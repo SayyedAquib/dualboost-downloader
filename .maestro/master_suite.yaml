@@ -1,0 +1,11 @@
+appId: com.dualboost.downloader
+---
+# ==============================================================================
+# DualBoost Downloader — Master End-to-End Test Suite
+# Tests:
+#   1. Complete Download & Discard Lifecycle
+#   2. 3-Phase Ephemeral Speed Benchmark
+# ==============================================================================
+
+- runFlow: download_flow.yaml
+- runFlow: speed_benchmark_flow.yaml

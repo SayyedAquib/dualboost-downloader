@@ -106,6 +106,17 @@ This script executes:
 2. Inspects ADB for attached devices (e.g. Pixel 9).
 3. If connected, automatically compiles the APK (`.\gradlew.bat assembleDebug`), installs it via ADB, grants permissions, launches the app, and monitors logcat to confirm zero crashes.
 
+### Playwright-Style Mobile UI Automation (Maestro)
+Playwright-style declarative mobile UI testing is implemented via **Maestro** (`.maestro/`):
+- **Runner Script**: `.\run-maestro.ps1`
+- **Master Suite**: `.maestro/master_suite.yaml` (runs all flows sequentially).
+- **Core Download & Discard Flow** (`.maestro/download_flow.yaml`): Automatically selects benchmark presets, initiates downloads, verifies live telemetry, triggers pause, verifies discard resets cleanly to `Idle`, and verifies URL preservation.
+- **Speed Benchmark Flow** (`.maestro/speed_benchmark_flow.yaml`): Taps "Test Speed", executes the 3-phase automated benchmark (Wi-Fi -> 5G -> DualBoost), verifies the celebratory summary, and closes the bottom sheet.
+- **One-Line Installation**:
+  ```powershell
+  powershell -c "irm https://get.maestro.mobile.dev | iex"
+  ```
+
 ## API Testing
 - Verify HTTP 206 response validation.
 - Verify fallback behavior when a mock server returns HTTP 200 (server ignored Range header).

@@ -19,6 +19,10 @@ DualBoost Downloader has reached full production readiness and visual polish und
   - Streamed incoming bytes directly into an in-memory discarding buffer (`ByteArray(32768)`), completely bypassing disk storage (**0 bytes stored on disk**).
   - Integrated `SpeedTestBottomSheet.kt` with live real-time speedometer readout, progress indicator, individual Wi-Fi/Cellular/DualBoost result cards, and dynamic boost gain multiplier banner (`+X% Speed Boost!`).
   - Added Quick Benchmark Card on the main dashboard and action button in TopAppBar.
+- **Playwright-Style Mobile UI Automation (Maestro)**:
+  - Created `.maestro/` test suite: `download_flow.yaml` (tests 150 MB preset selection, start download, pause, discard, and Idle reset), `speed_benchmark_flow.yaml` (tests 3-phase automated speed benchmark modal, 10s execution, telemetry, and dismiss), and `master_suite.yaml` (runs both sequentially).
+  - Created `run-maestro.ps1` PowerShell runner with automatic connected device detection and one-line CLI installation guidance (`powershell -c "irm https://get.maestro.mobile.dev | iex"`).
+  - Updated `AGENTS.md` and `docs/TESTING.md` with Maestro CLI commands.
 - **Temporary File Hygiene & Clean-up Rule (Item 4)**:
   - Added strict file hygiene rules to `docs/RULES.md`. Cleaned up temporary screencaps and XML dumps from device `/sdcard/`.
 - **Device Build & Deployment**:

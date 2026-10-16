@@ -53,6 +53,7 @@ DualBoost Downloader is an Android application for Google Pixel 9 (Android 14/15
 
 ## Testing Commands
 - Run automated end-to-end suite (Unit + MockWebServer + ADB smoke tests): `powershell -ExecutionPolicy Bypass -File .\test-automated.ps1`
+- Run Playwright-style Maestro mobile UI tests: `powershell -ExecutionPolicy Bypass -File .\run-maestro.ps1`
 - Run unit & integration tests: `.\gradlew.bat test`
 - Run connected Android device tests: `.\gradlew.bat connectedAndroidTest`
 - Run lint verification: `.\gradlew.bat lint`
