@@ -88,3 +88,8 @@
 - Always delete temporary test files, diagnostic screenshots (`/sdcard/screen_*.png`), and UI dumps (`window_dump.xml`) from both device `/sdcard/` and local scratch folders as soon as verification completes.
 - Keep the git working tree clean; never commit or leave untracked scratch scripts in the root directory.
 
+## Communication & Explanation Rules
+- ALWAYS explain concepts, technical decisions, and answers in the simplest words possible.
+- ALWAYS accompany explanations with intuitive real-world analogies and practical examples directly from the DualBoost Downloader app.
+
+

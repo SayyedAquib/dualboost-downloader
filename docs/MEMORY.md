@@ -31,6 +31,7 @@ DualBoost Downloader has reached full production readiness and visual polish und
 - User is on Google Pixel 9 running Android 17 (future-proofed for 18/19).
 - CLI-only workflow (Gradle wrapper + ADB). No Android Studio.
 - Testing requirement: Comprehensive test coverage for all functionalities, edge cases, scenarios, and UI flows.
+- Communication Rule: ALWAYS explain concepts in the simplest words possible with intuitive real-world analogies and practical examples from the app.
 
 ## Recent Decisions
 - ADR-010: Dynamic HTTP Header Injection and Range-Verified Benchmark Presets.
