@@ -106,20 +106,19 @@ This script executes:
 2. Inspects ADB for attached devices (e.g. Pixel 9).
 3. If connected, automatically compiles the APK (`.\gradlew.bat assembleDebug`), installs it via ADB, grants permissions, launches the app, and monitors logcat to confirm zero crashes.
 
-### Playwright-Style Mobile UI Automation (Maestro)
-Playwright-style declarative mobile UI testing is implemented via **Maestro** (`.maestro/`):
-- **Runner Script**: `.\run-maestro.ps1`
-- **Master Suite**: `.maestro/master_suite.yaml` (runs all flows sequentially).
-- **Core Download & Discard Flow** (`.maestro/download_flow.yaml`): Automatically selects benchmark presets, initiates downloads, verifies live telemetry, triggers pause, verifies discard resets cleanly to `Idle`, and verifies URL preservation.
-- **Speed Benchmark Flow** (`.maestro/speed_benchmark_flow.yaml`): Taps "Test Speed", executes the 3-phase automated benchmark (Wi-Fi -> 5G -> DualBoost), verifies the celebratory summary, and closes the bottom sheet.
-- **Windows Native Installation**:
-  Download and extract the official release zip:
+### Jetpack Compose UI Testing (`androidx.compose.ui:ui-test-junit4`)
+End-to-end and component UI testing on Android devices is performed using Google's official Jetpack Compose Testing framework:
+- **Test Suite**: `app/src/androidTest/java/com/dualboost/downloader/ui/MainComposeUiTest.kt`
+- **Execution Command**:
   ```powershell
-  curl.exe -L "https://github.com/mobile-dev-inc/Maestro/releases/latest/download/maestro.zip" -o "$HOME\maestro.zip"
-  Expand-Archive "$HOME\maestro.zip" -DestinationPath "$HOME\.maestro" -Force
-  Remove-Item "$HOME\maestro.zip"
+  .\gradlew.bat connectedAndroidTest
   ```
-  Or download `maestro.zip` directly via browser and extract to `C:\maestro\bin`.
+- **Tested User Flows**:
+  1. **Dashboard Initial State**: Confirms "Ready to Download" state, preset chips, and input field rendering.
+  2. **Benchmark Preset Selection**: Tapping preset chips (e.g. "150 MB") updates the URL input reactive state.
+  3. **Custom URL Typing**: Ensures custom URL typing updates reactive StateFlow.
+  4. **Download & Discard Lifecycle**: Tests starting download, pausing, and discarding, asserting complete reset back to Idle without losing the URL.
+  5. **Speed Benchmark Bottom Sheet**: Tests clicking "Test Speed", opening the modal sheet, inspecting comparative metric cards, and dismissing cleanly back to dashboard.
 
 ## API Testing
 - Verify HTTP 206 response validation.

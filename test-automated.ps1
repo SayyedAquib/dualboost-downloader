@@ -8,7 +8,7 @@ Write-Host "  DualBoost Downloader - Automated Test Runner       " -ForegroundCo
 Write-Host "=====================================================" -ForegroundColor Cyan
 
 # Step 1: Run Local JVM Unit & Integration Tests (MockWebServer + SHA-256 validation)
-Write-Host "`n[1/3] Running local MockWebServer unit & integration tests..." -ForegroundColor Yellow
+Write-Host "`n[1/4] Running local MockWebServer unit & integration tests..." -ForegroundColor Yellow
 & .\gradlew.bat test
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[FAIL] Unit and Integration tests failed!" -ForegroundColor Red
@@ -17,7 +17,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[PASS] All unit and integration tests passed cleanly (0 failures)!" -ForegroundColor Green
 
 # Step 2: Check for connected Android device via ADB
-Write-Host "`n[2/3] Checking for connected Android devices via ADB..." -ForegroundColor Yellow
+Write-Host "`n[2/4] Checking for connected Android devices via ADB..." -ForegroundColor Yellow
 $devicesOutput = & adb devices
 $deviceConnected = $false
 
@@ -30,16 +30,32 @@ foreach ($line in $devicesOutput) {
 }
 
 if (-not $deviceConnected) {
-    Write-Host "[INFO] No Android device attached. Skipping connected on-device smoke test." -ForegroundColor DarkGray
+    Write-Host "[INFO] No Android device attached. Skipping connected on-device UI and smoke tests." -ForegroundColor DarkGray
     Write-Host "       (Plug in your Pixel 9 with USB Debugging enabled to run live hardware tests)" -ForegroundColor DarkGray
     Write-Host "`n=====================================================" -ForegroundColor Cyan
-    Write-Host "[PASS] 100% AUTOMATED TESTS PASSED (MockWebServer + Integrity)!" -ForegroundColor Green
+    Write-Host "[PASS] 100% AUTOMATED UNIT & INTEGRATION TESTS PASSED!" -ForegroundColor Green
     Write-Host "=====================================================" -ForegroundColor Cyan
     exit 0
 }
 
-# Step 3: Run On-Device Automated ADB Smoke Test
-Write-Host "`n[3/3] Running automated on-device deployment test via ADB..." -ForegroundColor Yellow
+# Wake device screen & ensure awake for UI tests
+Write-Host "   Waking device screen and enabling stay-on..." -ForegroundColor DarkGray
+& adb shell input keyevent 224 | Out-Null
+& adb shell input swipe 500 1800 500 500 | Out-Null
+& adb shell svc power stayon true | Out-Null
+Start-Sleep -Milliseconds 500
+
+# Step 3: Run Jetpack Compose UI Tests on Connected Pixel 9
+Write-Host "`n[3/4] Running Jetpack Compose UI Tests on device..." -ForegroundColor Yellow
+& .\gradlew.bat connectedAndroidTest
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[FAIL] Jetpack Compose UI tests failed on device!" -ForegroundColor Red
+    exit 1
+}
+Write-Host "[PASS] All Jetpack Compose UI tests passed cleanly on device!" -ForegroundColor Green
+
+# Step 4: Run On-Device Automated ADB Deployment Smoke Test
+Write-Host "`n[4/4] Running automated on-device deployment test via ADB..." -ForegroundColor Yellow
 
 # Build APK
 Write-Host "   Compiling debug APK..." -ForegroundColor DarkGray

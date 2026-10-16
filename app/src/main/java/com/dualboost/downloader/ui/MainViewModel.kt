@@ -52,11 +52,12 @@ val DEFAULT_PRESETS = listOf(
     )
 )
 
-class MainViewModel(
-    val repository: DownloadRepository? = runCatching { DualBoostApp.instance.repository }.getOrNull()
+open class MainViewModel(
+    val repository: DownloadRepository? = runCatching { DualBoostApp.instance.repository }.getOrNull(),
+    downloadStateOverride: StateFlow<DownloadState>? = null
 ) : ViewModel() {
 
-    val downloadState: StateFlow<DownloadState> = repository?.downloadState ?: MutableStateFlow(DownloadState.Idle)
+    val downloadState: StateFlow<DownloadState> = downloadStateOverride ?: repository?.downloadState ?: MutableStateFlow(DownloadState.Idle)
     val speedTestState: StateFlow<com.dualboost.downloader.data.SpeedTestState> = repository?.speedTestState ?: MutableStateFlow(com.dualboost.downloader.data.SpeedTestState.Idle)
     val isWifiAvailable: StateFlow<Boolean> = repository?.isWifiAvailable ?: MutableStateFlow(false)
     val isCellularAvailable: StateFlow<Boolean> = repository?.isCellularAvailable ?: MutableStateFlow(false)
