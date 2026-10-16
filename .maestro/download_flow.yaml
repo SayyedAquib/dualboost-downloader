@@ -37,3 +37,4 @@ appId: com.dualboost.downloader
 # 9. Verify immediate return to Idle state with URL retained
 - assertVisible: "Ready to Download"
 - assertVisible: "Boost Download"
+

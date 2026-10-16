@@ -33,3 +33,4 @@ appId: com.dualboost.downloader
 
 # 7. Verify returned cleanly to dashboard
 - assertVisible: "Ready to Download"
+

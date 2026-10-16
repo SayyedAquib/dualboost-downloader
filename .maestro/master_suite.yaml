@@ -9,3 +9,4 @@ appId: com.dualboost.downloader
 
 - runFlow: download_flow.yaml
 - runFlow: speed_benchmark_flow.yaml
+
