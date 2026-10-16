@@ -5,10 +5,10 @@ DualBoost Downloader embraces Material 3 Expressive ("Material You") design prin
 
 ## Visual Direction & Brand Identity
 - **Pixel Native Material You**: Full dynamic color extraction (`dynamicDarkColorScheme` / `dynamicLightColorScheme`) that adapts in real-time to the user's Pixel wallpaper.
-- **Adaptive App Icon ("Dual Converging Boost")**:
-  - Background: Deep slate linear gradient with centered cyan ambient glow (`res/drawable/ic_launcher_background.xml`).
-  - Foreground: Dual energy streams (Cyan Wi-Fi stream on left, Electric Violet 5G stream on right) converging into a high-speed downward arrow (`res/drawable/ic_launcher_foreground.xml`).
-  - Monochrome Layer: Full-fidelity silhouette (`res/drawable/ic_launcher_monochrome.xml`) providing dynamic tinting for Pixel Themed Icons.
+- **Adaptive App Icon (Google Material 3 Native)**:
+  - Background: Clean, crisp pure white background (`#FFFFFF`) matching Google Pixel system apps (`res/drawable/ic_launcher_background.xml`).
+  - Foreground: Google-style geometric curves featuring converging Electric Cyan/Azure (`#00B0FF` / `#0288D1`) and Neon Violet/Purple (`#B388FF` / `#651FFF`) streams meeting at a central downward boost arrow with a clean white lightning core (`res/drawable/ic_launcher_foreground.xml`), calibrated within the 72dp safe zone.
+  - Monochrome Layer: High-contrast single-color silhouette (`res/drawable/ic_launcher_monochrome.xml`) providing dynamic Monet tinting for Pixel Themed Icons.
 - **Edge-to-Edge System Integration**: 100% transparent status bar and gesture navigation pill bar utilizing `enableEdgeToEdge()` and `WindowInsets.safeDrawing`.
 
 ## Colors & Themes
@@ -63,6 +63,7 @@ To ensure physical network transparency across any wallpaper palette:
 - **URL Input Field**: `OutlinedTextField` spanning full width, single line, with explicit placeholder and clear affordance.
 
 ### Cards
+- **Speed Benchmark Quick Card**: 18dp rounded container (`surfaceContainer`) with primary container icon badge, live subtitle, and quick-action "Test Speed" button launching the benchmark modal.
 - **Download Telemetry Card**: High-contrast card with 4dp elevation containing filename, linear progress bar, combined transfer rate, and individual Wi-Fi and 5G meters.
 - **Download Paused Card**: Elevated card (2dp elevation) displaying frozen progress percentage, progress bar, preserved byte count, primary filled "Resume" button with Play icon, and error-tinted outlined "Discard" button with trash icon.
 - **Download Completed Card**: Container card (`primaryContainer`) displaying successful transfer summary, elapsed time, primary filled "Open File" button (`ACTION_VIEW`), and adjacent tonal "Share" button (`ACTION_SEND`).
@@ -72,7 +73,8 @@ To ensure physical network transparency across any wallpaper palette:
 ### Navigation
 - Single-screen utility view; no complex bottom bar or navigation drawer required in MVP.
 
-### Modals
+### Modals & Bottom Sheets
+- **Speed Test Bottom Sheet (`ModalBottomSheet`)**: Rounded 28dp surface container modal delivering an interactive 3-phase automated benchmark (Wi-Fi 3s -> 5G 3s -> DualBoost 4s) with real-time animated speedometer digits, dynamic progress indicator, comparative cards, and celebratory Boost Gain summary banner.
 - Android system dialogs for runtime permissions (`POST_NOTIFICATIONS`).
 
 ### Tables

@@ -39,6 +39,8 @@ Standard Android operating system behavior automatically deactivates or idles th
    - Automatic single-stream fallback if remote servers do not support HTTP 206 Partial Content.
    - Seamless chunk reassignment to the surviving network if either Wi-Fi or Cellular disconnects mid-transfer.
 7. **System Share Sheet Integration**: Receiver intent allowing URLs to be sent directly to the downloader from any browser.
+8. **Combined Dual-Interface Speed Benchmark**: Ephemeral 3-phase throughput test measuring Wi-Fi alone (3s), 5G Cellular alone (3s), and DualBoost Combined (4s) using high-speed CDN chunk streams with zero storage consumption (0 bytes stored on disk) and displaying real-time speedometers and aggregate boost multiplier.
+9. **Google Material 3 System Harmonization**: Adaptive launcher icon designed to match Google Pixel system apps with clean white background, geometric vector stream convergence, and Monet dynamic themed icon support.
 
 ## User Flows
 1. **Direct URL Download Flow**:

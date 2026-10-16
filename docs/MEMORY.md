@@ -1,32 +1,31 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader has reached full production readiness and visual polish under **ADR-016** (Discard Download State Decoupling & Inactive Network UI). The test suite contains **70 automated unit and integration tests passing with 100% success** (0 failures across 11 test suites). The app features overflow-safe pre-flight disk storage checks, server ETag validation, MediaStore export, startup auto-recovery, and an overhauled Dark Mode UI with full M3 surfaceContainer hierarchy, glowing interface accents, crisp inactive network state borders with `WifiOff` / `SignalCellularOff` icons, a 4-state context-aware status banner, and clean discard handling returning directly to `Idle` with URL preservation.
+DualBoost Downloader has reached full production readiness and visual polish under **ADR-017** (Ephemeral 3-Phase Speed Benchmark & Google Material 3 App Icon Redesign). The test suite contains **76 automated unit and integration tests passing with 100% success** (0 failures across 12 test suites). The app features a Google Material 3 adaptive launcher icon with crisp white background and dynamic themed icon support, an in-app ephemeral 3-phase speed benchmark with zero disk storage footprint, overflow-safe pre-flight disk storage checks, server ETag validation, MediaStore export, startup auto-recovery, and an overhauled Dark Mode UI with full M3 surfaceContainer hierarchy on Google Pixel 9.
 
 ## Recently Completed
-- **Discard Button Bug Root Cause Identified & Resolved (ADR-016)**:
-  - Discovered that `ACTION_CANCEL_DOWNLOAD` sent to `DownloadForegroundService` was calling `downloaderEngine.pauseDownload()`, inadvertently overwriting `Idle` with `Paused(0%)`.
-  - Discovered that coroutine cancellation inside `startDownload` caught `CancellationException` and defaulted to `DownloadState.Paused(url)`.
-  - Introduced `ACTION_DISCARD_DOWNLOAD` in `DownloadForegroundService` to safely stop service notifications without modifying engine state.
-  - Added atomic `isDiscarding` flag in `DualDownloaderEngine` to ensure cancellation transitions directly to `DownloadState.Idle`.
-  - Ensured partial `.part` files and `.dualboost_meta` sidecars are deleted on discard while preserving `urlInput` in `MainViewModel`.
-- **Inactive Network Cards & Context-Aware 4-State Banner (ADR-016)**:
-  - Updated inactive network cards with `surfaceContainer` fill, 1dp `outlineVariant.copy(alpha = 0.5f)` border, amber/grey indicator dots, and dynamic `WifiOff` / `SignalCellularOff` icons with 0.5f opacity.
-  - Implemented 4-state context-aware network status banner:
-    - *Dual-Channel Active*: `primaryContainer` pill ("Dual-Channel Active: Aggregating Wi-Fi + 5G").
-    - *Both Offline*: `errorContainer` warning banner ("No Network Available: Reconnect Wi-Fi or Cellular to download.").
-    - *Wi-Fi Only*: `surfaceContainerHigh` tip ("Using Wi-Fi only: Enable 'Mobile data always active' in Developer Options to aggregate 5G.").
-    - *5G Only*: `surfaceContainerHigh` tip ("Using 5G Cellular only: Connect Wi-Fi to activate DualBoost aggregation.").
-- **Test Suite Expanded (70 tests, 100% passing across 11 suites)**:
-  - Added `testRepository_DiscardDownload_TransitionsToIdleAndCleansFiles` in `DownloadRepositoryTest.kt`.
-  - Added `testDiscardDownload_PreservesUrlInputWhenDiscarded` in `MainViewModelTest.kt`.
-  - Executed `.\gradlew.bat test` — all 70 tests passed cleanly.
-- **Device Build & Verification**:
-  - Compiled and installed debug APK onto Google Pixel 9 (`.\gradlew.bat installDebug`): BUILD SUCCESSFUL.
-  - Captured live device screenshot `screen_current.png` confirming active dual-channel status, Dark Mode styling, and typography.
+- **Curated VS Code Extension Pack (`.vscode/extensions.json`)**:
+  - Configured workspace recommendations including `fwcd.kotlin`, `vscjava.vscode-gradle`, `redhat.java`, `redhat.vscode-xml`, `ms-vscode.powershell`, `adelphes.android-dev-ext`, and `eamodio.gitlens` for one-click developer setup.
+- **Google Material 3 App Icon Redesign (ADR-017)**:
+  - Replaced dark slate background with a clean, crisp pure white background (`#FFFFFF`) in `ic_launcher_background.xml` matching Google Pixel first-party system apps.
+  - Re-engineered `ic_launcher_foreground.xml` with Google Material 3 geometric curves: Electric Cyan / Azure (`#00B0FF` / `#0288D1`) and Neon Violet / Purple (`#B388FF` / `#651FFF`) streams converging into a central downward arrow with white lightning core, sized inside the 72dp safe zone.
+  - Updated `ic_launcher_monochrome.xml` with clean negative-space silhouette for dynamic Monet Pixel Themed Icons.
+- **Ephemeral 3-Phase Speed Benchmark (ADR-017)**:
+  - Implemented `SpeedTestEngine.kt` and `SpeedTestModels.kt` executing a 3-phase automated throughput test: Wi-Fi alone (3s) -> 5G Cellular alone (3s) -> DualBoost combined (4s).
+  - Streamed incoming bytes directly into an in-memory discarding buffer (`ByteArray(32768)`), completely bypassing disk storage (**0 bytes stored on disk**).
+  - Integrated `SpeedTestBottomSheet.kt` with live real-time speedometer readout, progress indicator, individual Wi-Fi/Cellular/DualBoost result cards, and dynamic boost gain multiplier banner (`+X% Speed Boost!`).
+  - Added Quick Benchmark Card on the main dashboard and action button in TopAppBar.
+- **Temporary File Hygiene & Clean-up Rule (Item 4)**:
+  - Added strict file hygiene rules to `docs/RULES.md`. Cleaned up temporary screencaps and XML dumps from device `/sdcard/`.
+- **Comprehensive Test Suite Expanded (76 tests, 100% passing across 12 suites)**:
+  - Added `SpeedTestEngineTest.kt` (5 tests) and extended `MainViewModelTest.kt` (8 tests).
+  - Executed `.\gradlew.bat test` — all 76 unit tests passed cleanly with 0 failures.
+- **Device Build & Deployment**:
+  - Assembled and installed debug APK onto Google Pixel 9 (`.\gradlew.bat installDebug`): BUILD SUCCESSFUL.
+  - Verified clean launch via ADB logcat with both Wi-Fi (netid 137) and Cellular (netid 138) bound immediately.
 
 ## Known Problems
-- None. App compiles with 0 errors, 70/70 tests pass with 100% success, zero flicker on device during downloads, persistent chunk resumption active, discard cleanly returns to Idle with URL preserved, and inactive network cards render clearly.
+- None. App compiles with 0 errors, 76/76 tests pass with 100% success, zero flicker on device during downloads, persistent chunk resumption active, discard cleanly returns to Idle, speed benchmark runs with zero storage overhead, and Google-style app icon renders cleanly.
 
 ## Important Context
 - User is on Google Pixel 9 running Android 17 (future-proofed for 18/19).
@@ -41,7 +40,8 @@ DualBoost Downloader has reached full production readiness and visual polish und
 - ADR-014: Persistent Chunk Resumption with Atomic Sidecar Metadata (`.dualboost_meta`).
 - ADR-015: Storage Pre-Flight Verification, Server ETag Invalidation, Public MediaStore Export, and Startup Auto-Recovery.
 - ADR-016: Discard Download State Decoupling & Inactive Network Context-Aware UI.
+- ADR-017: Ephemeral 3-Phase Speed Benchmark & Google Material 3 App Icon Redesign.
 
 ## Next Steps
-1. User tests downloads on their Google Pixel 9 to confirm Discard button immediately resets to "Ready to Download" with URL preserved, and inactive network indicators when Wi-Fi/Cellular are toggled.
+1. User tests the new Speed Benchmark feature and inspects the Google-style app icon on their Google Pixel 9 launcher.
 

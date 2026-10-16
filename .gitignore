@@ -43,7 +43,8 @@ signing.properties
 .idea/
 
 # VS Code & alternative editors
-.vscode/
+.vscode/*
+!.vscode/extensions.json
 
 # OS-generated temporary files
 .DS_Store

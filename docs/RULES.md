@@ -82,4 +82,9 @@
 - NEVER bypass Android's `Network.socketFactory` when intending to route through a specific network interface.
 - NEVER commit personal API keys, passwords, or local SDK directory configurations to git.
 - NEVER deliver code changes without updating corresponding docs in `docs/`.
+- NEVER leave behind temporary dumps, screen captures, or scratch files on either the host machine or connected device after testing and verification steps are concluded.
+
+## Temporary File Hygiene & Clean-up Rules
+- Always delete temporary test files, diagnostic screenshots (`/sdcard/screen_*.png`), and UI dumps (`window_dump.xml`) from both device `/sdcard/` and local scratch folders as soon as verification completes.
+- Keep the git working tree clean; never commit or leave untracked scratch scripts in the root directory.
 

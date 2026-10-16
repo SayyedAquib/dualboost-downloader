@@ -5,35 +5,43 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Left Wi-Fi Stream (Cyan) -->
-    <path
-        android:fillColor="#00E5FF"
-        android:pathData="M29,38 C35,32 43,30 50,30 L50,34 C44,34 38,36 32,41 Z" />
+    <!-- Wi-Fi High-Speed Arc 1 (Electric Cyan) -->
     <path
         android:fillColor="#00B0FF"
-        android:pathData="M27,48 C33,48 41,52 46,60 L42,62 C38,56 32,52 27,52 Z" />
+        android:pathData="M 30,34 C 36,28 44,25 53,25 L 53,30 C 46,30 39,33 34,38 Z" />
 
-    <!-- Right 5G Cellular Stream (Electric Violet) -->
+    <!-- Wi-Fi High-Speed Arc 2 (Electric Cyan) -->
+    <path
+        android:fillColor="#0091EA"
+        android:pathData="M 25,48 C 25,42 27,37 31,33 L 35,37 C 32,40 31,44 31,48 Z" />
+
+    <!-- 5G Cellular High-Speed Arc 1 (Neon Violet) -->
     <path
         android:fillColor="#B388FF"
-        android:pathData="M79,38 C73,32 65,30 58,30 L58,34 C64,34 70,36 76,41 Z" />
+        android:pathData="M 55,25 C 64,25 72,28 78,34 L 74,38 C 69,33 62,30 55,30 Z" />
+
+    <!-- 5G Cellular High-Speed Arc 2 (Deep Violet) -->
     <path
         android:fillColor="#7C4DFF"
-        android:pathData="M81,48 C75,48 67,52 62,60 L66,62 C70,56 76,52 81,52 Z" />
+        android:pathData="M 77,33 C 81,37 83,42 83,48 L 77,48 C 77,44 76,40 73,37 Z" />
 
-    <!-- Central High-Speed Download Arrow (Clean Crisp White & Cyan Glow) -->
+    <!-- Central Converging DualBoost Arrow: Left Wing (Wi-Fi Azure) -->
+    <path
+        android:fillColor="#0288D1"
+        android:pathData="M 45,30 L 54,30 L 54,76 L 35,53 L 45,53 Z" />
+
+    <!-- Central Converging DualBoost Arrow: Right Wing (5G Purple) -->
+    <path
+        android:fillColor="#651FFF"
+        android:pathData="M 54,30 L 63,30 L 63,53 L 73,53 L 54,76 Z" />
+
+    <!-- Lightning Bolt Core (Clean White with Google Polish) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M48,32 L60,32 L60,54 L72,54 L54,76 L36,54 L48,54 Z" />
+        android:pathData="M 55,36 L 49,48 L 54,48 L 52,60 L 59,47 L 54,47 Z" />
 
-    <!-- Dynamic Energy Core inside Arrow -->
+    <!-- Bottom Speed Indicator Dot (Dynamic Energy Point) -->
     <path
         android:fillColor="#00E5FF"
-        android:pathData="M52,38 L56,38 L56,52 L62,52 L54,64 L46,52 L52,52 Z" />
-
-    <!-- Bottom Speed Streak -->
-    <path
-        android:fillColor="#80FFFFFF"
-        android:pathData="M52,80 L56,80 L56,83 L52,83 Z" />
+        android:pathData="M 54,82 m -3,0 a 3,3 0 1,0 6,0 a 3,3 0 1,0 -6,0" />
 </vector>
-

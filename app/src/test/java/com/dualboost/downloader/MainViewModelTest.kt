@@ -158,4 +158,15 @@ class MainViewModelTest {
         viewModel.discardDownload("10Mb.dat")
         assertEquals("https://proof.ovh.net/files/10Mb.dat", viewModel.urlInput.value)
     }
+
+    @Test
+    fun testSpeedTest_StateFlowAndSafeExecution_WhenRepositoryNull() {
+        val viewModel = MainViewModel(repository = null)
+        assertTrue("Speed test state must default to Idle", viewModel.speedTestState.value is com.dualboost.downloader.data.SpeedTestState.Idle)
+        // Calling start/stop without repository must be safe and not crash
+        viewModel.startSpeedTest()
+        viewModel.stopSpeedTest()
+        assertTrue("Speed test state must remain Idle", viewModel.speedTestState.value is com.dualboost.downloader.data.SpeedTestState.Idle)
+    }
 }
+

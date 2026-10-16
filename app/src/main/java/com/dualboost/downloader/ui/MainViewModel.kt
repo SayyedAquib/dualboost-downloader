@@ -57,6 +57,7 @@ class MainViewModel(
 ) : ViewModel() {
 
     val downloadState: StateFlow<DownloadState> = repository?.downloadState ?: MutableStateFlow(DownloadState.Idle)
+    val speedTestState: StateFlow<com.dualboost.downloader.data.SpeedTestState> = repository?.speedTestState ?: MutableStateFlow(com.dualboost.downloader.data.SpeedTestState.Idle)
     val isWifiAvailable: StateFlow<Boolean> = repository?.isWifiAvailable ?: MutableStateFlow(false)
     val isCellularAvailable: StateFlow<Boolean> = repository?.isCellularAvailable ?: MutableStateFlow(false)
 
@@ -115,5 +116,14 @@ class MainViewModel(
     fun isStartButtonEnabled(state: DownloadState, input: String): Boolean {
         return input.isNotBlank() && state !is DownloadState.Downloading && state !is DownloadState.Probing
     }
+
+    fun startSpeedTest() {
+        repository?.startSpeedTest()
+    }
+
+    fun stopSpeedTest() {
+        repository?.stopSpeedTest()
+    }
 }
+
 

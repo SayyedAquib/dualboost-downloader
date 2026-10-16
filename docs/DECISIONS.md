@@ -462,6 +462,48 @@ Accepted
 ### Reasoning
 Prevents race conditions between coroutine cancellation, foreground service lifecycles, and engine state emissions, ensuring discard cleanly returns to Idle while providing crystal-clear network diagnostics across all connection permutations.
 
+---
+
+## ADR-017: Ephemeral 3-Phase Speed Benchmark & Google Material 3 App Icon Redesign
+
+### Date
+2026-10-16
+
+### Status
+Accepted
+
+### Context
+1. Users need direct, demonstrable proof of the aggregate bandwidth advantages provided by DualBoost prior to downloading large files.
+2. Speed tests must not exhaust local device storage or leave behind multi-megabyte artifact files.
+3. The previous launcher icon utilized a dark slate linear gradient with glowing center effects, clashing with the Google Pixel home screen aesthetic where first-party apps (Google Files, Chrome, Photos, Drive) utilize clean white adaptive icon backgrounds and minimalist Material geometric curves.
+
+### Options Considered
+- Integrate third-party Ookla or Speedtest SDKs (rejected: heavy dependencies, ads, tracking).
+- Implement an in-engine ephemeral 3-phase speed benchmark: sequentially testing Wi-Fi alone (3s), 5G Cellular alone (3s), and DualBoost combined (4s) using high-speed CDN chunk streams discarded directly in memory (0 bytes stored).
+- Redesign the app icon to match Google's Material 3 adaptive icon specifications: solid `#FFFFFF` background, geometric converging streams (Cyan/Azure & Violet/Purple) into a downward boost arrow with lightning core, and high-contrast monochrome silhouette for Monet themed icons.
+
+### Decision
+1. **SpeedTestEngine & Data Models**:
+   - Implemented `SpeedTestEngine` in `com.dualboost.downloader.engine`.
+   - Utilizes `NetworkProvider` for interface isolation (`wifiClient`, `cellularClient`).
+   - Streams incoming bytes into an in-memory discard buffer (`ByteArray(32768)`), completely bypassing disk storage (**0 bytes stored on disk**).
+   - Sequential 3-phase execution: Phase 1 (Wi-Fi 3s), Phase 2 (5G Cellular 3s), Phase 3 (DualBoost 4s).
+   - Computes real-time and final Mbps, along with dynamic boost multiplier gain:
+     $$\text{Boost \%} = \frac{S_{\text{dual}} - \max(S_{\text{wifi}}, S_{\text{cell}})}{\max(S_{\text{wifi}}, S_{\text{cell}})} \times 100\%$$
+   - Emits `SpeedTestState` (`Idle`, `Running`, `Completed`, `Error`) with full cancellation safety via `stopSpeedTest()`.
+2. **Interactive UI (`SpeedTestBottomSheet`) & Dashboard Quick Card**:
+   - Created `SpeedTestBottomSheet` using Material 3 `ModalBottomSheet`.
+   - TopAppBar action button and dedicated dashboard card ("Speed Benchmark: Test combined Wi-Fi + 5G speed").
+   - Live real-time speedometer readout, progress indicator, and comparative results card displaying individual Wi-Fi, 5G, and aggregate DualBoost speeds.
+3. **Google-Style Material 3 App Icon**:
+   - `ic_launcher_background.xml`: Clean white (`#FFFFFF`) adaptive background.
+   - `ic_launcher_foreground.xml`: Bold, geometric Material 3 vector curves with Google-inspired color harmony (Electric Cyan `#00B0FF` / Azure `#0288D1` left stream, Neon Violet `#B388FF` / Purple `#651FFF` right stream) converging into a central downward arrow with white lightning core, sized within the 72dp safe zone.
+   - `ic_launcher_monochrome.xml`: Crisp single-color silhouette for Google Pixel dynamic themed icon theming.
+
+### Reasoning
+Empowers users to quantitatively benchmark their network aggregation capability with zero storage footprint, while seamlessly harmonizing the launcher icon with Google Pixel's first-party design system.
+
+
 
 
 
