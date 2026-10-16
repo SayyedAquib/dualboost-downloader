@@ -112,10 +112,14 @@ Playwright-style declarative mobile UI testing is implemented via **Maestro** (`
 - **Master Suite**: `.maestro/master_suite.yaml` (runs all flows sequentially).
 - **Core Download & Discard Flow** (`.maestro/download_flow.yaml`): Automatically selects benchmark presets, initiates downloads, verifies live telemetry, triggers pause, verifies discard resets cleanly to `Idle`, and verifies URL preservation.
 - **Speed Benchmark Flow** (`.maestro/speed_benchmark_flow.yaml`): Taps "Test Speed", executes the 3-phase automated benchmark (Wi-Fi -> 5G -> DualBoost), verifies the celebratory summary, and closes the bottom sheet.
-- **One-Line Installation**:
+- **Windows Native Installation**:
+  Download and extract the official release zip:
   ```powershell
-  powershell -c "irm https://get.maestro.mobile.dev | iex"
+  curl.exe -L "https://github.com/mobile-dev-inc/Maestro/releases/latest/download/maestro.zip" -o "$HOME\maestro.zip"
+  Expand-Archive "$HOME\maestro.zip" -DestinationPath "$HOME\.maestro" -Force
+  Remove-Item "$HOME\maestro.zip"
   ```
+  Or download `maestro.zip` directly via browser and extract to `C:\maestro\bin`.
 
 ## API Testing
 - Verify HTTP 206 response validation.
