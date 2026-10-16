@@ -75,6 +75,31 @@ class MainComposeUiTest {
     }
 
     @Test
+    fun testLargePresetChipSelection_Populates1GBUrlAndEnablesDownload() {
+        val viewModel = MainViewModel(repository = null)
+        composeTestRule.setContent {
+            DualBoostTheme {
+                MainScreen(
+                    viewModel = viewModel,
+                    onOpenFile = { _, _ -> },
+                    onShareFile = { _, _ -> }
+                )
+            }
+        }
+
+        // Click on the 1 GB Range Benchmark preset chip in the horizontal carousel
+        composeTestRule.onNodeWithText("1 GB").performScrollTo().performClick()
+
+        // Verify the descriptive label appears indicating dual aggregation capability for 1 GB tier
+        composeTestRule.onNodeWithText(
+            "Google Edge CDN (Massive 1.2 GB Endurance Stress Test) • Aggregates Wi-Fi + 5G concurrently"
+        ).performScrollTo().assertIsDisplayed()
+
+        // Verify Boost Download button is enabled
+        composeTestRule.onNodeWithText("Boost Download").performScrollTo().assertIsEnabled()
+    }
+
+    @Test
     fun testCustomUrlInput_CanBeTypedAndCleared() {
         val viewModel = MainViewModel(repository = null)
         composeTestRule.setContent {

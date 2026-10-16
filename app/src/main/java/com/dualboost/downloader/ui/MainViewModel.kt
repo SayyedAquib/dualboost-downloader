@@ -35,11 +35,11 @@ val DEFAULT_PRESETS = listOf(
         supportsRange = true
     ),
     QuickTestPreset(
-        id = "google_150mb",
-        label = "150 MB",
-        sizeLabel = "150 MB",
-        description = "Google Edge CDN (Full Aggregation Stress Test)",
-        url = "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip",
+        id = "google_50mb",
+        label = "50 MB",
+        sizeLabel = "50 MB",
+        description = "Google Edge CDN (Dual-Channel Quick Test)",
+        url = "https://dl.google.com/android/repository/platform-35_r02.zip",
         supportsRange = true
     ),
     QuickTestPreset(
@@ -49,6 +49,30 @@ val DEFAULT_PRESETS = listOf(
         description = "Cloudflare Edge Dynamic Stream (Single-Channel)",
         url = "https://speed.cloudflare.com/__down?bytes=104857600",
         supportsRange = false
+    ),
+    QuickTestPreset(
+        id = "google_150mb",
+        label = "150 MB",
+        sizeLabel = "150 MB",
+        description = "Google Edge CDN (Full Aggregation Stress Test)",
+        url = "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip",
+        supportsRange = true
+    ),
+    QuickTestPreset(
+        id = "google_500mb",
+        label = "500 MB",
+        sizeLabel = "500 MB",
+        description = "Google Edge CDN (High-Throughput Aggregation)",
+        url = "https://dl.google.com/android/repository/emulator-windows_x64-16555280.zip",
+        supportsRange = true
+    ),
+    QuickTestPreset(
+        id = "google_1gb",
+        label = "1 GB",
+        sizeLabel = "1 GB",
+        description = "Google Edge CDN (Massive 1.2 GB Endurance Stress Test)",
+        url = "https://dl.google.com/android/studio/install/2024.2.1.11/android-studio-2024.2.1.11-windows.exe",
+        supportsRange = true
     )
 )
 

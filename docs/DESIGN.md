@@ -45,7 +45,7 @@ To ensure physical network transparency across any wallpaper palette:
 ## Layout & Components
 - **Top Bar**: `CenterAlignedTopAppBar` with branded lightning bolt badge, dynamic title, and technical information dialog.
 - **Hero Network Cards**: Dual `Card` containers with live status indicators, connection state badges, dynamic active/inactive iconography (`Wifi`/`WifiOff`, `SignalCellularAlt`/`SignalCellularOff`), and Developer Options guidance.
-- **Download Action Card**: 24dp rounded elevated container with quick clipboard paste, text clear, dynamic quick-test benchmark presets (10MB, 100MB Range, 100MB Cloudflare, 1GB Range), selected chip visual state with primary border and lightning bolt (`⚡`) range indicators, dynamic server capability captions, and prominent "Boost Download" button.
+- **Download Action Card**: 24dp rounded elevated container with quick clipboard paste, text clear, dynamic quick-test benchmark presets arranged in ascending order (10MB, 25MB, 50MB, 100MB Cloudflare, 150MB, 500MB, 1GB), selected chip visual state with primary border and lightning bolt (`⚡`) range indicators, dynamic server capability captions, and prominent "Boost Download" button.
 - **Dual-Color Progress Bar**: Stacked proportional bar visualizing the real-time byte contribution between Wi-Fi and 5G.
 - **File Provider Integration**: Direct "Open File" launcher upon download completion.
 

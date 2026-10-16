@@ -10,7 +10,7 @@ class UIFlowAndViewModelComprehensiveTest {
 
     @Test
     fun testAllPresetDefinitions_HaveValidAttributesAndProtocols() {
-        assertEquals("Should have exactly 4 curated presets", 4, DEFAULT_PRESETS.size)
+        assertEquals("Should have exactly 7 curated presets", 7, DEFAULT_PRESETS.size)
 
         val ids = DEFAULT_PRESETS.map { it.id }
         assertEquals("Preset IDs must be unique", ids.size, ids.distinct().size)

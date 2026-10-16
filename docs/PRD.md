@@ -41,6 +41,7 @@ Standard Android operating system behavior automatically deactivates or idles th
 7. **System Share Sheet Integration**: Receiver intent allowing URLs to be sent directly to the downloader from any browser.
 8. **Combined Dual-Interface Speed Benchmark**: Ephemeral 3-phase throughput test measuring Wi-Fi alone (3s), 5G Cellular alone (3s), and DualBoost Combined (4s) using high-speed CDN chunk streams with zero storage consumption (0 bytes stored on disk) and displaying real-time speedometers and aggregate boost multiplier.
 9. **Google Material 3 System Harmonization**: Adaptive launcher icon designed to match Google Pixel system apps with clean white background, geometric vector stream convergence, and Monet dynamic themed icon support.
+10. **Curated Quick Test Benchmark Tiers**: Seven pre-configured download presets sorted in ascending order (10 MB, 25 MB, 50 MB, 100 MB Cloudflare, 150 MB, 500 MB, 1 GB) targeting high-capacity Google Edge and Fastly CDNs to easily stress-test dual-channel aggregation across various payload sizes with zero manual typing.
 
 ## User Flows
 1. **Direct URL Download Flow**:

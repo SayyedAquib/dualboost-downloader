@@ -1,9 +1,17 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader has reached full production readiness and visual polish under **ADR-017** (Ephemeral 3-Phase Speed Benchmark & Google Material 3 App Icon Redesign) with **Turbine Stream Testing Integration**. The test suite contains **80 automated unit and integration tests passing with 100% success** (0 failures across 12 test suites). The app features a Google Material 3 adaptive launcher icon with crisp white background and dynamic themed icon support, an in-app ephemeral 3-phase speed benchmark with zero disk storage footprint, overflow-safe pre-flight disk storage checks, server ETag validation, MediaStore export, startup auto-recovery, and an overhauled Dark Mode UI with full M3 surfaceContainer hierarchy on Google Pixel 9.
+DualBoost Downloader has reached full production readiness and visual polish under **ADR-017** with expanded **Curated Quick Test Benchmark Tiers** (7 presets from 10 MB to 1 GB) and **100% Automated Test Coverage** (**80 unit tests across 12 suites + 6 connected Compose UI tests** on physical Google Pixel 9, all passing with zero failures). The app features a Google Material 3 adaptive launcher icon with crisp white background and dynamic themed icon support, an in-app ephemeral 3-phase speed benchmark with zero disk storage footprint, overflow-safe pre-flight disk storage checks, server ETag validation, MediaStore export, startup auto-recovery, and an overhauled Dark Mode UI with full M3 surfaceContainer hierarchy on Google Pixel 9.
 
 ## Recently Completed
+- **Expanded Quick Test Benchmark Suite (7 Curated Tiers)**:
+  - Added 50 MB (`platform-35_r02.zip`), 500 MB (`emulator-windows_x64-16555280.zip`), and 1 GB (`android-studio-2024.2.1.11-windows.exe`) from Google Edge CDN, verified via HTTP 206 probe testing for full dual-channel byte aggregation.
+  - Organized all 7 presets in strictly ascending size order: 10 MB, 25 MB, 50 MB, 100 MB (Cloudflare single-stream fallback), 150 MB, 500 MB, and 1 GB.
+  - Updated `MainViewModel.kt`, `UIFlowAndViewModelComprehensiveTest.kt`, and `MainComposeUiTest.kt`.
+- **Jetpack Compose UI Testing Suite on Google Pixel 9**:
+  - Implemented 6 on-device tests in `MainComposeUiTest.kt`: dashboard render, preset selection, 1 GB preset selection, custom URL input and clearing, paused card with discard button, and speed benchmark bottom sheet.
+  - Updated `test-automated.ps1` to automatically wake the screen, ensure stay-on, and run `connectedAndroidTest` followed by live ADB deployment.
+  - Verified 6/6 tests passing cleanly on Pixel 9.
 - **Turbine Flow Testing Integration (`app.cash.turbine:turbine:1.2.0`)**:
   - Integrated Cash App's Turbine library into `gradle/libs.versions.toml` and `app/build.gradle.kts`.
   - Added 4 live stream tests asserting exact state progression without race conditions: `testTurbine_UrlInputStream_EmitsAccurateSequence`, `testTurbine_SelectedPresetStream_EmitsAccurateSequence`, `testTurbine_SpeedTestStateStream_RemainsIdleWithoutRepository` in `MainViewModelTest`, and `testTurbine_SpeedTestState_EmitsErrorWhenOffline` in `SpeedTestEngineTest`.
