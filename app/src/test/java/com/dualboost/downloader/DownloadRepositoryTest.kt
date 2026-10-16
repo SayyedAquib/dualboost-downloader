@@ -158,4 +158,29 @@ class DownloadRepositoryTest {
         assertTrue(repo.isWifiAvailable.value)
         assertTrue(repo.isCellularAvailable.value)
     }
+
+    @Test
+    fun testRepository_DiscardDownload_TransitionsToIdleAndCleansFiles() {
+        val client = OkHttpClient.Builder().build()
+        val dummyContext = DummyTestContext(tempDir)
+        val mockNetwork = MockNetworkProvider(client)
+        val engine = DualDownloaderEngine(dummyContext, mockNetwork)
+
+        val repo = DownloadRepository(
+            context = dummyContext,
+            networkProvider = mockNetwork,
+            engineOverride = engine
+        )
+
+        val testFile = File(tempDir, "discard_target.bin")
+        testFile.writeText("partial content")
+        val metaFile = File(tempDir, "discard_target.bin.dualboost_meta")
+        metaFile.writeText("url=http://example.com\ntotalLength=1000\ncompletedChunks=0\n")
+
+        repo.discardDownload(fileName = "discard_target.bin", targetDir = tempDir)
+
+        assertEquals(DownloadState.Idle, repo.downloadState.value)
+        assertFalse(testFile.exists())
+        assertFalse(metaFile.exists())
+    }
 }

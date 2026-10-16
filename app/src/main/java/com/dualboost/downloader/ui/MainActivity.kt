@@ -248,7 +248,7 @@ fun MainScreen(
                     modifier = Modifier.weight(1f),
                     title = "Wi-Fi",
                     subtitle = if (wifiAvailable) "Bound & Ready" else "Disconnected",
-                    icon = Icons.Rounded.Wifi,
+                    icon = if (wifiAvailable) Icons.Rounded.Wifi else Icons.Rounded.WifiOff,
                     isActive = wifiAvailable,
                     activeColor = wifiColor
                 )
@@ -256,7 +256,7 @@ fun MainScreen(
                     modifier = Modifier.weight(1f),
                     title = "5G Cellular",
                     subtitle = if (cellularAvailable) "Bound & Ready" else "Standby",
-                    icon = Icons.Rounded.SignalCellularAlt,
+                    icon = if (cellularAvailable) Icons.Rounded.SignalCellularAlt else Icons.Rounded.SignalCellularOff,
                     isActive = cellularAvailable,
                     activeColor = cellularColor
                 )
@@ -264,7 +264,7 @@ fun MainScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Aggregation Status Pill
+            // Context-Aware Network Status Banner
             if (wifiAvailable && cellularAvailable) {
                 Surface(
                     shape = RoundedCornerShape(18.dp),
@@ -290,7 +290,32 @@ fun MainScreen(
                         )
                     }
                 }
-            } else if (!cellularAvailable) {
+            } else if (!wifiAvailable && !cellularAvailable) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.CloudOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "No Network Available: Reconnect Wi-Fi or Cellular to download.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            } else if (wifiAvailable && !cellularAvailable) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -309,7 +334,32 @@ fun MainScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "To boost with 5G simultaneously, enable 'Mobile data always active' in Developer Options.",
+                            text = "Using Wi-Fi only: Enable 'Mobile data always active' in Developer Options to aggregate 5G.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.SignalCellularAlt,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Using 5G Cellular only: Connect Wi-Fi to activate DualBoost aggregation.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1056,11 +1106,11 @@ fun NetworkCard(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isActive) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerLowest
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         border = BorderStroke(
             1.dp,
-            if (isActive) activeColor.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+            if (isActive) activeColor.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -1071,14 +1121,14 @@ fun NetworkCard(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = if (isActive) activeColor.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
+                    color = if (isActive) activeColor.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.8f),
                     modifier = Modifier.size(36.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = if (isActive) activeColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            tint = if (isActive) activeColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -1087,7 +1137,7 @@ fun NetworkCard(
                     modifier = Modifier
                         .size(10.dp)
                         .clip(CircleShape)
-                        .background(if (isActive) activeColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                        .background(if (isActive) activeColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))

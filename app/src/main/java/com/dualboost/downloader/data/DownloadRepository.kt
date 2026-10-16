@@ -70,11 +70,11 @@ class DownloadRepository(
         }
     }
 
-    fun discardDownload(fileName: String? = null) {
-        downloaderEngine.discardDownload(fileName = fileName)
+    fun discardDownload(fileName: String? = null, targetDir: File = downloaderEngine.getDefaultDownloadDir()) {
+        downloaderEngine.discardDownload(targetDir = targetDir, fileName = fileName)
         try {
             val intent = Intent(context, DownloadForegroundService::class.java).apply {
-                action = DownloadForegroundService.ACTION_CANCEL_DOWNLOAD
+                action = DownloadForegroundService.ACTION_DISCARD_DOWNLOAD
             }
             context.startService(intent)
         } catch (_: Exception) {

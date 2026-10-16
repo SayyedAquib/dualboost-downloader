@@ -20,17 +20,21 @@ The application fully embraces Material You dynamic color extraction (`dynamicCo
   - Base cards: `surfaceContainer` for primary content containers ("New Download", "Ready to Download", "Downloading", "Paused").
   - Elevated surfaces: `surfaceContainerHigh` for hero speed telemetry and info banners.
   - Tonal controls: `surfaceContainerHighest` for URL textfield input fills and inactive preset benchmark chips.
-- **Accented Card Borders**: Subtle 1dp `BorderStroke` (`outlineVariant.copy(alpha = 0.35f)` for base cards, and interface-tinted glows `activeColor.copy(alpha = 0.35f)` for Wi-Fi and 5G) delivering crisp edge definition against deep dark backgrounds.
+- **Accented Card Borders**: Subtle 1dp `BorderStroke` (`outlineVariant.copy(alpha = 0.35f)` for base cards, `outlineVariant.copy(alpha = 0.5f)` for inactive cards, and interface-tinted glows `activeColor.copy(alpha = 0.35f)` for active Wi-Fi and 5G) delivering crisp edge definition against deep dark backgrounds.
 - **Action Button ("Boost Download")**: Full-width filled `Button` using `MaterialTheme.colorScheme.primary` and `onPrimary`.
-- **Aggregation Pill**: Adapts to `MaterialTheme.colorScheme.primaryContainer` with `onPrimaryContainer` and subtle 1dp primary border.
+- **Context-Aware Aggregation Banner**: Replaces static pills with a 4-state dynamic banner adapting container color and messaging to real-time network states:
+  - *Dual Active*: `primaryContainer` with 1dp border ("Dual-Channel Active: Aggregating Wi-Fi + 5G").
+  - *Both Offline*: `errorContainer` alert ("No Network Available: Reconnect Wi-Fi or Cellular to download.").
+  - *Wi-Fi Only*: `surfaceContainerHigh` tip ("Using Wi-Fi only: Enable 'Mobile data always active' in Developer Options to aggregate 5G.").
+  - *5G Only*: `surfaceContainerHigh` tip ("Using 5G Cellular only: Connect Wi-Fi to activate DualBoost aggregation.").
 - **Preset Benchmark Chips**: Active chips use `primaryContainer` with 1.5dp `primary` outline and bold label; idle chips use `surfaceContainerHighest` with 1dp `outlineVariant` border.
 - **Empty State Hero Card**: Replaced bulky placeholder slab with a sleek 24dp rounded `surfaceContainer` hero card featuring a 56dp primary-tinted circular icon container (`Icons.Rounded.CloudDownload`), bold `titleMedium` typography, and centered assistive copy.
 - **Pause / Cancel Control**: Outlined button adapting to `MaterialTheme.colorScheme.error`.
 
 ### Functional Network Clarity Accents
 To ensure physical network transparency across any wallpaper palette:
-- **Wi-Fi Stream**: Electric Cyan (`#00E5FF` in Dark Mode, `#00838F` in Light Mode) applied to status dot, icon, and speed progress segment.
-- **Cellular (5G/LTE) Stream**: Neon Violet (`#B388FF` in Dark Mode, `#651FFF` in Light Mode) applied to status dot, icon, and speed progress segment.
+- **Wi-Fi Stream**: Electric Cyan (`#00E5FF` in Dark Mode, `#00838F` in Light Mode) applied to status dot, icon, and speed progress segment. Displays `Icons.Rounded.WifiOff` when disconnected.
+- **Cellular (5G/LTE) Stream**: Neon Violet (`#B388FF` in Dark Mode, `#651FFF` in Light Mode) applied to status dot, icon, and speed progress segment. Displays `Icons.Rounded.SignalCellularOff` when disconnected.
 
 ## Typography & Motion
 - System Google Sans / Roboto via Material 3 Typography scales.
@@ -40,7 +44,7 @@ To ensure physical network transparency across any wallpaper palette:
 
 ## Layout & Components
 - **Top Bar**: `CenterAlignedTopAppBar` with branded lightning bolt badge, dynamic title, and technical information dialog.
-- **Hero Network Cards**: Dual `ElevatedCard` containers with live status indicators, connection state badges, and Developer Options guidance.
+- **Hero Network Cards**: Dual `Card` containers with live status indicators, connection state badges, dynamic active/inactive iconography (`Wifi`/`WifiOff`, `SignalCellularAlt`/`SignalCellularOff`), and Developer Options guidance.
 - **Download Action Card**: 24dp rounded elevated container with quick clipboard paste, text clear, dynamic quick-test benchmark presets (10MB, 100MB Range, 100MB Cloudflare, 1GB Range), selected chip visual state with primary border and lightning bolt (`⚡`) range indicators, dynamic server capability captions, and prominent "Boost Download" button.
 - **Dual-Color Progress Bar**: Stacked proportional bar visualizing the real-time byte contribution between Wi-Fi and 5G.
 - **File Provider Integration**: Direct "Open File" launcher upon download completion.

@@ -422,6 +422,47 @@ Accepted
 ### Reasoning
 Elevates DualBoost Downloader from a proof-of-concept into a resilient, production-grade Android utility capable of handling real-world network anomalies, storage boundaries, and Android lifecycle restarts.
 
+---
+
+## ADR-016: Discard Download State Decoupling & Inactive Network Context-Aware UI
+
+### Date
+2026-10-16
+
+### Status
+Accepted
+
+### Context
+1. When discarding a paused or active download, `DownloadRepository.discardDownload()` dispatched `ACTION_CANCEL_DOWNLOAD` to `DownloadForegroundService`. The service command handler treated `ACTION_CANCEL_DOWNLOAD` identically to pause, invoking `downloaderEngine.pauseDownload()` which overwrote `DownloadState.Idle` with `DownloadState.Paused(0%)`. Furthermore, coroutine cancellation inside `startDownload` caught `CancellationException` and defaulted to `DownloadState.Paused(url)`. This caused the Discard button to reset partial downloads to 0% Paused instead of returning cleanly to `Idle` ("Ready to Download").
+2. When Wi-Fi or 5G was disabled, network cards turned into sunken dark rectangles with faint borders, and the status banner only supported dual-active or single generic idle messages, leaving users without actionable guidance when only one or neither interface was active.
+
+### Options Considered
+- Continue using `ACTION_CANCEL_DOWNLOAD` with boolean flags.
+- Create a dedicated `ACTION_DISCARD_DOWNLOAD` service action, introduce an atomic `isDiscarding` flag in `DualDownloaderEngine`, update repository and UI discard actions, style inactive cards with crisp borders and dynamic `WifiOff` / `SignalCellularOff` icons, and expand the status banner to 4 distinct context-aware states.
+
+### Decision
+1. **Dedicated Service Action (`ACTION_DISCARD_DOWNLOAD`)**:
+   - `DownloadForegroundService` handles `ACTION_DISCARD_DOWNLOAD` independently, stopping the foreground service and removing notifications immediately without calling `pauseDownload()`.
+   - Guarded `ACTION_CANCEL_DOWNLOAD` so that it never calls `pauseDownload()` if the engine is already in `Idle` or `Paused`.
+2. **Atomic `isDiscarding` State Protection**:
+   - Added `val isDiscarding = AtomicBoolean(false)` in `DualDownloaderEngine`.
+   - In `discardDownload()`, `isDiscarding.set(true)` before job cancellation.
+   - When workers catch `CancellationException`, if `isDiscarding.get()` is true, they safely emit `DownloadState.Idle` instead of resurrecting `DownloadState.Paused`.
+   - Existing partial `.part` files and `.dualboost_meta` sidecars are deleted, resetting disk and memory state.
+3. **URL Input Retention**:
+   - In `MainViewModel`, `discardDownload()` resets state to `Idle` while preserving `urlInput`, allowing users to immediately restart or select a new preset without re-entering the URL.
+4. **Inactive Network Cards & 4-State Context-Aware Banner**:
+   - Inactive network cards use `surfaceContainer` fill, 1dp `outlineVariant.copy(alpha = 0.5f)` border, amber/grey indicator dots, and dynamic `WifiOff` / `SignalCellularOff` icons with 0.5f opacity.
+   - Status banner implements 4 contextual states:
+     - Dual Active: `primaryContainer` pill ("Dual-Channel Active: Aggregating Wi-Fi + 5G").
+     - Both Inactive: `errorContainer` warning banner ("No Network Available: Reconnect Wi-Fi or Cellular to download.").
+     - Wi-Fi Only: `surfaceContainerHigh` tip ("Using Wi-Fi only: Enable 'Mobile data always active' in Developer Options to aggregate 5G.").
+     - 5G Only: `surfaceContainerHigh` info ("Using 5G Cellular only: Connect Wi-Fi to activate DualBoost aggregation.").
+
+### Reasoning
+Prevents race conditions between coroutine cancellation, foreground service lifecycles, and engine state emissions, ensuring discard cleanly returns to Idle while providing crystal-clear network diagnostics across all connection permutations.
+
+
 
 
 

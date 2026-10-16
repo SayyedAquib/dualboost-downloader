@@ -61,7 +61,14 @@ class DownloadForegroundService : Service() {
                 downloaderEngine.startDownload(url)
             }
         } else if (action == ACTION_CANCEL_DOWNLOAD) {
-            downloaderEngine.pauseDownload()
+            val currentState = downloaderEngine.downloadState.value
+            if (currentState !is DownloadState.Idle && currentState !is DownloadState.Paused) {
+                downloaderEngine.pauseDownload()
+            }
+            releaseWakeLock()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        } else if (action == ACTION_DISCARD_DOWNLOAD) {
             releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -232,6 +239,7 @@ class DownloadForegroundService : Service() {
 
         const val ACTION_START_DOWNLOAD = "com.dualboost.ACTION_START_DOWNLOAD"
         const val ACTION_CANCEL_DOWNLOAD = "com.dualboost.ACTION_CANCEL_DOWNLOAD"
+        const val ACTION_DISCARD_DOWNLOAD = "com.dualboost.ACTION_DISCARD_DOWNLOAD"
         const val EXTRA_URL = "extra_download_url"
     }
 }

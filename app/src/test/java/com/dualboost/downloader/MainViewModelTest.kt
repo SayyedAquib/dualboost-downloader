@@ -150,4 +150,12 @@ class MainViewModelTest {
         viewModel.startDownload()
         viewModel.pauseDownload()
     }
+
+    @Test
+    fun testDiscardDownload_PreservesUrlInputWhenDiscarded() {
+        val viewModel = MainViewModel(repository = null)
+        viewModel.onUrlChanged("https://proof.ovh.net/files/10Mb.dat")
+        viewModel.discardDownload("10Mb.dat")
+        assertEquals("https://proof.ovh.net/files/10Mb.dat", viewModel.urlInput.value)
+    }
 }

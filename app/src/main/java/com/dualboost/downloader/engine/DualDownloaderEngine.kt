@@ -47,6 +47,7 @@ class DualDownloaderEngine(
     // Active calls tracking to guarantee instantaneous cancellation upon Pause / Cancel
     private val activeCalls = ConcurrentHashMap.newKeySet<Call>()
     private val isPaused = AtomicBoolean(false)
+    private val isDiscarding = AtomicBoolean(false)
     internal val activeCallsCount: Int get() = activeCalls.size
 
     // Active download tracking for seamless resume and discard
@@ -70,11 +71,19 @@ class DualDownloaderEngine(
     private val CHUNK_SIZE = 4 * 1024 * 1024L // 4 MB chunks
 
     fun getDefaultDownloadDir(): File {
-        val publicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        return if (publicDir.exists() || publicDir.mkdirs()) {
+        val publicDir = try {
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        } catch (_: Throwable) {
+            null
+        }
+        return if (publicDir != null && (publicDir.exists() || publicDir.mkdirs())) {
             publicDir
         } else {
-            context.getExternalFilesDir(null) ?: context.filesDir
+            try {
+                context.getExternalFilesDir(null) ?: context.filesDir
+            } catch (_: Throwable) {
+                File(System.getProperty("java.io.tmpdir") ?: ".")
+            }
         }
     }
 
@@ -210,6 +219,7 @@ class DualDownloaderEngine(
         val previousState = _downloadState.value
         if (previousState is DownloadState.Downloading && currentUrl == sanitizedUrl) return
 
+        isDiscarding.set(false)
         isPaused.set(true)
         downloadJob?.cancel()
         activeCalls.forEach { try { it.cancel() } catch (_: Exception) {} }
@@ -220,20 +230,25 @@ class DualDownloaderEngine(
             try {
                 executeDownload(sanitizedUrl, targetDir)
             } catch (e: CancellationException) {
-                val lastState = _downloadState.value
-                if (lastState is DownloadState.Downloading) {
-                    _downloadState.value = DownloadState.Paused(
-                        fileName = lastState.fileName,
-                        filePath = currentOutputFile?.absolutePath ?: "",
-                        totalBytes = lastState.totalBytes,
-                        downloadedBytes = lastState.downloadedBytes,
-                        progressPercentage = lastState.progressPercentage,
-                        url = currentUrl ?: sanitizedUrl
-                    )
-                } else if (lastState !is DownloadState.Paused) {
-                    _downloadState.value = DownloadState.Paused(url = currentUrl ?: sanitizedUrl)
+                if (!isDiscarding.get()) {
+                    val lastState = _downloadState.value
+                    if (lastState is DownloadState.Downloading) {
+                        _downloadState.value = DownloadState.Paused(
+                            fileName = lastState.fileName,
+                            filePath = currentOutputFile?.absolutePath ?: "",
+                            totalBytes = lastState.totalBytes,
+                            downloadedBytes = lastState.downloadedBytes,
+                            progressPercentage = lastState.progressPercentage,
+                            url = currentUrl ?: sanitizedUrl
+                        )
+                    } else if (lastState !is DownloadState.Paused && lastState !is DownloadState.Idle) {
+                        _downloadState.value = DownloadState.Paused(url = currentUrl ?: sanitizedUrl)
+                    }
+                    Log.d(TAG, "Download paused/cancelled")
+                } else {
+                    _downloadState.value = DownloadState.Idle
+                    Log.d(TAG, "Download discarded")
                 }
-                Log.d(TAG, "Download paused/cancelled")
             } catch (e: Exception) {
                 Log.e(TAG, "Download failed", e)
                 _downloadState.value = DownloadState.Failed(e.localizedMessage ?: "Unknown error")
@@ -261,20 +276,35 @@ class DualDownloaderEngine(
                 progressPercentage = lastState.progressPercentage,
                 url = currentUrl ?: ""
             )
-        } else if (lastState !is DownloadState.Paused) {
+        } else if (lastState !is DownloadState.Paused && lastState !is DownloadState.Idle) {
             _downloadState.value = DownloadState.Paused(url = currentUrl ?: "")
         }
     }
 
     fun discardDownload(targetDir: File = getDefaultDownloadDir(), fileName: String? = null) {
+        isDiscarding.set(true)
+        isPaused.set(true)
+        downloadJob?.cancel()
+        activeCalls.forEach { call ->
+            try { call.cancel() } catch (_: Exception) {}
+        }
+        activeCalls.clear()
+
         val target = currentOutputFile ?: if (fileName != null) File(targetDir, fileName) else null
-        pauseDownload()
         try {
             target?.let { file ->
                 if (file.exists()) file.delete()
                 val meta = getMetaFile(file.parentFile ?: targetDir, file.name)
                 if (meta.exists()) meta.delete()
                 val tmp = File(file.parentFile ?: targetDir, "${meta.name}.tmp")
+                if (tmp.exists()) tmp.delete()
+            }
+            if (fileName != null) {
+                val orphan = File(targetDir, fileName)
+                if (orphan.exists()) orphan.delete()
+                val meta = getMetaFile(targetDir, fileName)
+                if (meta.exists()) meta.delete()
+                val tmp = File(targetDir, "${meta.name}.tmp")
                 if (tmp.exists()) tmp.delete()
             }
         } catch (_: Exception) {}

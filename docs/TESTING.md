@@ -10,7 +10,7 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (68 active tests across 11 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (70 active tests across 11 test suites, 100% passing):
 
 - **EngineComprehensiveTest** (13 tests):
   - `testExtractFileName_StandardExtension`: Verifies filename extraction across standard `.iso`, `.dat`, and `.tar.gz` extensions.
@@ -27,11 +27,12 @@ Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (68 active te
   - `testSingleStreamFallback_MetersSpeedAndPreservesDataIntegrity`: Exercises end-to-end single-stream fallback with real-time speed calculation, 300ms throttling, and bit-for-bit SHA-256 verification.
   - `testContentDispositionHeader_OverridesUrlFilename`: Confirms server-supplied `Content-Disposition` header supersedes URL path naming.
 
-- **DownloadRepositoryTest** (4 tests):
+- **DownloadRepositoryTest** (5 tests):
   - `testRepository_InitialStateIsIdle`: Verifies initial state of repository starts in `DownloadState.Idle`.
   - `testRepository_StartDownload_TransitionsToProbing`: Verifies `startDownload()` delegates to engine and transitions lifecycle states.
   - `testRepository_PauseDownload_TransitionsToPaused`: Confirms `pauseDownload()` cancels active downloads and transitions state to `Paused`.
   - `testRepository_ExposesNetworkStateFlows`: Validates that `isWifiAvailable` and `isCellularAvailable` flows are exposed directly to consumers.
+  - `testRepository_DiscardDownload_TransitionsToIdleAndCleansFiles`: Verifies `discardDownload()` stops foreground service without triggering pause, cancels engine with `isDiscarding`, cleans partial files and metadata, and transitions directly to `Idle`.
 
 - **DualNetworkManagerTest** (5 tests):
   - `testNetworkProvider_BothDisconnectedInitially`: Validates default state when neither interface is active.
@@ -53,8 +54,8 @@ Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (68 active te
   - `testStartButtonStateMatrix_Exhaustive`: Tests the complete state machine matrix for button enablement across all 7 lifecycle states.
   - `testDualColorProgressSplit_FormulaPrecision`: Validates dual-channel progress split calculations across asymmetric loads and edge cases.
 
-- **MainViewModelTest** (6 tests):
-  - Validates presets, chip clicks, URL updates, start button states, dual-color ratio math, and null repository tolerance.
+- **MainViewModelTest** (7 tests):
+  - Validates presets, chip clicks, URL updates, start button states, dual-color ratio math, null repository tolerance, and URL preservation across `discardDownload()`.
 
 - **EngineEdgeCasesTest** (9 tests):
   - Tests request header injection, HTTP 403, 404, 500 handling, User-Agent propagation, single-stream fallback, pause cancellation, instantaneous socket abort, and interface circuit-breaker recovery.
