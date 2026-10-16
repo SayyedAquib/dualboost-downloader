@@ -8,8 +8,6 @@ DualBoost Downloader has reached full production readiness and visual polish und
   - Integrated Cash App's Turbine library into `gradle/libs.versions.toml` and `app/build.gradle.kts`.
   - Added 4 live stream tests asserting exact state progression without race conditions: `testTurbine_UrlInputStream_EmitsAccurateSequence`, `testTurbine_SelectedPresetStream_EmitsAccurateSequence`, `testTurbine_SpeedTestStateStream_RemainsIdleWithoutRepository` in `MainViewModelTest`, and `testTurbine_SpeedTestState_EmitsErrorWhenOffline` in `SpeedTestEngineTest`.
   - Executed full test suite via `.\gradlew.bat test`: all 80 unit tests across 12 suites pass with 100% success.
-- **Curated VS Code Extension Pack (`.vscode/extensions.json`)**:
-  - Configured workspace recommendations including `fwcd.kotlin`, `vscjava.vscode-gradle`, `redhat.java`, `redhat.vscode-xml`, `ms-vscode.powershell`, `adelphes.android-dev-ext`, and `eamodio.gitlens` for one-click developer setup.
 - **Google Material 3 App Icon Redesign (ADR-017)**:
   - Replaced dark slate background with a clean, crisp pure white background (`#FFFFFF`) in `ic_launcher_background.xml` matching Google Pixel first-party system apps.
   - Re-engineered `ic_launcher_foreground.xml` with Google Material 3 geometric curves: Electric Cyan / Azure (`#00B0FF` / `#0288D1`) and Neon Violet / Purple (`#B388FF` / `#651FFF`) streams converging into a central downward arrow with white lightning core, sized inside the 72dp safe zone.
