@@ -55,3 +55,14 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 
+# DualBoost partial downloads & engine sidecar metadata
+*.dualboost_meta
+*.dualboost_meta.tmp
+*.part
+*.bin
+*.tmp
+
+# Memory dumps and profiler snapshots
+*.hprof
+
+
