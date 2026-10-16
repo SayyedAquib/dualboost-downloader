@@ -60,6 +60,7 @@ dependencies {
 
     // Unit & Integration Testing
     testImplementation(libs.junit)
+    testImplementation(libs.turbine)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.kotlinx.coroutines.test)
 

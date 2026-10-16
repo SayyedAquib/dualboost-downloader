@@ -1,5 +1,6 @@
 package com.dualboost.downloader
 
+import app.cash.turbine.test
 import com.dualboost.downloader.data.SpeedTestPhase
 import com.dualboost.downloader.data.SpeedTestState
 import com.dualboost.downloader.engine.SpeedTestEngine
@@ -125,5 +126,21 @@ class SpeedTestEngineTest {
         assertTrue(phases.contains(SpeedTestPhase.COMPLETED))
         assertTrue(phases.contains(SpeedTestPhase.CANCELLED))
         assertTrue(phases.contains(SpeedTestPhase.FAILED))
+    }
+
+    @Test
+    fun testTurbine_SpeedTestState_EmitsErrorWhenOffline() = runBlocking {
+        val provider = MockNetworkProvider()
+        provider.wifiFlow.value = false
+        provider.cellFlow.value = false
+
+        val engine = SpeedTestEngine(provider, mockWebServer.url("/test").toString(), testScope)
+        engine.speedTestState.test {
+            assertEquals(SpeedTestState.Idle, awaitItem()) // 1. Initial State
+            engine.startSpeedTest()
+            val nextState = awaitItem() // 2. Error State
+            assertTrue("Turbine must observe transition to Error state", nextState is SpeedTestState.Error)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

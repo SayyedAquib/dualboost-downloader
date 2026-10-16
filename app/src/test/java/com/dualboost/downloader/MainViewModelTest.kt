@@ -1,8 +1,11 @@
 package com.dualboost.downloader
 
+import app.cash.turbine.test
 import com.dualboost.downloader.data.DownloadState
+import com.dualboost.downloader.data.SpeedTestState
 import com.dualboost.downloader.ui.DEFAULT_PRESETS
 import com.dualboost.downloader.ui.MainViewModel
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -162,11 +165,50 @@ class MainViewModelTest {
     @Test
     fun testSpeedTest_StateFlowAndSafeExecution_WhenRepositoryNull() {
         val viewModel = MainViewModel(repository = null)
-        assertTrue("Speed test state must default to Idle", viewModel.speedTestState.value is com.dualboost.downloader.data.SpeedTestState.Idle)
+        assertTrue("Speed test state must default to Idle", viewModel.speedTestState.value is SpeedTestState.Idle)
         // Calling start/stop without repository must be safe and not crash
         viewModel.startSpeedTest()
         viewModel.stopSpeedTest()
-        assertTrue("Speed test state must remain Idle", viewModel.speedTestState.value is com.dualboost.downloader.data.SpeedTestState.Idle)
+        assertTrue("Speed test state must remain Idle", viewModel.speedTestState.value is SpeedTestState.Idle)
+    }
+
+    @Test
+    fun testTurbine_UrlInputStream_EmitsAccurateSequence() = runBlocking {
+        val viewModel = MainViewModel(repository = null)
+        viewModel.urlInput.test {
+            assertEquals("", awaitItem()) // 1. Initial state
+            viewModel.onUrlChanged("https://test.com/file.iso")
+            assertEquals("https://test.com/file.iso", awaitItem()) // 2. Typed URL
+            viewModel.clearUrl()
+            assertEquals("", awaitItem()) // 3. Cleared URL
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun testTurbine_SelectedPresetStream_EmitsAccurateSequence() = runBlocking {
+        val viewModel = MainViewModel(repository = null)
+        viewModel.selectedPreset.test {
+            assertNull(awaitItem()) // 1. Initially null
+            val preset = DEFAULT_PRESETS.first()
+            viewModel.onPresetSelected(preset)
+            assertEquals(preset, awaitItem()) // 2. Preset selected
+            viewModel.clearUrl()
+            assertNull(awaitItem()) // 3. Cleared
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun testTurbine_SpeedTestStateStream_RemainsIdleWithoutRepository() = runBlocking {
+        val viewModel = MainViewModel(repository = null)
+        viewModel.speedTestState.test {
+            assertEquals(SpeedTestState.Idle, awaitItem())
+            viewModel.startSpeedTest()
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }
+
 

@@ -10,7 +10,7 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (76 active tests across 12 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (80 active tests across 12 test suites, 100% passing):
 
 - **EngineComprehensiveTest** (13 tests):
   - `testExtractFileName_StandardExtension`: Verifies filename extraction across standard `.iso`, `.dat`, and `.tar.gz` extensions.
@@ -54,8 +54,8 @@ Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (76 active te
   - `testStartButtonStateMatrix_Exhaustive`: Tests the complete state machine matrix for button enablement across all 7 lifecycle states.
   - `testDualColorProgressSplit_FormulaPrecision`: Validates dual-channel progress split calculations across asymmetric loads and edge cases.
 
-- **MainViewModelTest** (8 tests):
-  - Validates presets, chip clicks, URL updates, start button states, dual-color ratio math, null repository tolerance, URL preservation across `discardDownload()`, and safe speed test state delegation.
+- **MainViewModelTest** (11 tests):
+  - Validates presets, chip clicks, URL updates, start button states, dual-color ratio math, null repository tolerance, URL preservation across `discardDownload()`, safe speed test state delegation, and Turbine live stream assertions (`testTurbine_UrlInputStream_EmitsAccurateSequence`, `testTurbine_SelectedPresetStream_EmitsAccurateSequence`, `testTurbine_SpeedTestStateStream_RemainsIdleWithoutRepository`).
 
 - **EngineEdgeCasesTest** (9 tests):
   - Tests request header injection, HTTP 403, 404, 500 handling, User-Agent propagation, single-stream fallback, pause cancellation, instantaneous socket abort, and interface circuit-breaker recovery.
@@ -87,12 +87,13 @@ Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (76 active te
 - **NotificationThrottlerTest** (2 tests):
   - Verifies rapid update suppression and instant terminal event dispatch.
 
-- **SpeedTestEngineTest** (5 tests):
+- **SpeedTestEngineTest** (6 tests):
   - `testSpeedTest_InitialStateIsIdle`: Verifies initial state of SpeedTestEngine starts in `Idle`.
   - `testSpeedTest_FailsWhenNoNetworkAvailable`: Confirms error transition when both Wi-Fi and Cellular are unavailable.
   - `testSpeedTest_StopResetsStateToIdle`: Tests user cancellation safety and immediate return to `Idle`.
   - `testSpeedTestModels_DataClassIntegrity`: Tests state immutability, progress calculation, and telemetry fields across Running, Completed, and Error states.
   - `testSpeedTestPhaseEnum_ValuesExist`: Verifies all 7 lifecycle phases (`IDLE`, `TESTING_WIFI`, `TESTING_CELLULAR`, `TESTING_DUALBOOST`, `COMPLETED`, `CANCELLED`, `FAILED`).
+  - `testTurbine_SpeedTestState_EmitsErrorWhenOffline`: Asserts live `speedTestState` stream transitions sequentially from `Idle` to `Error` using Turbine.
 
 
 ## End-to-End & Automated Smoke Testing

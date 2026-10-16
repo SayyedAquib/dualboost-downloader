@@ -1,9 +1,13 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader has reached full production readiness and visual polish under **ADR-017** (Ephemeral 3-Phase Speed Benchmark & Google Material 3 App Icon Redesign). The test suite contains **76 automated unit and integration tests passing with 100% success** (0 failures across 12 test suites). The app features a Google Material 3 adaptive launcher icon with crisp white background and dynamic themed icon support, an in-app ephemeral 3-phase speed benchmark with zero disk storage footprint, overflow-safe pre-flight disk storage checks, server ETag validation, MediaStore export, startup auto-recovery, and an overhauled Dark Mode UI with full M3 surfaceContainer hierarchy on Google Pixel 9.
+DualBoost Downloader has reached full production readiness and visual polish under **ADR-017** (Ephemeral 3-Phase Speed Benchmark & Google Material 3 App Icon Redesign) with **Turbine Stream Testing Integration**. The test suite contains **80 automated unit and integration tests passing with 100% success** (0 failures across 12 test suites). The app features a Google Material 3 adaptive launcher icon with crisp white background and dynamic themed icon support, an in-app ephemeral 3-phase speed benchmark with zero disk storage footprint, overflow-safe pre-flight disk storage checks, server ETag validation, MediaStore export, startup auto-recovery, and an overhauled Dark Mode UI with full M3 surfaceContainer hierarchy on Google Pixel 9.
 
 ## Recently Completed
+- **Turbine Flow Testing Integration (`app.cash.turbine:turbine:1.2.0`)**:
+  - Integrated Cash App's Turbine library into `gradle/libs.versions.toml` and `app/build.gradle.kts`.
+  - Added 4 live stream tests asserting exact state progression without race conditions: `testTurbine_UrlInputStream_EmitsAccurateSequence`, `testTurbine_SelectedPresetStream_EmitsAccurateSequence`, `testTurbine_SpeedTestStateStream_RemainsIdleWithoutRepository` in `MainViewModelTest`, and `testTurbine_SpeedTestState_EmitsErrorWhenOffline` in `SpeedTestEngineTest`.
+  - Executed full test suite via `.\gradlew.bat test`: all 80 unit tests across 12 suites pass with 100% success.
 - **Curated VS Code Extension Pack (`.vscode/extensions.json`)**:
   - Configured workspace recommendations including `fwcd.kotlin`, `vscjava.vscode-gradle`, `redhat.java`, `redhat.vscode-xml`, `ms-vscode.powershell`, `adelphes.android-dev-ext`, and `eamodio.gitlens` for one-click developer setup.
 - **Google Material 3 App Icon Redesign (ADR-017)**:
@@ -17,15 +21,12 @@ DualBoost Downloader has reached full production readiness and visual polish und
   - Added Quick Benchmark Card on the main dashboard and action button in TopAppBar.
 - **Temporary File Hygiene & Clean-up Rule (Item 4)**:
   - Added strict file hygiene rules to `docs/RULES.md`. Cleaned up temporary screencaps and XML dumps from device `/sdcard/`.
-- **Comprehensive Test Suite Expanded (76 tests, 100% passing across 12 suites)**:
-  - Added `SpeedTestEngineTest.kt` (5 tests) and extended `MainViewModelTest.kt` (8 tests).
-  - Executed `.\gradlew.bat test` — all 76 unit tests passed cleanly with 0 failures.
 - **Device Build & Deployment**:
   - Assembled and installed debug APK onto Google Pixel 9 (`.\gradlew.bat installDebug`): BUILD SUCCESSFUL.
   - Verified clean launch via ADB logcat with both Wi-Fi (netid 137) and Cellular (netid 138) bound immediately.
 
 ## Known Problems
-- None. App compiles with 0 errors, 76/76 tests pass with 100% success, zero flicker on device during downloads, persistent chunk resumption active, discard cleanly returns to Idle, speed benchmark runs with zero storage overhead, and Google-style app icon renders cleanly.
+- None. App compiles with 0 errors, 80/80 tests pass with 100% success, zero flicker on device during downloads, persistent chunk resumption active, discard cleanly returns to Idle, speed benchmark runs with zero storage overhead, Turbine stream tests verified, and Google-style app icon renders cleanly.
 
 ## Important Context
 - User is on Google Pixel 9 running Android 17 (future-proofed for 18/19).
