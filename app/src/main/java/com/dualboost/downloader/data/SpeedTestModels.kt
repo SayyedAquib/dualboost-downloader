@@ -15,18 +15,26 @@ sealed class SpeedTestState {
 
     data class Running(
         val phase: SpeedTestPhase,
-        val currentSpeedMbps: Float,
+        val currentSpeedMBps: Float,
         val overallProgress: Float, // 0.0f to 1.0f
-        val wifiSpeedMbps: Float = 0f,
-        val cellularSpeedMbps: Float = 0f
-    ) : SpeedTestState()
+        val wifiSpeedMBps: Float = 0f,
+        val cellularSpeedMBps: Float = 0f
+    ) : SpeedTestState() {
+        val currentSpeedMbps: Float get() = currentSpeedMBps
+        val wifiSpeedMbps: Float get() = wifiSpeedMBps
+        val cellularSpeedMbps: Float get() = cellularSpeedMBps
+    }
 
     data class Completed(
-        val wifiSpeedMbps: Float,
-        val cellularSpeedMbps: Float,
-        val dualBoostSpeedMbps: Float,
+        val wifiSpeedMBps: Float,
+        val cellularSpeedMBps: Float,
+        val dualBoostSpeedMBps: Float,
         val boostGainPercent: Int
-    ) : SpeedTestState()
+    ) : SpeedTestState() {
+        val wifiSpeedMbps: Float get() = wifiSpeedMBps
+        val cellularSpeedMbps: Float get() = cellularSpeedMBps
+        val dualBoostSpeedMbps: Float get() = dualBoostSpeedMBps
+    }
 
     data class Error(val message: String) : SpeedTestState()
 }

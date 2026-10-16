@@ -55,14 +55,14 @@ class SpeedTestEngine(
         activeJob?.cancel()
         activeJob = scope.launch {
             try {
-                var wifiSpeedMbps = 0f
-                var cellularSpeedMbps = 0f
-                var dualBoostSpeedMbps = 0f
+                var wifiSpeedMBps = 0f
+                var cellularSpeedMBps = 0f
+                var dualBoostSpeedMBps = 0f
 
                 // --- PHASE 1: Wi-Fi Benchmark (3s) ---
                 if (networkProvider.isWifiAvailable.value) {
                     val client = networkProvider.getWifiClient() ?: networkProvider.getDefaultClient()
-                    wifiSpeedMbps = runStreamPhase(
+                    wifiSpeedMBps = runStreamPhase(
                         phase = SpeedTestPhase.TESTING_WIFI,
                         client = client,
                         durationMs = SINGLE_PHASE_DURATION_MS,
@@ -76,13 +76,13 @@ class SpeedTestEngine(
                 // --- PHASE 2: 5G Cellular Benchmark (3s) ---
                 if (networkProvider.isCellularAvailable.value) {
                     val client = networkProvider.getCellularClient() ?: networkProvider.getDefaultClient()
-                    cellularSpeedMbps = runStreamPhase(
+                    cellularSpeedMBps = runStreamPhase(
                         phase = SpeedTestPhase.TESTING_CELLULAR,
                         client = client,
                         durationMs = SINGLE_PHASE_DURATION_MS,
                         overallProgressStart = 0.3f,
                         overallProgressSpan = 0.3f,
-                        wifiPrev = wifiSpeedMbps,
+                        wifiPrev = wifiSpeedMBps,
                         cellPrev = 0f
                     )
                 }
@@ -90,30 +90,30 @@ class SpeedTestEngine(
                 // --- PHASE 3: DualBoost Combined Benchmark (4s) ---
                 val canAggregate = networkProvider.isWifiAvailable.value && networkProvider.isCellularAvailable.value
                 if (canAggregate) {
-                    dualBoostSpeedMbps = runDualStreamPhase(
+                    dualBoostSpeedMBps = runDualStreamPhase(
                         durationMs = DUAL_PHASE_DURATION_MS,
-                        wifiPrev = wifiSpeedMbps,
-                        cellPrev = cellularSpeedMbps
+                        wifiPrev = wifiSpeedMBps,
+                        cellPrev = cellularSpeedMBps
                     )
                 } else {
-                    dualBoostSpeedMbps = maxOf(wifiSpeedMbps, cellularSpeedMbps)
+                    dualBoostSpeedMBps = maxOf(wifiSpeedMBps, cellularSpeedMBps)
                 }
 
                 // Calculate Boost Gain
-                val bestSingle = maxOf(wifiSpeedMbps, cellularSpeedMbps)
-                val boostGainPercent = if (bestSingle > 0.5f && dualBoostSpeedMbps > bestSingle) {
-                    (((dualBoostSpeedMbps - bestSingle) / bestSingle) * 100f).toInt()
-                } else if (bestSingle > 0.5f && canAggregate) {
+                val bestSingle = maxOf(wifiSpeedMBps, cellularSpeedMBps)
+                val boostGainPercent = if (bestSingle > 0.05f && dualBoostSpeedMBps > bestSingle) {
+                    (((dualBoostSpeedMBps - bestSingle) / bestSingle) * 100f).toInt()
+                } else if (bestSingle > 0.05f && canAggregate) {
                     // Margin calculation
-                    (((dualBoostSpeedMbps / bestSingle) - 1f) * 100f).toInt().coerceAtLeast(0)
+                    (((dualBoostSpeedMBps / bestSingle) - 1f) * 100f).toInt().coerceAtLeast(0)
                 } else {
                     0
                 }
 
                 _speedTestState.value = SpeedTestState.Completed(
-                    wifiSpeedMbps = wifiSpeedMbps,
-                    cellularSpeedMbps = cellularSpeedMbps,
-                    dualBoostSpeedMbps = dualBoostSpeedMbps,
+                    wifiSpeedMBps = wifiSpeedMBps,
+                    cellularSpeedMBps = cellularSpeedMBps,
+                    dualBoostSpeedMBps = dualBoostSpeedMBps,
                     boostGainPercent = boostGainPercent
                 )
             } catch (e: CancellationException) {
@@ -178,16 +178,16 @@ class SpeedTestEngine(
             while ((System.currentTimeMillis() - startTime) < durationMs) {
                 delay(150)
                 val elapsedSec = ((System.currentTimeMillis() - startTime) / 1000f).coerceAtLeast(0.1f)
-                val currentSpeed = (bytesRead.get() * 8f) / (elapsedSec * 1_000_000f)
+                val currentSpeed = bytesRead.get().toFloat() / (elapsedSec * (1024f * 1024f))
                 finalSpeedMbps = currentSpeed
                 val phaseProgress = ((System.currentTimeMillis() - startTime).toFloat() / durationMs).coerceIn(0f, 1f)
 
                 _speedTestState.value = SpeedTestState.Running(
                     phase = phase,
-                    currentSpeedMbps = currentSpeed,
+                    currentSpeedMBps = currentSpeed,
                     overallProgress = overallProgressStart + (phaseProgress * overallProgressSpan),
-                    wifiSpeedMbps = if (phase == SpeedTestPhase.TESTING_WIFI) currentSpeed else wifiPrev,
-                    cellularSpeedMbps = if (phase == SpeedTestPhase.TESTING_CELLULAR) currentSpeed else cellPrev
+                    wifiSpeedMBps = if (phase == SpeedTestPhase.TESTING_WIFI) currentSpeed else wifiPrev,
+                    cellularSpeedMBps = if (phase == SpeedTestPhase.TESTING_CELLULAR) currentSpeed else cellPrev
                 )
             }
         } finally {
@@ -252,16 +252,16 @@ class SpeedTestEngine(
                 delay(150)
                 val elapsedSec = ((System.currentTimeMillis() - startTime) / 1000f).coerceAtLeast(0.1f)
                 val totalBytes = wifiBytes.get() + cellBytes.get()
-                val currentSpeed = (totalBytes * 8f) / (elapsedSec * 1_000_000f)
+                val currentSpeed = totalBytes.toFloat() / (elapsedSec * (1024f * 1024f))
                 finalSpeedMbps = currentSpeed
                 val phaseProgress = ((System.currentTimeMillis() - startTime).toFloat() / durationMs).coerceIn(0f, 1f)
 
                 _speedTestState.value = SpeedTestState.Running(
                     phase = SpeedTestPhase.TESTING_DUALBOOST,
-                    currentSpeedMbps = currentSpeed,
+                    currentSpeedMBps = currentSpeed,
                     overallProgress = 0.6f + (phaseProgress * 0.4f),
-                    wifiSpeedMbps = wifiPrev,
-                    cellularSpeedMbps = cellPrev
+                    wifiSpeedMBps = wifiPrev,
+                    cellularSpeedMBps = cellPrev
                 )
             }
 

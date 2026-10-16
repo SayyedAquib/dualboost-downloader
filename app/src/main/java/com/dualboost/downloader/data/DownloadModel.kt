@@ -33,12 +33,16 @@ sealed class DownloadState {
         val downloadedBytes: Long,
         val wifiDownloadedBytes: Long,
         val cellularDownloadedBytes: Long,
-        val wifiSpeedMbps: Double,
-        val cellularSpeedMbps: Double,
-        val totalSpeedMbps: Double,
+        val wifiSpeedMBps: Double,
+        val cellularSpeedMBps: Double,
+        val totalSpeedMBps: Double,
         val progressPercentage: Float,
         val supportsRanges: Boolean
-    ) : DownloadState()
+    ) : DownloadState() {
+        val wifiSpeedMbps: Double get() = wifiSpeedMBps
+        val cellularSpeedMbps: Double get() = cellularSpeedMBps
+        val totalSpeedMbps: Double get() = totalSpeedMBps
+    }
     data class Completed(
         val fileName: String,
         val filePath: String,
@@ -56,6 +60,35 @@ sealed class DownloadState {
         val progressPercentage: Float = 0f,
         val url: String = ""
     ) : DownloadState()
+}
+
+/**
+ * Formats a speed given in Megabytes per second (MB/s).
+ * Adapts to KB/s for speeds below 1.0 MB/s, and defaults to 0.0 MB/s when idle.
+ */
+fun formatSpeed(speedMBps: Double): String {
+    return when {
+        speedMBps <= 0.0 -> "0.0 MB/s"
+        speedMBps < 1.0 -> {
+            val kbps = speedMBps * 1024.0
+            String.format(java.util.Locale.US, "%.0f KB/s", kbps)
+        }
+        else -> String.format(java.util.Locale.US, "%.1f MB/s", speedMBps)
+    }
+}
+
+/**
+ * Returns a pair of (numericValueString, unitString) for speedometer hero displays.
+ */
+fun formatSpeedComponents(speedMBps: Float): Pair<String, String> {
+    return when {
+        speedMBps <= 0f -> Pair("0.0", "MB/s")
+        speedMBps < 1f -> {
+            val kbps = speedMBps * 1024f
+            Pair(String.format(java.util.Locale.US, "%.0f", kbps), "KB/s")
+        }
+        else -> Pair(String.format(java.util.Locale.US, "%.1f", speedMBps), "MB/s")
+    }
 }
 
 

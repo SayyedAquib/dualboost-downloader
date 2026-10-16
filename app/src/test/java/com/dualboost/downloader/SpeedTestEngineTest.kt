@@ -90,26 +90,28 @@ class SpeedTestEngineTest {
     fun testSpeedTestModels_DataClassIntegrity() {
         val running = SpeedTestState.Running(
             phase = SpeedTestPhase.TESTING_WIFI,
-            currentSpeedMbps = 45.2f,
+            currentSpeedMBps = 5.65f,
             overallProgress = 0.25f,
-            wifiSpeedMbps = 45.2f,
-            cellularSpeedMbps = 0f
+            wifiSpeedMBps = 5.65f,
+            cellularSpeedMBps = 0f
         )
         assertEquals(SpeedTestPhase.TESTING_WIFI, running.phase)
-        assertEquals(45.2f, running.currentSpeedMbps, 0.01f)
+        assertEquals(5.65f, running.currentSpeedMBps, 0.01f)
+        assertEquals(5.65f, running.currentSpeedMbps, 0.01f) // verify compatibility getter
         assertEquals(0.25f, running.overallProgress, 0.01f)
-        assertEquals(45.2f, running.wifiSpeedMbps, 0.01f)
-        assertEquals(0f, running.cellularSpeedMbps, 0.01f)
+        assertEquals(5.65f, running.wifiSpeedMBps, 0.01f)
+        assertEquals(0f, running.cellularSpeedMBps, 0f)
 
         val completed = SpeedTestState.Completed(
-            wifiSpeedMbps = 50.0f,
-            cellularSpeedMbps = 60.0f,
-            dualBoostSpeedMbps = 100.0f,
+            wifiSpeedMBps = 6.25f,
+            cellularSpeedMBps = 7.5f,
+            dualBoostSpeedMBps = 12.5f,
             boostGainPercent = 66
         )
-        assertEquals(50.0f, completed.wifiSpeedMbps, 0.01f)
-        assertEquals(60.0f, completed.cellularSpeedMbps, 0.01f)
-        assertEquals(100.0f, completed.dualBoostSpeedMbps, 0.01f)
+        assertEquals(6.25f, completed.wifiSpeedMBps, 0.01f)
+        assertEquals(7.5f, completed.cellularSpeedMBps, 0.01f)
+        assertEquals(12.5f, completed.dualBoostSpeedMBps, 0.01f)
+        assertEquals(6.25f, completed.wifiSpeedMbps, 0.01f) // verify compatibility getter
         assertEquals(66, completed.boostGainPercent)
 
         val error = SpeedTestState.Error("Network timeout")

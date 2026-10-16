@@ -64,7 +64,7 @@ To ensure physical network transparency across any wallpaper palette:
 
 ### Cards
 - **Speed Benchmark Quick Card**: 18dp rounded container (`surfaceContainer`) with primary container icon badge, live subtitle, and quick-action "Test Speed" button launching the benchmark modal.
-- **Download Telemetry Card**: High-contrast card with 4dp elevation containing filename, linear progress bar, combined transfer rate, and individual Wi-Fi and 5G meters.
+- **Download Telemetry Card**: High-contrast card with 4dp elevation containing filename, progress bar, real-time speed in `MB/s` (or `KB/s`), individual Wi-Fi and 5G meters, and an amber alert banner (`tertiaryContainer`) displaying *"Single-Stream Mode: Server does not support dual-channel splitting • Running on Wi-Fi to preserve mobile data"* when non-range servers are detected with inactive rows dimmed (0.45f opacity).
 - **Download Paused Card**: Elevated card (2dp elevation) displaying frozen progress percentage, progress bar, preserved byte count, primary filled "Resume" button with Play icon, and error-tinted outlined "Discard" button with trash icon.
 - **Download Completed Card**: Container card (`primaryContainer`) displaying successful transfer summary, elapsed time, primary filled "Open File" button (`ACTION_VIEW`), and adjacent tonal "Share" button (`ACTION_SEND`).
 - **System Tip Banner**: Flat card with `tertiaryContainer` background highlighting required OS settings (Developer Options).

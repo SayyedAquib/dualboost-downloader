@@ -503,6 +503,44 @@ Accepted
 ### Reasoning
 Empowers users to quantitatively benchmark their network aggregation capability with zero storage footprint, while seamlessly harmonizing the launcher icon with Google Pixel's first-party design system.
 
+---
+
+## ADR-018: Standardized Megabytes-per-Second (MB/s) Telemetry and Single-Stream Fallback Amber Alert
+
+### Date
+2026-10-17
+
+### Status
+Accepted
+
+### Context
+1. In downloader applications (e.g., Chrome, Steam, Android DownloadManager), users calculate transfer times against file sizes measured in Megabytes (MB). Displaying speed in Megabits per second (`Mbps`) requires mental division by 8 and creates friction.
+2. When downloading files from remote servers that do not support HTTP Range requests (`Accept-Ranges: bytes`), the engine automatically falls back to single-stream downloading. However, the UI previously showed `5G: 0.0 Mbps` without explicit explanation, leaving users confused about why dual aggregation was not active.
+
+### Options Considered
+- Keep `Mbps` everywhere to match ISP speed tests (rejected: counterintuitive for file progress).
+- Switch to binary `MB/s` with adaptive `KB/s` granularity and explicit single-stream UI cues (accepted).
+
+### Decision
+1. **Binary MB/s Speed Calculation**:
+   - Standardized calculations in `DualDownloaderEngine` and `SpeedTestEngine` to binary Megabytes per second using $1024 \times 1024$ bytes:
+     $$\text{Speed (MB/s)} = \frac{\Delta \text{Bytes}}{\Delta \text{Seconds} \times 1,048,576.0}$$
+   - Perfectly aligns speed with file sizes formatted with `formatBytes()`.
+2. **Adaptive Formatting (`formatSpeed` and `formatSpeedComponents`)**:
+   - Speeds $\ge 1.0\text{ MB/s}$: `%.1f MB/s` (e.g., `12.4 MB/s`).
+   - Speeds $< 1.0\text{ MB/s}$ and $> 0$: `%.0f KB/s` (e.g., `512 KB/s`).
+   - Speeds $\le 0$: `0.0 MB/s`.
+   - Propagated to active download card, notification shade, and speed benchmark bottom sheet.
+3. **Single-Stream Informative Alert Banner & Dimming**:
+   - When `!state.supportsRanges`, render an amber container banner in `DownloadState.Downloading`: *"Single-Stream Mode: Server does not support dual-channel splitting • Running on Wi-Fi to preserve mobile data"*.
+   - Adapt hero title from "Aggregated Bandwidth" to "Single-Channel Bandwidth".
+   - Dim the inactive interface in `SpeedDetailRow` using `alpha(0.45f)` and append `"(Inactive in Single-Stream)"`.
+4. **Smart Interface Attribution**:
+   - Single-stream downloads dynamically check `networkManager.isWifiAvailable.value`: routes to Wi-Fi by default to save cellular data, or seamlessly uses Cellular if Wi-Fi is offline.
+
+### Consequences
+Eliminates mental math friction for users calculating download times, provides complete transparency on non-range servers, and guarantees zero data waste on unboosted links.
+
 
 
 

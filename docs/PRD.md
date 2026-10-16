@@ -34,9 +34,9 @@ Standard Android operating system behavior automatically deactivates or idles th
 4. **Data Safety Controls**:
    - One-tap toggle to enable or disable Cellular Boost.
    - Optional configurable maximum cellular data threshold per download.
-5. **Real-Time Visual Speed Telemetry**: Live UI and persistent notification displaying discrete Wi-Fi speed (Mbps), Cellular speed (Mbps), and combined total speed.
-6. **Graceful Fallback**:
-   - Automatic single-stream fallback if remote servers do not support HTTP 206 Partial Content.
+5. **Real-Time Visual Speed Telemetry**: Live UI and persistent notification displaying discrete Wi-Fi speed (`MB/s`), Cellular speed (`MB/s`), and combined total speed calculated via true binary Megabytes per second ($1\text{ MB} = 1024 \times 1024\text{ bytes}$) with adaptive auto-switching to `KB/s` for sub-megabyte transfers.
+6. **Graceful Fallback & Single-Stream Alert**:
+   - Automatic single-stream fallback if remote servers do not support HTTP 206 Partial Content, accompanied by a prominent amber alert banner on the active download card.
    - Seamless chunk reassignment to the surviving network if either Wi-Fi or Cellular disconnects mid-transfer.
 7. **System Share Sheet Integration**: Receiver intent allowing URLs to be sent directly to the downloader from any browser.
 8. **Combined Dual-Interface Speed Benchmark**: Ephemeral 3-phase throughput test measuring Wi-Fi alone (3s), 5G Cellular alone (3s), and DualBoost Combined (4s) using high-speed CDN chunk streams with zero storage consumption (0 bytes stored on disk) and displaying real-time speedometers and aggregate boost multiplier.

@@ -68,7 +68,8 @@ app/src/main/
    - Manages Android `NotificationManager` with a 1000ms throttler to avoid system message shedding.
    - Guards against race conditions by checking current engine state before initiating downloads.
 4. **Execution Engine Layer (`com.dualboost.downloader.engine`)**:
-   - `DualDownloaderEngine`: Dynamically computes headers (`Referer`, `Origin`, `Accept-Encoding`), probes remote servers, validates storage via `StatFs`, partitions files into 4MB byte segments, manages work queues, and writes to disk via `RandomAccessFile`.
+   - `DualDownloaderEngine`: Dynamically computes headers (`Referer`, `Origin`, `Accept-Encoding`), probes remote servers, validates storage via `StatFs`, partitions files into 4MB byte segments, manages work queues, computes binary Megabytes per second (`MB/s`) speed with adaptive `KB/s` formatting (`formatSpeed`), handles single-stream non-range server fallbacks, and writes to disk via `RandomAccessFile`.
+   - `SpeedTestEngine`: Ephemeral 3-phase throughput benchmark engine (Wi-Fi 3s -> 5G 3s -> DualBoost 4s) streaming bytes directly into an in-memory discard buffer (0 bytes stored on disk) and reporting real-time speeds in `MB/s`.
 5. **Transport Layer (`com.dualboost.downloader.network`)**:
    - `NetworkProvider`: Decoupled interface defining interface availability and client factories, allowing seamless MockWebServer integration testing.
    - `DualNetworkManager`: Listens to `ConnectivityManager` callbacks for `TRANSPORT_WIFI` and `TRANSPORT_CELLULAR`.

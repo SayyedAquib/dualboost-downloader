@@ -323,17 +323,19 @@ private fun SpeedTestRunningView(
 
     // Real-Time Speed Telemetry Hero
     val animatedSpeed by animateFloatAsState(
-        targetValue = state.currentSpeedMbps,
+        targetValue = state.currentSpeedMBps,
         animationSpec = tween(durationMillis = 200),
-        label = "SpeedMbps"
+        label = "SpeedMBps"
     )
+
+    val (speedValue, speedUnit) = com.dualboost.downloader.data.formatSpeedComponents(animatedSpeed)
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
-            text = String.format(Locale.US, "%.1f", animatedSpeed),
+            text = speedValue,
             style = MaterialTheme.typography.displayLarge.copy(
                 fontWeight = FontWeight.Black,
                 fontSize = 58.sp,
@@ -342,7 +344,7 @@ private fun SpeedTestRunningView(
             color = phaseColor
         )
         Text(
-            text = "Mbps",
+            text = speedUnit,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -401,7 +403,7 @@ private fun SpeedTestRunningView(
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(text = "Wi-Fi", style = MaterialTheme.typography.labelSmall, color = wifiColor)
                 Text(
-                    text = if (state.wifiSpeedMbps > 0f) String.format(Locale.US, "%.1f Mbps", state.wifiSpeedMbps) else "Testing...",
+                    text = if (state.wifiSpeedMBps > 0f) com.dualboost.downloader.data.formatSpeed(state.wifiSpeedMBps.toDouble()) else "Testing...",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -416,7 +418,7 @@ private fun SpeedTestRunningView(
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(text = "5G Cellular", style = MaterialTheme.typography.labelSmall, color = cellularColor)
                 Text(
-                    text = if (state.cellularSpeedMbps > 0f) String.format(Locale.US, "%.1f Mbps", state.cellularSpeedMbps) else if (state.phase == SpeedTestPhase.TESTING_CELLULAR) "Testing..." else "Waiting...",
+                    text = if (state.cellularSpeedMBps > 0f) com.dualboost.downloader.data.formatSpeed(state.cellularSpeedMBps.toDouble()) else if (state.phase == SpeedTestPhase.TESTING_CELLULAR) "Testing..." else "Waiting...",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -475,7 +477,7 @@ private fun SpeedTestCompletedView(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Aggregating Wi-Fi + 5G delivered ${String.format(Locale.US, "%.1f", state.dualBoostSpeedMbps)} Mbps aggregate throughput.",
+                    text = "Aggregating Wi-Fi + 5G delivered ${com.dualboost.downloader.data.formatSpeed(state.dualBoostSpeedMBps.toDouble())} aggregate throughput.",
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
@@ -540,7 +542,7 @@ private fun SpeedTestCompletedView(
                     Text(text = "Wi-Fi Only", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 }
                 Text(
-                    text = String.format(Locale.US, "%.1f Mbps", state.wifiSpeedMbps),
+                    text = com.dualboost.downloader.data.formatSpeed(state.wifiSpeedMBps.toDouble()),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = wifiColor
                 )
@@ -572,7 +574,7 @@ private fun SpeedTestCompletedView(
                     Text(text = "5G Cellular Only", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 }
                 Text(
-                    text = String.format(Locale.US, "%.1f Mbps", state.cellularSpeedMbps),
+                    text = com.dualboost.downloader.data.formatSpeed(state.cellularSpeedMBps.toDouble()),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = cellularColor
                 )
@@ -609,7 +611,7 @@ private fun SpeedTestCompletedView(
                     )
                 }
                 Text(
-                    text = String.format(Locale.US, "%.1f Mbps", state.dualBoostSpeedMbps),
+                    text = com.dualboost.downloader.data.formatSpeed(state.dualBoostSpeedMBps.toDouble()),
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )

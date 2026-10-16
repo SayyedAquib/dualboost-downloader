@@ -82,9 +82,9 @@ class UIFlowAndViewModelComprehensiveTest {
             downloadedBytes = 100_000_000L,
             wifiDownloadedBytes = 60_000_000L,
             cellularDownloadedBytes = 40_000_000L,
-            wifiSpeedMbps = 25.0,
-            cellularSpeedMbps = 15.0,
-            totalSpeedMbps = 40.0,
+            wifiSpeedMBps = 3.125,
+            cellularSpeedMBps = 1.875,
+            totalSpeedMBps = 5.0,
             progressPercentage = 0.20f,
             supportsRanges = true
         )
@@ -139,5 +139,35 @@ class UIFlowAndViewModelComprehensiveTest {
         assertEquals(0.00f, w6, 0.0001f)
         assertEquals(0.00f, c6, 0.0001f)
     }
+
+    @Test
+    fun testFormatSpeed_AdaptiveFormatting() {
+        // Zero / Idle
+        assertEquals("0.0 MB/s", com.dualboost.downloader.data.formatSpeed(0.0))
+        assertEquals("0.0 MB/s", com.dualboost.downloader.data.formatSpeed(-5.0))
+
+        // Normal speeds (>= 1.0 MB/s)
+        assertEquals("12.4 MB/s", com.dualboost.downloader.data.formatSpeed(12.4))
+        assertEquals("100.0 MB/s", com.dualboost.downloader.data.formatSpeed(100.0))
+        assertEquals("1.0 MB/s", com.dualboost.downloader.data.formatSpeed(1.0))
+
+        // Low speeds (< 1.0 MB/s, auto-adapts to KB/s)
+        assertEquals("512 KB/s", com.dualboost.downloader.data.formatSpeed(0.5))
+        assertEquals("256 KB/s", com.dualboost.downloader.data.formatSpeed(0.25))
+
+        // Components for hero gauges
+        val (val1, unit1) = com.dualboost.downloader.data.formatSpeedComponents(15.2f)
+        assertEquals("15.2", val1)
+        assertEquals("MB/s", unit1)
+
+        val (val2, unit2) = com.dualboost.downloader.data.formatSpeedComponents(0.5f)
+        assertEquals("512", val2)
+        assertEquals("KB/s", unit2)
+
+        val (val0, unit0) = com.dualboost.downloader.data.formatSpeedComponents(0f)
+        assertEquals("0.0", val0)
+        assertEquals("MB/s", unit0)
+    }
 }
+
 

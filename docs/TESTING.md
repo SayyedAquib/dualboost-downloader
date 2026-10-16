@@ -10,7 +10,7 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (80 active tests across 12 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (81 active tests across 12 test suites, 100% passing):
 
 - **EngineComprehensiveTest** (13 tests):
   - `testExtractFileName_StandardExtension`: Verifies filename extraction across standard `.iso`, `.dat`, and `.tar.gz` extensions.
@@ -46,13 +46,14 @@ Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (80 active te
   - `testServiceActionNaming_FollowsReverseDomainConvention`: Ensures action naming adheres to Android package reverse-domain guidelines.
   - `testThrottledNotificationLogic_LimitsToOncePerSecond`: Verifies that notification updates are capped to 1 per second while terminal states (Complete/Fail) dispatch immediately.
 
-- **UIFlowAndViewModelComprehensiveTest** (6 tests):
-  - `testAllPresetDefinitions_HaveValidAttributesAndProtocols`: Verifies all 4 presets have valid HTTPS URLs, non-blank labels, and capability descriptions.
+- **UIFlowAndViewModelComprehensiveTest** (7 tests):
+  - `testAllPresetDefinitions_HaveValidAttributesAndProtocols`: Verifies all 7 curated presets have valid HTTPS URLs, non-blank labels, and capability descriptions.
   - `testSequentialPresetSwitching_MaintainsCorrectViewModelState`: Verifies sequential chip clicks correctly update URL and active preset selection.
   - `testCustomUrlTyping_DeselectsPresetAutomatically`: Ensures typing custom URLs clears preset chip highlights.
   - `testClearUrl_ResetsBothUrlAndPreset`: Verifies the clear button resets both input text and preset state.
   - `testStartButtonStateMatrix_Exhaustive`: Tests the complete state machine matrix for button enablement across all 7 lifecycle states.
   - `testDualColorProgressSplit_FormulaPrecision`: Validates dual-channel progress split calculations across asymmetric loads and edge cases.
+  - `testFormatSpeed_AdaptiveFormatting`: Asserts binary MB/s speed formatting, adaptive KB/s switching for sub-megabyte transfers, zero/idle boundaries, and hero speedometer components.
 
 - **MainViewModelTest** (11 tests):
   - Validates presets, chip clicks, URL updates, start button states, dual-color ratio math, null repository tolerance, URL preservation across `discardDownload()`, safe speed test state delegation, and Turbine live stream assertions (`testTurbine_UrlInputStream_EmitsAccurateSequence`, `testTurbine_SelectedPresetStream_EmitsAccurateSequence`, `testTurbine_SpeedTestStateStream_RemainsIdleWithoutRepository`).

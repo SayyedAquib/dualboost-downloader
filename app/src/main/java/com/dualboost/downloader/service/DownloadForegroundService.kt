@@ -108,13 +108,7 @@ class DownloadForegroundService : Service() {
                             lastNotificationTime = now
                             updateNotification(
                                 title = "Downloading: ${state.fileName}",
-                                content = String.format(
-                                    Locale.US,
-                                    "Wi-Fi: %.1f Mbps | 5G: %.1f Mbps (Total: %.1f Mbps)",
-                                    state.wifiSpeedMbps,
-                                    state.cellularSpeedMbps,
-                                    state.totalSpeedMbps
-                                ),
+                                content = "Wi-Fi: ${com.dualboost.downloader.data.formatSpeed(state.wifiSpeedMBps)} | 5G: ${com.dualboost.downloader.data.formatSpeed(state.cellularSpeedMBps)} (Total: ${com.dualboost.downloader.data.formatSpeed(state.totalSpeedMBps)})",
                                 progress = (state.progressPercentage * 100).toInt(),
                                 indeterminate = false
                             )

@@ -88,9 +88,9 @@ class MainViewModelTest {
             downloadedBytes = 50_000_000L,
             wifiDownloadedBytes = 25_000_000L,
             cellularDownloadedBytes = 25_000_000L,
-            wifiSpeedMbps = 50.0,
-            cellularSpeedMbps = 50.0,
-            totalSpeedMbps = 100.0,
+            wifiSpeedMBps = 6.25,
+            cellularSpeedMBps = 6.25,
+            totalSpeedMBps = 12.5,
             progressPercentage = 0.5f,
             supportsRanges = true
         )

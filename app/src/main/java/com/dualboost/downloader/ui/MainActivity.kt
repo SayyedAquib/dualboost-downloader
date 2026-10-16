@@ -32,6 +32,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -715,6 +716,35 @@ fun MainScreen(
                                     }
                                 }
 
+                                // Single-Stream Informative Alert Banner
+                                if (!state.supportsRanges) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Info,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Text(
+                                                text = "Single-Stream Mode: Server does not support dual-channel splitting • Running on ${if (state.cellularDownloadedBytes > 0L && state.wifiDownloadedBytes == 0L) "5G Cellular" else "Wi-Fi to preserve mobile data"}",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                                            )
+                                        }
+                                    }
+                                }
+
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 // Dual-Color Contribution Progress Bar
@@ -781,12 +811,12 @@ fun MainScreen(
                                             Spacer(modifier = Modifier.width(10.dp))
                                             Column {
                                                 Text(
-                                                    text = "Aggregated Bandwidth",
+                                                    text = if (state.supportsRanges) "Aggregated Bandwidth" else "Single-Channel Bandwidth",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                                 Text(
-                                                    text = "${String.format(Locale.US, "%.1f", state.totalSpeedMbps)} Mbps",
+                                                    text = com.dualboost.downloader.data.formatSpeed(state.totalSpeedMBps),
                                                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
                                                     color = MaterialTheme.colorScheme.primary
                                                 )
@@ -798,20 +828,25 @@ fun MainScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 // Detailed Interface Speeds
+                                val isWifiInactiveInSingleStream = !state.supportsRanges && state.wifiDownloadedBytes == 0L && state.cellularDownloadedBytes > 0L
+                                val isCellularInactiveInSingleStream = !state.supportsRanges && state.cellularDownloadedBytes == 0L
+
                                 SpeedDetailRow(
-                                    label = "Wi-Fi Interface",
-                                    speedMbps = state.wifiSpeedMbps,
+                                    label = if (isWifiInactiveInSingleStream) "Wi-Fi (Inactive in Single-Stream)" else "Wi-Fi Interface",
+                                    speedMBps = state.wifiSpeedMBps,
                                     downloadedBytes = state.wifiDownloadedBytes,
                                     indicatorColor = rowWifiColor,
-                                    icon = Icons.Rounded.Wifi
+                                    icon = Icons.Rounded.Wifi,
+                                    isDimmed = isWifiInactiveInSingleStream
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 SpeedDetailRow(
-                                    label = "5G Cellular Interface",
-                                    speedMbps = state.cellularSpeedMbps,
+                                    label = if (isCellularInactiveInSingleStream) "5G Cellular (Inactive in Single-Stream)" else "5G Cellular Interface",
+                                    speedMBps = state.cellularSpeedMBps,
                                     downloadedBytes = state.cellularDownloadedBytes,
                                     indicatorColor = rowCellularColor,
-                                    icon = Icons.Rounded.SignalCellularAlt
+                                    icon = Icons.Rounded.SignalCellularAlt,
+                                    isDimmed = isCellularInactiveInSingleStream
                                 )
 
                                 Spacer(modifier = Modifier.height(18.dp))
@@ -1269,15 +1304,17 @@ fun PresetChip(
 @Composable
 fun SpeedDetailRow(
     label: String,
-    speedMbps: Double,
+    speedMBps: Double,
     downloadedBytes: Long,
     indicatorColor: Color,
-    icon: ImageVector
+    icon: ImageVector,
+    isDimmed: Boolean = false
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .then(if (isDimmed) Modifier.alpha(0.45f) else Modifier),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1303,7 +1340,7 @@ fun SpeedDetailRow(
             )
         }
         Text(
-            text = "${String.format(Locale.US, "%.1f", speedMbps)} Mbps (${formatBytes(downloadedBytes)})",
+            text = "${com.dualboost.downloader.data.formatSpeed(speedMBps)} (${formatBytes(downloadedBytes)})",
             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.onSurface
         )

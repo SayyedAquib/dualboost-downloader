@@ -473,8 +473,8 @@ class DualDownloaderEngine(
         var lastWifiBytes = 0L
         var lastCellularBytes = 0L
         var lastSampleTime = System.currentTimeMillis()
-        var wifiSpeedMbps = 0.0
-        var cellularSpeedMbps = 0.0
+        var wifiSpeedMBps = 0.0
+        var cellularSpeedMBps = 0.0
 
         // Use coroutineScope so all workers & monitor are direct children of downloadJob
         coroutineScope {
@@ -488,8 +488,8 @@ class DualDownloaderEngine(
                     val currentWifi = wifiDownloadedBytes.get()
                     val currentCell = cellularDownloadedBytes.get()
 
-                    wifiSpeedMbps = ((currentWifi - lastWifiBytes) * 8.0) / (deltaSec * 1_000_000.0)
-                    cellularSpeedMbps = ((currentCell - lastCellularBytes) * 8.0) / (deltaSec * 1_000_000.0)
+                    wifiSpeedMBps = (currentWifi - lastWifiBytes).toDouble() / (deltaSec * (1024.0 * 1024.0))
+                    cellularSpeedMBps = (currentCell - lastCellularBytes).toDouble() / (deltaSec * (1024.0 * 1024.0))
 
                     lastWifiBytes = currentWifi
                     lastCellularBytes = currentCell
@@ -504,9 +504,9 @@ class DualDownloaderEngine(
                         downloadedBytes = downloaded,
                         wifiDownloadedBytes = currentWifi,
                         cellularDownloadedBytes = currentCell,
-                        wifiSpeedMbps = max(0.0, wifiSpeedMbps),
-                        cellularSpeedMbps = max(0.0, cellularSpeedMbps),
-                        totalSpeedMbps = max(0.0, wifiSpeedMbps + cellularSpeedMbps),
+                        wifiSpeedMBps = max(0.0, wifiSpeedMBps),
+                        cellularSpeedMBps = max(0.0, cellularSpeedMBps),
+                        totalSpeedMBps = max(0.0, wifiSpeedMBps + cellularSpeedMBps),
                         progressPercentage = progress,
                         supportsRanges = true
                     )
@@ -722,7 +722,7 @@ class DualDownloaderEngine(
                 val startTime = System.currentTimeMillis()
                 var lastEmitTime = startTime
                 var lastBytes = 0L
-                var currentSpeedMbps = 0.0
+                var currentSpeedMBps = 0.0
 
                 outputFile.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
@@ -740,20 +740,21 @@ class DualDownloaderEngine(
                         val isComplete = (totalLength > 0 && totalRead >= totalLength)
                         if (now - lastEmitTime >= 300 || isComplete) {
                             val deltaSec = max((now - lastEmitTime) / 1000.0, 0.001)
-                            currentSpeedMbps = max(0.0, ((totalRead - lastBytes) * 8.0) / (deltaSec * 1_000_000.0))
+                            currentSpeedMBps = max(0.0, (totalRead - lastBytes).toDouble() / (deltaSec * (1024.0 * 1024.0)))
                             lastEmitTime = now
                             lastBytes = totalRead
 
+                            val isWifi = networkManager.isWifiAvailable.value
                             val progress = if (totalLength > 0) totalRead.toFloat() / totalLength.toFloat() else 0f
                             _downloadState.value = DownloadState.Downloading(
                                 fileName = outputFile.name,
                                 totalBytes = totalLength,
                                 downloadedBytes = totalRead,
-                                wifiDownloadedBytes = totalRead,
-                                cellularDownloadedBytes = 0L,
-                                wifiSpeedMbps = currentSpeedMbps,
-                                cellularSpeedMbps = 0.0,
-                                totalSpeedMbps = currentSpeedMbps,
+                                wifiDownloadedBytes = if (isWifi) totalRead else 0L,
+                                cellularDownloadedBytes = if (isWifi) 0L else totalRead,
+                                wifiSpeedMBps = if (isWifi) currentSpeedMBps else 0.0,
+                                cellularSpeedMBps = if (isWifi) 0.0 else currentSpeedMBps,
+                                totalSpeedMBps = currentSpeedMBps,
                                 progressPercentage = progress,
                                 supportsRanges = false
                             )

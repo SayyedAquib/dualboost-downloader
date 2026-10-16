@@ -187,4 +187,46 @@ class MainComposeUiTest {
         composeTestRule.onNodeWithText("Resume Download").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Discard").performScrollTo().assertIsDisplayed()
     }
+
+    @Test
+    fun testSingleStreamFallback_DisplaysAmberBannerAndSingleChannelBandwidth() {
+        val singleStreamState = kotlinx.coroutines.flow.MutableStateFlow<DownloadState>(
+            DownloadState.Downloading(
+                fileName = "single_stream_file.iso",
+                totalBytes = 104857600L,
+                downloadedBytes = 20971520L,
+                wifiDownloadedBytes = 20971520L,
+                cellularDownloadedBytes = 0L,
+                wifiSpeedMBps = 12.5,
+                cellularSpeedMBps = 0.0,
+                totalSpeedMBps = 12.5,
+                progressPercentage = 0.20f,
+                supportsRanges = false
+            )
+        )
+        val viewModel = MainViewModel(repository = null, downloadStateOverride = singleStreamState)
+        composeTestRule.setContent {
+            DualBoostTheme {
+                MainScreen(
+                    viewModel = viewModel,
+                    onOpenFile = { _, _ -> },
+                    onShareFile = { _, _ -> }
+                )
+            }
+        }
+
+        // Verify single stream alert banner
+        composeTestRule.onNodeWithText(
+            "Single-Stream Mode: Server does not support dual-channel splitting • Running on Wi-Fi to preserve mobile data"
+        ).performScrollTo().assertIsDisplayed()
+
+        // Verify header text
+        composeTestRule.onNodeWithText("Single-Channel Bandwidth").performScrollTo().assertIsDisplayed()
+
+        // Verify speed displayed in MB/s
+        composeTestRule.onNodeWithText("12.5 MB/s").performScrollTo().assertIsDisplayed()
+
+        // Verify inactive cellular label
+        composeTestRule.onNodeWithText("5G Cellular (Inactive in Single-Stream)").performScrollTo().assertIsDisplayed()
+    }
 }
