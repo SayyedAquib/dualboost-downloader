@@ -15,10 +15,16 @@ DualBoost Downloader embraces Material 3 Expressive ("Material You") design prin
 ### Material You Dynamic Theming (Pixel Native Monet Engine)
 The application fully embraces Material You dynamic color extraction (`dynamicColor = true`), harmonizing with the user's Pixel wallpaper and automatically switching between dynamic dark and dynamic light themes based on system Day/Night mode:
 - **Background & Scaffold**: Adapts directly to `MaterialTheme.colorScheme.background`.
-- **Surfaces & Cards**: `ElevatedCard` containers with tonal elevation adapting to `MaterialTheme.colorScheme.surface` and `surfaceContainer`.
+- **Surfaces & Cards Hierarchy**: Material 3 surface elevation hierarchy eliminates flat pitch-black clipping in Dark Mode:
+  - Deepest tier: `surfaceContainerLowest` for unselected/dormant cards.
+  - Base cards: `surfaceContainer` for primary content containers ("New Download", "Ready to Download", "Downloading", "Paused").
+  - Elevated surfaces: `surfaceContainerHigh` for hero speed telemetry and info banners.
+  - Tonal controls: `surfaceContainerHighest` for URL textfield input fills and inactive preset benchmark chips.
+- **Accented Card Borders**: Subtle 1dp `BorderStroke` (`outlineVariant.copy(alpha = 0.35f)` for base cards, and interface-tinted glows `activeColor.copy(alpha = 0.35f)` for Wi-Fi and 5G) delivering crisp edge definition against deep dark backgrounds.
 - **Action Button ("Boost Download")**: Full-width filled `Button` using `MaterialTheme.colorScheme.primary` and `onPrimary`.
-- **Aggregation Pill**: Adapts to `MaterialTheme.colorScheme.secondaryContainer` with `onSecondaryContainer`.
-- **Preset Benchmark Chips**: Adapts to `primaryContainer` with `primary` outline when active, and `surfaceVariant` when idle.
+- **Aggregation Pill**: Adapts to `MaterialTheme.colorScheme.primaryContainer` with `onPrimaryContainer` and subtle 1dp primary border.
+- **Preset Benchmark Chips**: Active chips use `primaryContainer` with 1.5dp `primary` outline and bold label; idle chips use `surfaceContainerHighest` with 1dp `outlineVariant` border.
+- **Empty State Hero Card**: Replaced bulky placeholder slab with a sleek 24dp rounded `surfaceContainer` hero card featuring a 56dp primary-tinted circular icon container (`Icons.Rounded.CloudDownload`), bold `titleMedium` typography, and centered assistive copy.
 - **Pause / Cancel Control**: Outlined button adapting to `MaterialTheme.colorScheme.error`.
 
 ### Functional Network Clarity Accents

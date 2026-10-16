@@ -1,9 +1,16 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader has reached full production readiness and stability under **ADR-015**. The test suite contains **68 automated unit and integration tests passing with 100% success** (0 failures across 11 test suites). The app features overflow-safe pre-flight disk storage checks, server ETag/Last-Modified validation on resume, automatic export to public `MediaStore.Downloads`, startup auto-recovery of incomplete downloads, and interactive "Open File" and "Share" actions.
+DualBoost Downloader has reached full production readiness and visual polish under **ADR-015** and the **Material 3 Dark Mode Overhaul**. The test suite contains **68 automated unit and integration tests passing with 100% success** (0 failures across 11 test suites). The app features overflow-safe pre-flight disk storage checks, server ETag validation, MediaStore export, startup auto-recovery, and an overhauled Dark Mode UI with full M3 surfaceContainer hierarchy and glowing interface accents on Google Pixel 9.
 
 ## Recently Completed
+- **Material 3 Expressive Dark Mode Overhaul**:
+  - Implemented true M3 surface hierarchy (`surfaceContainerLowest`, `surfaceContainer`, `surfaceContainerHigh`, `surfaceContainerHighest`) across `Theme.kt` and `MainActivity.kt`, eliminating pitch-black card flattening.
+  - Added subtle 1dp border strokes: interface-tinted glows (`#00E5FF` Cyan for Wi-Fi, `#B388FF` Violet for 5G) on `NetworkCard`, and crisp `outlineVariant` borders on input, state, and speed telemetry containers.
+  - Redesigned Empty State ("Ready to Download"): sleek 24dp rounded hero card with 56dp primary-tinted circular icon badge (`Icons.Rounded.CloudDownload`), bold M3 typography, and clean centered spacing.
+  - Upgraded Preset Benchmark Chips: distinct `primaryContainer` active state with 1.5dp border vs `surfaceContainerHighest` idle state.
+  - Upgraded Aggregation Status Pill: high-contrast `primaryContainer` with clear iconography and text.
+  - Validated live on Google Pixel 9: captured screenshots confirming high-contrast depth, sharp card borders, selected preset chip styling, and complete download telemetry.
 - **Production Hardening & Storage Resilience (ADR-015)**:
   - Added overflow-guarded `checkAvailableStorage(targetDir, requiredBytes, existingFile)` in `DualDownloaderEngine` with 20 MB safety margin.
   - Implemented server ETag and Last-Modified validation in `.dualboost_meta`; stale remote files trigger clean restarts from 0%.
@@ -11,13 +18,11 @@ DualBoost Downloader has reached full production readiness and stability under *
   - Added startup auto-recovery: `restoreIncompleteDownload()` scans for pending `.dualboost_meta` files on cold launch, restoring `DownloadState.Paused` and pre-filling `MainViewModel.urlInput`.
   - Upgraded Completed Card UI in `MainActivity.kt` with side-by-side "Open File" (`ACTION_VIEW`) and "Share" (`ACTION_SEND`) buttons.
 - **Comprehensive Test Suite Expansion (68 tests, 100% passing across 11 suites)**:
-  - Added `ProductionHardeningResilienceTest` (9 tests): Storage pre-check under sufficient and exceeded conditions, partial file accounting, ETag/Last-Modified roundtrip and mismatch recovery, startup restoration, empty directory fallback, MIME type resolution, and `Completed` content URI preservation.
-  - Verified existing suites: `EngineComprehensiveTest` (13), `ResumableDownloadTest` (5), `DownloadRepositoryTest` (4), `DualNetworkManagerTest` (5), `ServiceLifecycleTest` (3), `UIFlowAndViewModelComprehensiveTest` (6), `ChunkCalculationTest` (4), `EngineEdgeCasesTest` (9), `MainViewModelTest` (6), `MockWebServerDownloadTest` (2), `NotificationThrottlerTest` (2).
+  - Verified `ProductionHardeningResilienceTest` (9 tests), `EngineComprehensiveTest` (13), `ResumableDownloadTest` (5), `DownloadRepositoryTest` (4), `DualNetworkManagerTest` (5), `ServiceLifecycleTest` (3), `UIFlowAndViewModelComprehensiveTest` (6), `ChunkCalculationTest` (4), `EngineEdgeCasesTest` (9), `MainViewModelTest` (6), `MockWebServerDownloadTest` (2), `NotificationThrottlerTest` (2).
 - **Verification & Builds**:
   - Ran full 68-test automated suite via `.\gradlew.bat test`: 100% passing.
-  - Compiled both debug and release APKs (`.\gradlew.bat assembleDebug assembleRelease`): BUILD SUCCESSFUL.
-  - Automatically reconnected to Google Pixel 9 via wireless ADB (`<device-ip>:<port>`).
-  - Executed `test-automated.ps1`: 100% automated tests passed, streamed APK install succeeded, and `MainActivity` launched cleanly (PID: 5898) with 0 crashes or logcat errors.
+  - Compiled and installed debug APK onto Google Pixel 9 via ADB (`.\gradlew.bat installDebug`): BUILD SUCCESSFUL.
+  - Live device screencaps verified: `screen_dark_ui.png`, `screen_dark_ui_selected.png`, `screen_dark_downloading.png`.
 
 ## Known Problems
 - None. App compiles with 0 errors, 68/68 tests pass with 100% success, zero flicker on device during downloads, persistent chunk resumption active, storage protected, and dual physical sockets remain active.

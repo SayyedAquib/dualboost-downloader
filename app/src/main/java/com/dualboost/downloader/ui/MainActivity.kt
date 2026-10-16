@@ -17,6 +17,7 @@ import androidx.activity.viewModels
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -266,8 +267,9 @@ fun MainScreen(
             // Aggregation Status Pill
             if (wifiAvailable && cellularAvailable) {
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -277,21 +279,22 @@ fun MainScreen(
                         Icon(
                             imageVector = Icons.Rounded.Speed,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Dual-Channel Active: Aggregating Wi-Fi + 5G",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
                 }
             } else if (!cellularAvailable) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -317,12 +320,13 @@ fun MainScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             // Download Input Card
-            ElevatedCard(
+            Card(
                 shape = RoundedCornerShape(24.dp),
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Text(
@@ -338,7 +342,7 @@ fun MainScreen(
                         label = { Text("Download Link") },
                         placeholder = { Text("https://example.com/largefile.zip") },
                         leadingIcon = {
-                            Icon(Icons.Rounded.Link, contentDescription = null)
+                            Icon(Icons.Rounded.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         },
                         trailingIcon = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -363,6 +367,12 @@ fun MainScreen(
                                 }
                             }
                         },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.25f),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                        ),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -470,41 +480,55 @@ fun MainScreen(
                 when (state) {
                     is DownloadState.Idle -> {
                         Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(
-                                modifier = Modifier.padding(28.dp),
+                                modifier = Modifier.padding(24.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.CloudDownload,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                    modifier = Modifier.size(56.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.CloudDownload,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(14.dp))
                                 Text(
                                     text = "Ready to Download",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "Paste any direct download link above, choose a test file, or share a URL from Chrome.",
+                                    text = "Paste any direct download link above, pick a test benchmark, or share a URL from your browser.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 18.sp
                                 )
                             }
                         }
                     }
 
                     is DownloadState.Probing -> {
-                        ElevatedCard(
+                        Card(
                             shape = RoundedCornerShape(24.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -515,7 +539,8 @@ fun MainScreen(
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Text(
                                         text = state.message,
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium)
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -531,12 +556,13 @@ fun MainScreen(
                             label = "ProgressAnimation"
                         )
 
-                        ElevatedCard(
+                        Card(
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            )
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
 
@@ -588,7 +614,7 @@ fun MainScreen(
                                         .fillMaxWidth()
                                         .height(12.dp)
                                         .clip(RoundedCornerShape(6.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -619,7 +645,8 @@ fun MainScreen(
                                 // Hero Speed Display
                                 Surface(
                                     shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Row(
@@ -696,12 +723,13 @@ fun MainScreen(
                     }
 
                     is DownloadState.AutoRecovering -> {
-                        ElevatedCard(
+                        Card(
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.elevatedCardColors(
+                            colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                            )
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f))
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -733,12 +761,13 @@ fun MainScreen(
                     }
 
                     is DownloadState.Completed -> {
-                        ElevatedCard(
+                        Card(
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.elevatedCardColors(
+                            colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.primaryContainer
-                            )
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -825,12 +854,13 @@ fun MainScreen(
                     }
 
                     is DownloadState.Failed -> {
-                        ElevatedCard(
+                        Card(
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.elevatedCardColors(
+                            colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -858,12 +888,12 @@ fun MainScreen(
                     }
 
                     is DownloadState.Paused -> {
-                        ElevatedCard(
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = MaterialTheme.colorScheme.surface
+                        Card(
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
                             ),
-                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
@@ -1022,14 +1052,15 @@ fun NetworkCard(
     isActive: Boolean,
     activeColor: Color
 ) {
-    ElevatedCard(
+    Card(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (isActive) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isActive) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerLowest
         ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = if (isActive) 2.dp else 0.dp
+        border = BorderStroke(
+            1.dp,
+            if (isActive) activeColor.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
         )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -1040,7 +1071,7 @@ fun NetworkCard(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = if (isActive) activeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                    color = if (isActive) activeColor.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
                     modifier = Modifier.size(36.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -1056,7 +1087,7 @@ fun NetworkCard(
                     modifier = Modifier
                         .size(10.dp)
                         .clip(CircleShape)
-                        .background(if (isActive) activeColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+                        .background(if (isActive) activeColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
@@ -1068,7 +1099,7 @@ fun NetworkCard(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (isActive) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                color = if (isActive) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
     }
@@ -1083,8 +1114,8 @@ fun PresetChip(
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+        border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
         onClick = onClick
     ) {
         Row(
@@ -1103,7 +1134,7 @@ fun PresetChip(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                 ),
                 color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
             )
