@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Left Wi-Fi Stream (Cyan) -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M29,38 C35,32 43,30 50,30 L50,34 C44,34 38,36 32,41 Z" />
+    <path
+        android:fillColor="#00B0FF"
+        android:pathData="M27,48 C33,48 41,52 46,60 L42,62 C38,56 32,52 27,52 Z" />
+
+    <!-- Right 5G Cellular Stream (Electric Violet) -->
+    <path
+        android:fillColor="#B388FF"
+        android:pathData="M79,38 C73,32 65,30 58,30 L58,34 C64,34 70,36 76,41 Z" />
+    <path
+        android:fillColor="#7C4DFF"
+        android:pathData="M81,48 C75,48 67,52 62,60 L66,62 C70,56 76,52 81,52 Z" />
+
+    <!-- Central High-Speed Download Arrow (Clean Crisp White & Cyan Glow) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,32 L60,32 L60,54 L72,54 L54,76 L36,54 L48,54 Z" />
+
+    <!-- Dynamic Energy Core inside Arrow -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M52,38 L56,38 L56,52 L62,52 L54,64 L46,52 L52,52 Z" />
+
+    <!-- Bottom Speed Streak -->
+    <path
+        android:fillColor="#80FFFFFF"
+        android:pathData="M52,80 L56,80 L56,83 L52,83 Z" />
+</vector>
+
