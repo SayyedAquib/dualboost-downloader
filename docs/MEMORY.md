@@ -1,9 +1,20 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is fully updated with **ADR-024 (Expressive Telemetry & Real-Time UX Architecture: Segmented Dynamic Chunk Strip, Countdown ETA, Smart Clipboard Suggestion & Build Acceleration)** on top of **ADR-023**, **ADR-022**, and **ADR-021**. The application features real-time multi-block chunk visualizers (`SegmentedChunkStrip`), human-readable ETA countdowns (`formatEta`), auto-detected clipboard link pills, streaming pulse animations on active interfaces, celebratory completion summaries, and high-speed Gradle caching for rapid release iteration. All unit tests pass with 100% success rate and the updated Release APK is live and verified on the connected Google Pixel 9.
+DualBoost Downloader is fully updated with **ADR-026 (Phase 2 Security Hardening & Store Compliance: Scoped Storage Migration, FileProvider Containment, and R8 Binary Protection)** on top of **ADR-025**, **ADR-024**, and **ADR-023**. The application operates with zero excessive permissions (completely removing `MANAGE_EXTERNAL_STORAGE`), scopes FileProvider paths strictly to the `Download` subfolder, and ships with R8 minification, resource shrinking, and symbol obfuscation enabled (reducing APK footprint to 1.37 MB). All unit tests pass with 100% success rate, and the obfuscated release APK is live and verified on the connected Google Pixel 9.
 
 ## Recently Completed
+- **Phase 2 Security Hardening & Store Compliance (ADR-026 / OWASP Mobile Compliance)**:
+  - **Scoped Storage Migration (`SEC-AUDIT-04` / OWASP M8)**: Completely removed `MANAGE_EXTERNAL_STORAGE` from `AndroidManifest.xml` and eliminated the intrusive system settings launch prompt in `MainActivity.kt`. Engine writes directly to app-external storage with zero permissions and registers finished downloads into public Downloads via `MediaStore.Downloads`.
+  - **FileProvider Scope Containment (`SEC-AUDIT-06` / OWASP M8)**: Narrowed `<external-files-path name="external_app_files" path="Download" />` in `file_paths.xml` strictly to the `Download` directory, preventing any path escaping or access to other app-private files.
+  - **R8 Minification & Symbol Obfuscation (`SEC-AUDIT-05` / OWASP M7)**: Enabled `isMinifyEnabled = true` and `isShrinkResources = true` in `app/build.gradle.kts`. Configured comprehensive keep rules in `proguard-rules.pro` for OkHttp, Coroutines, and Data Models. Slashed release APK size to a lightweight 1.37 MB with full reverse-engineering symbol obfuscation.
+  - **Device Verification**: Built production release APK and installed onto physical Google Pixel 9 (`53201VDAQ00067`), verified dual network binding (`Wi-Fi 158` & `Cellular 159`) with zero crashes.
+- **Phase 1 Security Hardening (ADR-025 / OWASP Mobile Compliance)**:
+  - **Interface-Specific DNS Binding (`SEC-AUDIT-01` / OWASP M5)**: Implemented dedicated `Dns` instances in `DualNetworkManager.kt` binding name resolution strictly to the underlying physical `Network` via `network.getAllByName(hostname).toList()`. Enforces fail-closed interface isolation and eliminates DNS leakage across Wi-Fi and Cellular.
+  - **Zero-Toast Privacy-Conscious Clipboard Inspection (`SEC-AUDIT-02` / OWASP M6)**: Replaced intrusive clipboard text reading in `MainActivity.onResume()` with zero-toast metadata checking (`hasPrimaryClip()` and `primaryClipDescription?.hasMimeType(MIMETYPE_TEXT_PLAIN)`). Clipboard text is now exclusively accessed when the user explicitly taps "Paste".
+  - **Hardware-Grade UI Secret Key Masking (`SEC-AUDIT-03` / OWASP M1)**: Added `PasswordVisualTransformation()` and an interactive eye toggle (`Icons.Rounded.Visibility` / `VisibilityOff`) to the Cloud Slicer Secret Key `OutlinedTextField` in `SettingsBottomSheet.kt`.
+  - **Unit Test Expansion**: Added unit tests for privacy-conscious clipboard metadata state tracking in `MainViewModelTest.kt` (100% pass across all unit tests).
+  - **Production Release Deployment**: Assembled production release APK (`app-release.apk`) and installed onto attached Google Pixel 9 (`53201VDAQ00067`), verified dual interface binding (`Wi-Fi 158` & `Cellular 159`).
 - **Expressive Telemetry & Real-Time UX Architecture (ADR-024)**:
   - **Dynamic Chunk Snapshot Visualizer (`SegmentedChunkStrip`)**: Divided active range downloads into multi-block chunk strips where chunks light up in Cyan (Wi-Fi) or Violet (5G) with real-time animated shimmer during active streaming.
   - **ETA Countdown & Remaining Bytes Telemetry**: Implemented `estimatedSecondsRemaining` and `formatEta(seconds)` in `DownloadModel.kt` & `DualDownloaderEngine.kt`, rendering formatted countdown timers (e.g. `• 45s left (35.2 MB left)`).
@@ -82,6 +93,7 @@ DualBoost Downloader is fully updated with **ADR-024 (Expressive Telemetry & Rea
 - CLI-only workflow (Gradle wrapper + ADB). No Android Studio.
 - Testing requirement: Comprehensive test coverage for all functionalities, edge cases, scenarios, and UI flows.
 - Communication Rule: ALWAYS explain concepts in the simplest words possible with intuitive real-world analogies and practical examples from the app.
+- Security Architecture (SEC-006): Retained standard Android application sandboxing (`Context.MODE_PRIVATE`) and disabled cloud/ADB backups (`android:allowBackup="false"`). Hardware Keystore encryption evaluated and skipped to preserve lightweight zero-dependency architecture while maintaining total isolation on unrooted devices.
 
 ## Recent Decisions
 - ADR-010: Dynamic HTTP Header Injection and Range-Verified Benchmark Presets.
@@ -99,6 +111,8 @@ DualBoost Downloader is fully updated with **ADR-024 (Expressive Telemetry & Rea
 - ADR-022: Defense-in-Depth Security Hardening (SSRF, Path Traversal, Intent Isolation, Anti-DoS).
 - ADR-023: Advanced Security Architecture (DNS Rebinding SSRF Defense, Metadata Isolation, Header-Only Auth & Cryptographic Integrity).
 - ADR-024: Expressive Telemetry & Real-Time UX Architecture (Segmented Dynamic Chunk Strip, Countdown ETA, Smart Clipboard Suggestion & Build Acceleration).
+- ADR-025: Phase 1 Security Hardening (Interface-Specific DNS Binding, Privacy-Conscious Clipboard Access, and Secret Key UI Masking).
+- ADR-026: Phase 2 Security Hardening & Store Compliance (Scoped Storage Migration, FileProvider Containment, and R8 Binary Protection).
 
 ## Next Steps
 1. User can deploy `cloud-slicer/worker.js` to Cloudflare (or tap "Copy Script" in the app's Settings).

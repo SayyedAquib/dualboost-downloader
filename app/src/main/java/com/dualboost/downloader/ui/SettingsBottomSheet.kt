@@ -31,6 +31,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,6 +63,7 @@ fun SettingsBottomSheet(
 
     var workerUrl by remember { mutableStateOf(SlicerPreferences.getSlicerUrl(context)) }
     var secretKey by remember { mutableStateOf(SlicerPreferences.getSlicerSecret(context)) }
+    var isPasswordVisible by remember { mutableStateOf(false) }
     var testStatus by remember { mutableStateOf<WorkerTestStatus>(WorkerTestStatus.Idle) }
     var showSetupGuide by remember { mutableStateOf(false) }
 
@@ -188,7 +191,7 @@ fun SettingsBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Secret Key Input Field (Optional)
+            // SEC-AUDIT-03: Secret Key Input Field with Hardware-Grade UI Masking & Eye Toggle
             OutlinedTextField(
                 value = secretKey,
                 onValueChange = {
@@ -206,18 +209,15 @@ fun SettingsBottomSheet(
                     )
                 },
                 trailingIcon = {
-                    if (secretKey.isNotBlank()) {
-                        IconButton(onClick = {
-                            secretKey = ""
-                            testStatus = WorkerTestStatus.Idle
-                        }) {
-                            Icon(
-                                imageVector = Icons.Rounded.Clear,
-                                contentDescription = "Clear Secret"
-                            )
-                        }
+                    IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                        Icon(
+                            imageVector = if (isPasswordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                            contentDescription = if (isPasswordVisible) "Hide Secret Key" else "Show Secret Key",
+                            tint = if (isPasswordVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 },
+                visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,

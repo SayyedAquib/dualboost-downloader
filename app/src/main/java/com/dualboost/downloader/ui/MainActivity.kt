@@ -62,10 +62,6 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { /* Handled */ }
 
-    private val allFilesPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { /* Handled */ }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -81,26 +77,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Request storage access for direct public downloads folder writing on Android 11+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val prefs = getSharedPreferences("dualboost_prefs", Context.MODE_PRIVATE)
-            val hasPromptedStorage = prefs.getBoolean("has_prompted_all_files_access", false)
-            if (!android.os.Environment.isExternalStorageManager() && !hasPromptedStorage) {
-                prefs.edit().putBoolean("has_prompted_all_files_access", true).apply()
-                try {
-                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                        data = Uri.parse("package:$packageName")
-                    }
-                    allFilesPermissionLauncher.launch(intent)
-                } catch (_: Exception) {
-                    try {
-                        val fallbackIntent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                        allFilesPermissionLauncher.launch(fallbackIntent)
-                    } catch (_: Exception) {}
-                }
-            }
-        }
-
         handleIncomingIntent(intent)
 
         setContent {
@@ -108,24 +84,49 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     viewModel = viewModel,
                     onOpenFile = { path, uri -> openDownloadedFile(path, uri) },
-                    onShareFile = { path, uri -> shareDownloadedFile(path, uri) }
+                    onShareFile = { path, uri -> shareDownloadedFile(path, uri) },
+                    onPasteFromClipboard = { pasteFromClipboard() }
                 )
             }
         }
-        checkClipboardForUrl()
+        checkClipboardMetadata()
     }
 
     override fun onResume() {
         super.onResume()
-        checkClipboardForUrl()
+        checkClipboardMetadata()
     }
 
-    private fun checkClipboardForUrl() {
+    // SEC-AUDIT-02: Zero-toast privacy-preserving metadata check (does not access clipboard payload bytes)
+    private fun checkClipboardMetadata() {
         try {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            val text = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()
-            viewModel.onClipboardChecked(text)
+            val hasClip = clipboard?.hasPrimaryClip() == true
+            val isText = clipboard?.primaryClipDescription?.hasMimeType(android.content.ClipDescription.MIMETYPE_TEXT_PLAIN) == true
+            viewModel.onClipboardStateChanged(hasClip && isText)
         } catch (_: Exception) {}
+    }
+
+    private fun pasteFromClipboard() {
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            val rawText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+            if (rawText.isNullOrBlank()) {
+                Toast.makeText(this, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                viewModel.onClipboardStateChanged(false)
+                return
+            }
+            val extracted = extractUrl(rawText)
+            if (extracted.isNotBlank() && (extracted.startsWith("http://") || extracted.startsWith("https://"))) {
+                viewModel.onUrlChanged(extracted)
+                viewModel.onClipboardStateChanged(false)
+            } else {
+                Toast.makeText(this, "Clipboard does not contain a web URL", Toast.LENGTH_SHORT).show()
+                viewModel.onClipboardStateChanged(false)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Cannot access clipboard: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -207,7 +208,8 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     viewModel: MainViewModel,
     onOpenFile: (String, String?) -> Unit,
-    onShareFile: (String, String?) -> Unit
+    onShareFile: (String, String?) -> Unit,
+    onPasteFromClipboard: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -220,6 +222,7 @@ fun MainScreen(
     val cellularAvailable by viewModel.isCellularAvailable.collectAsState()
     val urlInput by viewModel.urlInput.collectAsState()
     val selectedPreset by viewModel.selectedPreset.collectAsState()
+    val hasClipboardContent by viewModel.hasClipboardContent.collectAsState()
     val detectedClipboardUrl by viewModel.detectedClipboardUrl.collectAsState()
 
     // Haptic feedback on completion
@@ -503,9 +506,9 @@ fun MainScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Smart Context Pill Banner (Clipboard Link Suggestion)
+                    // SEC-AUDIT-02: Smart Context Pill Banner (Privacy-Conscious Clipboard Suggestion)
                     AnimatedVisibility(
-                        visible = !detectedClipboardUrl.isNullOrBlank() && urlInput.isBlank(),
+                        visible = (hasClipboardContent || !detectedClipboardUrl.isNullOrBlank()) && urlInput.isBlank(),
                         enter = expandVertically() + fadeIn(),
                         exit = shrinkVertically() + fadeOut()
                     ) {
@@ -527,7 +530,7 @@ fun MainScreen(
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Rounded.Link,
+                                        imageVector = if (!detectedClipboardUrl.isNullOrBlank()) Icons.Rounded.Link else Icons.Rounded.ContentPaste,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                         modifier = Modifier.size(18.dp)
@@ -535,12 +538,12 @@ fun MainScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column {
                                         Text(
-                                            text = "Link detected in clipboard",
+                                            text = if (!detectedClipboardUrl.isNullOrBlank()) "Link detected in clipboard" else "Clipboard text available",
                                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                             color = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                         Text(
-                                            text = detectedClipboardUrl ?: "",
+                                            text = detectedClipboardUrl ?: "Tap 'Paste' to import URL",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                                             maxLines = 1,
@@ -553,7 +556,11 @@ fun MainScreen(
                                     Button(
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            viewModel.acceptClipboardUrl()
+                                            if (!detectedClipboardUrl.isNullOrBlank()) {
+                                                viewModel.acceptClipboardUrl()
+                                            } else {
+                                                onPasteFromClipboard()
+                                            }
                                         },
                                         shape = RoundedCornerShape(10.dp),
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -567,7 +574,7 @@ fun MainScreen(
                                     }
                                     Spacer(modifier = Modifier.width(4.dp))
                                     IconButton(
-                                        onClick = { viewModel.dismissClipboardUrl() },
+                                        onClick = { viewModel.dismissClipboardSuggestion() },
                                         modifier = Modifier.size(28.dp)
                                     ) {
                                         Icon(

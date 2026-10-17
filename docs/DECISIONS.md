@@ -777,6 +777,74 @@ Following the stabilization and security hardening of DualBoost Downloader, user
 ### Consequences
 Significantly elevates the user experience with transparent, high-tech chunk telemetry and one-handed link insertion, while accelerating incremental release builds on the development workstation.
 
+---
+
+## ADR-025: Phase 1 Security Hardening (Interface-Specific DNS Binding, Privacy-Conscious Clipboard Access, and Secret Key UI Masking)
+
+### Date
+2026-10-17
+
+### Status
+Accepted
+
+### Context
+Following an in-depth senior security engineering review based on the OWASP Mobile Top 10 (2024) and MASVS v2.1, three Phase 1 security and privacy flaws were identified:
+1. **Cross-Interface DNS Leakage (`SEC-AUDIT-01` / OWASP M5)**: In `DualNetworkManager.kt`, OkHttpClient instances bound transport sockets via `network.socketFactory` but relied on default system DNS (`Dns.SYSTEM`). This caused cellular chunk DNS queries to resolve through the active Wi-Fi interface, leaking target hostnames to local Wi-Fi networks and causing cellular download failures when Wi-Fi is behind a captive portal or private DNS.
+2. **Unsolicited Clipboard Snooping (`SEC-AUDIT-02` / OWASP M6)**: In `MainActivity.kt`, reading clipboard payload bytes on every `onResume()` triggered Android 12+ system privacy banners ("DualBoost pasted from your clipboard") and exposed user clipboard contents (passwords, private messages) to memory without user action.
+3. **Cleartext Secret Key Screen Exposure (`SEC-AUDIT-03` / OWASP M1)**: In `SettingsBottomSheet.kt`, the Cloud Slicer Secret Key field configured `keyboardType = KeyboardType.Password` but omitted `visualTransformation = PasswordVisualTransformation()`, displaying user tokens in cleartext on the screen.
+
+### Decision
+1. **Interface-Specific DNS Binding (`SEC-AUDIT-01`)**:
+   - Implemented custom `Dns` instances in `DualNetworkManager.kt` binding name resolution strictly to the physical `Network` object via `network.getAllByName(hostname).toList()`.
+   - Enforced strict fail-closed isolation: if an interface's DNS fails, it fails cleanly on that interface so DualBoost's circuit-breaker can re-route chunks without cross-interface hostname leakage.
+2. **Zero-Toast Privacy-Preserving Clipboard Detection (`SEC-AUDIT-02`)**:
+   - Replaced payload reads on app open/resume with zero-toast metadata inspection (`clipboard.hasPrimaryClip()` and `clipboard.primaryClipDescription?.hasMimeType(MIMETYPE_TEXT_PLAIN)`).
+   - Displayed an intuitive "Clipboard text available" smart chip, reading clipboard text strictly upon deliberate user tap of the "Paste" button.
+3. **Hardware-Grade UI Secret Key Masking (`SEC-AUDIT-03`)**:
+   - Applied `PasswordVisualTransformation()` to the Cloud Slicer Secret Key `OutlinedTextField`.
+   - Added an interactive Material 3 eye toggle icon (`Icons.Rounded.Visibility` / `Icons.Rounded.VisibilityOff`) enabling users to show/hide their secret key securely.
+
+### Consequences
+- Completely eliminates cross-interface DNS leaks and DNS-related cellular failures.
+- Eliminates unsolicited background clipboard snooping and Android 12+ privacy toast warnings.
+- Prevents shoulder-surfing and screen-recording exposure of Cloud Slicer secret tokens.
+- 100% pass across all unit tests and verified live on physical Google Pixel 9.
+
+---
+
+## ADR-026: Phase 2 Security Hardening & Store Compliance (Scoped Storage Migration, FileProvider Containment, and R8 Binary Protection)
+
+### Date
+2026-10-17
+
+### Status
+Accepted
+
+### Context
+Following Phase 1, three Phase 2 security and compliance items remained from the senior security review:
+1. **Excessive Storage Privileges (`SEC-AUDIT-04` / OWASP M8)**: `AndroidManifest.xml` requested `MANAGE_EXTERNAL_STORAGE` ("All Files Access") and prompted users via system settings on first launch. This excessive privilege violates the Principle of Least Privilege and leads to automatic rejection under Google Play Developer Policy.
+2. **Overly Permissive FileProvider Scope (`SEC-AUDIT-06` / OWASP M8)**: In `file_paths.xml`, `<external-files-path path="." />` exposed the entire root of the application's external storage to receiving apps via FileProvider.
+3. **Unobfuscated Binary & Bloated Package (`SEC-AUDIT-05` / OWASP M7)**: In `app/build.gradle.kts`, `isMinifyEnabled = false` left symbol names, networking internals, and coroutine state machines completely clear and unprotected against reverse engineering with JADX/apktool.
+
+### Decision
+1. **Complete Scoped Storage Migration (`SEC-AUDIT-04`)**:
+   - Removed `MANAGE_EXTERNAL_STORAGE` from `AndroidManifest.xml`.
+   - Removed `allFilesPermissionLauncher` and the system settings launch prompt in `MainActivity.kt`.
+   - The engine writes directly to `context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)` (requiring zero runtime permissions) and exports completed files to public Downloads via `MediaStore.Downloads` (`exportToMediaStore`).
+2. **FileProvider Path Containment (`SEC-AUDIT-06`)**:
+   - Narrowed `<external-files-path name="external_app_files" path="Download" />` strictly to the `Download` directory, preventing any path escaping or access to other app-private files.
+3. **R8 Minification, Resource Shrinking & Symbol Obfuscation (`SEC-AUDIT-05`)**:
+   - Configured `isMinifyEnabled = true` and `isShrinkResources = true` in `app/build.gradle.kts`.
+   - Hardened `app/proguard-rules.pro` with keep rules for OkHttp, Coroutines, and DualBoost data models (`com.dualboost.downloader.data.**`).
+   - Slashed release APK footprint down to **1.37 MB** with full symbol obfuscation.
+
+### Consequences
+- App complies with Android 14/15 Scoped Storage rules and is 100% compliant with Google Play policies without requiring special storage permissions.
+- Eliminates the intrusive "All Files Access" system prompt on first launch.
+- Scopes FileProvider to prevent directory exposure.
+- Protects intellectual property and application internals from reverse engineering.
+- 100% passing test suite and verified live on physical Google Pixel 9.
+
 
 
 

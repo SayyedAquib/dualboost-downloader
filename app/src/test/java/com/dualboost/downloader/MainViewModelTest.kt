@@ -252,6 +252,26 @@ class MainViewModelTest {
     }
 
     @Test
+    fun testClipboardStateChanged_PrivacyConsciousMetadata() {
+        val viewModel = MainViewModel(repository = null)
+        assertFalse(viewModel.hasClipboardContent.value)
+
+        // Metadata indicates text is present while urlInput is empty
+        viewModel.onClipboardStateChanged(true)
+        assertTrue(viewModel.hasClipboardContent.value)
+
+        // Dismiss suggestion
+        viewModel.dismissClipboardSuggestion()
+        assertFalse(viewModel.hasClipboardContent.value)
+
+        // Metadata indicates text present, but urlInput gets populated
+        viewModel.onClipboardStateChanged(true)
+        assertTrue(viewModel.hasClipboardContent.value)
+        viewModel.onUrlChanged("https://example.com/download.zip")
+        assertFalse("hasClipboardContent must be cleared when urlInput is populated", viewModel.hasClipboardContent.value)
+    }
+
+    @Test
     fun testFormatEta_ProducesAccurateCountdownStrings() {
         assertEquals("< 1s", com.dualboost.downloader.data.formatEta(0L))
         assertEquals("< 1s", com.dualboost.downloader.data.formatEta(-5L))

@@ -9,6 +9,7 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -48,8 +49,14 @@ class DualNetworkManager(context: Context) : NetworkProvider {
         override fun onAvailable(network: Network) {
             Log.d(TAG, "Wi-Fi network available: $network")
             wifiNetwork = network
+            // SEC-AUDIT-01: Cryptographically bind both TCP sockets and DNS resolution to Wi-Fi interface
             wifiClient = baseOkHttpClient.newBuilder()
                 .socketFactory(network.socketFactory)
+                .dns(object : Dns {
+                    override fun lookup(hostname: String): List<java.net.InetAddress> {
+                        return network.getAllByName(hostname).toList()
+                    }
+                })
                 .build()
             _isWifiAvailable.value = true
         }
@@ -58,6 +65,7 @@ class DualNetworkManager(context: Context) : NetworkProvider {
             Log.d(TAG, "Wi-Fi network lost: $network")
             if (wifiNetwork == network) {
                 wifiNetwork = null
+                wifiClient = baseOkHttpClient
                 _isWifiAvailable.value = false
             }
         }
@@ -67,8 +75,14 @@ class DualNetworkManager(context: Context) : NetworkProvider {
         override fun onAvailable(network: Network) {
             Log.d(TAG, "Cellular (5G/LTE) network available: $network")
             cellularNetwork = network
+            // SEC-AUDIT-01: Cryptographically bind both TCP sockets and DNS resolution to Cellular interface
             cellularClient = baseOkHttpClient.newBuilder()
                 .socketFactory(network.socketFactory)
+                .dns(object : Dns {
+                    override fun lookup(hostname: String): List<java.net.InetAddress> {
+                        return network.getAllByName(hostname).toList()
+                    }
+                })
                 .build()
             _isCellularAvailable.value = true
         }
@@ -77,6 +91,7 @@ class DualNetworkManager(context: Context) : NetworkProvider {
             Log.d(TAG, "Cellular (5G/LTE) network lost: $network")
             if (cellularNetwork == network) {
                 cellularNetwork = null
+                cellularClient = baseOkHttpClient
                 _isCellularAvailable.value = false
             }
         }

@@ -92,14 +92,31 @@ open class MainViewModel(
     private val _selectedPreset = MutableStateFlow<QuickTestPreset?>(null)
     val selectedPreset: StateFlow<QuickTestPreset?> = _selectedPreset.asStateFlow()
 
+    private val _hasClipboardContent = MutableStateFlow(false)
+    val hasClipboardContent: StateFlow<Boolean> = _hasClipboardContent.asStateFlow()
+
     private val _detectedClipboardUrl = MutableStateFlow<String?>(null)
     val detectedClipboardUrl: StateFlow<String?> = _detectedClipboardUrl.asStateFlow()
+
+    fun onClipboardStateChanged(hasText: Boolean) {
+        if (_urlInput.value.isBlank()) {
+            _hasClipboardContent.value = hasText
+        } else {
+            _hasClipboardContent.value = false
+        }
+    }
+
+    fun dismissClipboardSuggestion() {
+        _hasClipboardContent.value = false
+        _detectedClipboardUrl.value = null
+    }
 
     fun onClipboardChecked(url: String?) {
         val trimmed = url?.trim()
         if (!trimmed.isNullOrBlank() && (trimmed.startsWith("http://") || trimmed.startsWith("https://"))) {
             if (_urlInput.value.isBlank() && _detectedClipboardUrl.value != trimmed) {
                 _detectedClipboardUrl.value = trimmed
+                _hasClipboardContent.value = true
             }
         }
     }
@@ -108,11 +125,12 @@ open class MainViewModel(
         _detectedClipboardUrl.value?.let {
             onUrlChanged(it)
             _detectedClipboardUrl.value = null
+            _hasClipboardContent.value = false
         }
     }
 
     fun dismissClipboardUrl() {
-        _detectedClipboardUrl.value = null
+        dismissClipboardSuggestion()
     }
 
     init {
@@ -125,6 +143,10 @@ open class MainViewModel(
 
     fun onUrlChanged(newUrl: String) {
         _urlInput.value = newUrl
+        if (newUrl.isNotBlank()) {
+            _hasClipboardContent.value = false
+            _detectedClipboardUrl.value = null
+        }
         _selectedPreset.value = DEFAULT_PRESETS.firstOrNull { it.url == newUrl.trim() }
     }
 
