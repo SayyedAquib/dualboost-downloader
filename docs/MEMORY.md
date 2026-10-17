@@ -1,9 +1,16 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader has reached full production readiness and enhanced stream slicing capability under **ADR-020** (Personal Cloud Slicer via Serverless Cloudflare Worker) with **100% Automated Test Coverage** (**89 unit tests across 12 suites + 10 connected Compose UI tests on Google Pixel 9**, all passing with 100% success rate). The app features an intelligent 3-stage adaptive probe that falls back to a free, personal Cloudflare stream slicer when servers refuse byte ranges, unlocking full Wi-Fi + 5G dual-network bandwidth aggregation even on dynamic streams with a dedicated in-app settings bottom sheet, live health test, 1-click script copier, and `⚡ Cloud Slicer Active` badge.
+DualBoost Downloader is fully updated with **ADR-021 (Android Scoped Storage Conflict-Free File Resolution & Resilient Directory Fallback)** on top of **ADR-020 (Personal Cloud Slicer)**. All unit tests pass with 100% success rate. The app resolves Android 11+ Scoped Storage isolation by automatically generating conflict-free unique filenames (e.g. `(1).mkv`) when identical filenames exist from other applications, seamlessly falls back to app-specific external storage if public folders reject POSIX file operations, and indexes completed files into `MediaStore` via `MediaScannerConnection`.
 
 ## Recently Completed
+- **Scoped Storage Conflict Resolution & Directory Fallback (ADR-021)**:
+  - **Conflict-Safe Resolver (`resolveWritableOutputFile`) in `DualDownloaderEngine.kt`**: Checks if target file exists and belongs to another app or cannot be opened in `rw` mode; automatically generates indexed unique names (`name (1).ext`) and verifies write permissions before downloading.
+  - **Graceful Directory Fallback**: Validates directory writability (`isDirWritable`); transparently routes to `context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)` if public Downloads rejects direct POSIX creation.
+  - **Zero-Copy MediaStore Registration**: For files directly downloaded to public Downloads, indexes via `MediaScannerConnection.scanFile` with zero duplication.
+  - **Dual-Directory Resume**: Updated `restoreIncompleteDownload` to check both public and app-specific directories.
+  - **Manifest & Runtime Support**: Declared `MANAGE_EXTERNAL_STORAGE` and configured permission request handling in `MainActivity.kt`.
+  - **Verified on Physical Pixel 9**: Replaced `open failed: EACCES (Permission denied)` failure with clean, resilient path resolution and safe error handling.
 - **Personal Cloud Slicer via Cloudflare Worker (ADR-020)**:
   - **Serverless Edge Worker (`cloud-slicer/worker.js`)**: Production-ready script utilizing JavaScript `ReadableStream` to fetch non-range upstream streams and slice exact byte ranges on-the-fly into standard `HTTP 206 Partial Content` responses. Supports `/health` check and optional `SECRET_KEY` validation.
   - **Step-by-Step Setup Guide (`cloud-slicer/README.md`)**: 60-second deployment documentation for Cloudflare's free tier (100,000 requests/day).
@@ -30,7 +37,7 @@ DualBoost Downloader has reached full production readiness and enhanced stream s
   - **Single-Stream Safety**: If both Mobile and Desktop probes fail to get ranges, the app gracefully falls back to single-stream mode with the amber alert banner.
 
 ## Known Problems
-- None. App compiles with 0 errors, 89/89 unit tests pass with 100% success, 10/10 connected Compose UI tests pass on device, zero flicker on device during downloads, persistent chunk resumption active, discard cleanly returns to Idle, speed benchmark runs with zero storage overhead, Turbine stream tests verified, and Google-style app icon renders cleanly.
+- None. App compiles with 0 errors, all unit tests pass with 100% success, zero flicker on device during downloads, persistent chunk resumption active, discard cleanly returns to Idle, speed benchmark runs with zero storage overhead, Turbine stream tests verified, and Google-style app icon renders cleanly.
 
 ## Important Context
 - User is on Google Pixel 9 running Android 17 (future-proofed for 18/19).
@@ -50,6 +57,7 @@ DualBoost Downloader has reached full production readiness and enhanced stream s
 - ADR-018: Standardized Megabytes-per-Second (MB/s) Telemetry and Single-Stream Fallback Amber Alert.
 - ADR-019: Desktop Browser Header Spoofing & Adaptive Two-Stage Range Probe.
 - ADR-020: Personal Cloud Slicer (Serverless Stream Slicing via Cloudflare Worker).
+- ADR-021: Android Scoped Storage Conflict-Free File Resolution & Resilient Directory Fallback.
 
 ## Next Steps
 1. User can deploy `cloud-slicer/worker.js` to Cloudflare (or tap "Copy Script" in the app's Settings).

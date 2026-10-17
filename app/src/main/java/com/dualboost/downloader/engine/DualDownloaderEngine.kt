@@ -2,6 +2,7 @@ package com.dualboost.downloader.engine
 
 import android.content.ContentValues
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -28,7 +29,9 @@ import okhttp3.Response
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -71,21 +74,102 @@ class DualDownloaderEngine(
 
     private val CHUNK_SIZE = 4 * 1024 * 1024L // 4 MB chunks
 
+    internal fun isDirWritable(dir: File): Boolean {
+        return try {
+            if (!dir.exists()) dir.mkdirs()
+            val testFile = File(dir, ".dualboost_perm_${System.currentTimeMillis()}.tmp")
+            if (testFile.createNewFile()) {
+                testFile.delete()
+                true
+            } else {
+                false
+            }
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     fun getDefaultDownloadDir(): File {
         val publicDir = try {
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         } catch (_: Throwable) {
             null
         }
-        return if (publicDir != null && (publicDir.exists() || publicDir.mkdirs())) {
+        return if (publicDir != null && (publicDir.exists() || publicDir.mkdirs()) && isDirWritable(publicDir)) {
             publicDir
         } else {
-            try {
-                context.getExternalFilesDir(null) ?: context.filesDir
-            } catch (_: Throwable) {
-                File(System.getProperty("java.io.tmpdir") ?: ".")
-            }
+            val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
+            if (!appDir.exists()) appDir.mkdirs()
+            appDir
         }
+    }
+
+    internal fun resolveWritableOutputFile(targetDir: File, initialFileName: String, url: String): File {
+        val safeDir = if (isDirWritable(targetDir)) {
+            targetDir
+        } else {
+            val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
+            if (!appDir.exists()) appDir.mkdirs()
+            appDir
+        }
+
+        fun findAvailableFile(dir: File): File {
+            var candidateName = initialFileName
+            var file = File(dir, candidateName)
+            val metaFile = getMetaFile(dir, candidateName)
+            val existingMeta = readMetaInfo(metaFile)
+
+            // If file exists and matches our own interrupted download for this URL, check if writable and reuse!
+            if (file.exists() && existingMeta != null && existingMeta.url == url) {
+                try {
+                    RandomAccessFile(file, "rw").use { }
+                    return file
+                } catch (_: Throwable) {
+                    // If existing file is locked, fall through to generate unique name
+                }
+            }
+
+            // If file exists or cannot be opened in "rw" mode, generate non-conflicting unique name: "name (1).ext"
+            if (file.exists()) {
+                val baseName = initialFileName.substringBeforeLast('.')
+                val extension = initialFileName.substringAfterLast('.', "")
+                val extSuffix = if (extension.isNotEmpty() && extension != initialFileName) ".$extension" else ""
+                var counter = 1
+                while (file.exists()) {
+                    candidateName = "$baseName ($counter)$extSuffix"
+                    file = File(dir, candidateName)
+                    counter++
+                }
+            }
+            return file
+        }
+
+        var candidate = findAvailableFile(safeDir)
+
+        // Verify write access to candidate file
+        val canWrite = try {
+            if (!candidate.exists()) {
+                if (candidate.createNewFile()) {
+                    candidate.delete()
+                    true
+                } else {
+                    false
+                }
+            } else {
+                RandomAccessFile(candidate, "rw").use { }
+                true
+            }
+        } catch (_: Throwable) {
+            false
+        }
+
+        if (!canWrite) {
+            val fallbackDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
+            if (!fallbackDir.exists()) fallbackDir.mkdirs()
+            candidate = findAvailableFile(fallbackDir)
+        }
+
+        return candidate
     }
 
     internal fun getMetaFile(targetDir: File, fileName: String): File {
@@ -170,13 +254,23 @@ class DualDownloaderEngine(
 
     fun restoreIncompleteDownload(targetDir: File = getDefaultDownloadDir()): Boolean {
         try {
-            if (!targetDir.exists()) return false
-            val metaFiles = targetDir.listFiles { _, name -> name.endsWith(".dualboost_meta") } ?: return false
+            val candidateDirs = mutableListOf<File>()
+            if (targetDir.exists()) candidateDirs.add(targetDir)
+            val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            if (appDir != null && appDir.exists() && appDir != targetDir) {
+                candidateDirs.add(appDir)
+            }
+            if (candidateDirs.isEmpty()) return false
+
+            val metaFiles = candidateDirs.flatMap { dir ->
+                dir.listFiles { _, name -> name.endsWith(".dualboost_meta") }?.toList() ?: emptyList()
+            }
+            if (metaFiles.isEmpty()) return false
             val latestMeta = metaFiles.maxByOrNull { it.lastModified() } ?: return false
             val metaInfo = readMetaInfo(latestMeta) ?: return false
 
             val fileName = latestMeta.name.removeSuffix(".dualboost_meta")
-            val targetFile = File(targetDir, fileName)
+            val targetFile = File(latestMeta.parentFile ?: targetDir, fileName)
             val totalBytes = metaInfo.totalLength
 
             val completedBytes = metaInfo.completedChunks.sumOf { chunkIndex ->
@@ -375,7 +469,13 @@ class DualDownloaderEngine(
 
         // Check if existing sidecar metadata indicates previous desktop spoofing or cloud slicer
         val initialMetaFile = getMetaFile(targetDir, fileName)
-        val existingInitialMeta = readMetaInfo(initialMetaFile)
+        var existingInitialMeta = readMetaInfo(initialMetaFile)
+        if (existingInitialMeta == null) {
+            val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            if (appDir != null && appDir.exists()) {
+                existingInitialMeta = readMetaInfo(getMetaFile(appDir, fileName))
+            }
+        }
         val forceDesktop = existingInitialMeta?.isDesktopSpoofed == true
         if (forceDesktop) {
             isDesktopSpoofed = true
@@ -581,10 +681,12 @@ class DualDownloaderEngine(
             }
         }
 
-        val outputFile = File(targetDir, fileName)
+        val outputFile = resolveWritableOutputFile(targetDir, fileName, url)
+        val actualTargetDir = outputFile.parentFile ?: targetDir
+        fileName = outputFile.name
         currentOutputFile = outputFile
         currentUrl = url
-        val metaFile = getMetaFile(targetDir, fileName)
+        val metaFile = getMetaFile(actualTargetDir, fileName)
         val startTime = System.currentTimeMillis()
 
         if (!supportsRanges || contentLength <= 0) {
@@ -596,7 +698,7 @@ class DualDownloaderEngine(
         Log.i(TAG, "Starting dual-network segmented download: size = $contentLength bytes ($fileName)")
 
         // Pre-flight disk space validation
-        checkAvailableStorage(targetDir, contentLength, outputFile)
+        checkAvailableStorage(actualTargetDir, contentLength, outputFile)
 
         // Pre-allocate or verify file size with RandomAccessFile
         RandomAccessFile(outputFile, "rw").use { raf ->
@@ -890,7 +992,7 @@ class DualDownloaderEngine(
 
         try {
             if (metaFile.exists()) metaFile.delete()
-            val tmp = File(targetDir, "${metaFile.name}.tmp")
+            val tmp = File(actualTargetDir, "${metaFile.name}.tmp")
             if (tmp.exists()) tmp.delete()
         } catch (_: Exception) {}
 
@@ -1079,6 +1181,37 @@ class DualDownloaderEngine(
     internal fun exportToMediaStore(sourceFile: File, fileName: String): Uri? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             return try {
+                val publicDownloads = try {
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                } catch (_: Throwable) { null }
+
+                val isInPublicDownloads = publicDownloads != null &&
+                    try { sourceFile.canonicalPath.startsWith(publicDownloads.canonicalPath) } catch (_: Exception) { false }
+
+                if (isInPublicDownloads) {
+                    val completableFuture = CompletableFuture<Uri?>()
+                    MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(sourceFile.absolutePath),
+                        arrayOf(getMimeType(fileName))
+                    ) { _, uri ->
+                        completableFuture.complete(uri)
+                    }
+                    return try {
+                        completableFuture.get(3, TimeUnit.SECONDS)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+
+                // If in app-specific directory, check if there's enough storage to copy to MediaStore
+                val fileSize = sourceFile.length()
+                val freeSpace = (publicDownloads ?: context.filesDir).usableSpace
+                if (fileSize > 0 && freeSpace < fileSize + 50 * 1024 * 1024L) {
+                    Log.w(TAG, "Not enough free space ($freeSpace bytes) to duplicate $fileSize bytes into MediaStore. Retaining in app storage.")
+                    return null
+                }
+
                 val resolver = context.contentResolver ?: return null
                 val contentValues = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
@@ -1095,6 +1228,11 @@ class DualDownloaderEngine(
                 contentValues.clear()
                 contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
                 resolver.update(uri, contentValues, null, null)
+
+                try {
+                    sourceFile.delete()
+                } catch (_: Exception) {}
+
                 uri
             } catch (e: Exception) {
                 Log.w(TAG, "MediaStore export skipped or failed: ${e.message}")

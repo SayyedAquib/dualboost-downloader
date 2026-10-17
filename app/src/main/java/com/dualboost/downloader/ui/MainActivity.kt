@@ -60,6 +60,10 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { /* Handled */ }
 
+    private val allFilesPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { /* Handled */ }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -72,6 +76,26 @@ class MainActivity : ComponentActivity() {
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // Request storage access for direct public downloads folder writing on Android 11+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val prefs = getSharedPreferences("dualboost_prefs", Context.MODE_PRIVATE)
+            val hasPromptedStorage = prefs.getBoolean("has_prompted_all_files_access", false)
+            if (!android.os.Environment.isExternalStorageManager() && !hasPromptedStorage) {
+                prefs.edit().putBoolean("has_prompted_all_files_access", true).apply()
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    allFilesPermissionLauncher.launch(intent)
+                } catch (_: Exception) {
+                    try {
+                        val fallbackIntent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                        allFilesPermissionLauncher.launch(fallbackIntent)
+                    } catch (_: Exception) {}
+                }
             }
         }
 
@@ -101,6 +125,9 @@ class MainActivity : ComponentActivity() {
                 val extracted = extractUrl(sharedText)
                 if (extracted.isNotBlank()) {
                     viewModel.onUrlChanged(extracted)
+                    if (intent.getBooleanExtra("auto_start", false)) {
+                        viewModel.startDownload(extracted)
+                    }
                 }
             }
         }

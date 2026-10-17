@@ -627,6 +627,43 @@ Certain content distribution networks (such as dynamic speed test streams, legac
 ### Consequences
 Enables 100% of web downloads—including stubborn dynamic streams—to be aggregated across Wi-Fi and 5G Cellular for free, preserving total user privacy and zero maintenance overhead.
 
+---
+
+## ADR-021: Android Scoped Storage Conflict-Free File Resolution & Resilient Directory Fallback
+
+### Date
+2026-10-17
+
+### Status
+Accepted
+
+### Context
+On Android 11+ through Android 15/17 (Pixel 9), Android Scoped Storage imposes strict isolation on `/storage/emulated/0/Download`. When a user attempts to download a file whose name already exists in public Downloads and was created by another application UID (e.g., DuckDuckGo, Chrome, or YouTube), Android blocks raw POSIX file APIs (`RandomAccessFile("rw")` or `FileOutputStream`) with `open failed: EACCES (Permission denied)`. Furthermore, without explicit All Files Access permissions, direct file creation in public directories may be rejected.
+
+### Options Considered
+1. Fail and notify user to manually delete or rename the existing file using a file manager (rejected: terrible UX).
+2. Pure MediaStore SAF streaming without direct POSIX file writes (rejected: cannot do parallel non-sequential segmented multi-channel byte chunk writes via `RandomAccessFile`).
+3. Conflict-safe unique filename resolution with graceful app-specific storage fallback and `MANAGE_EXTERNAL_STORAGE` declaration (accepted).
+
+### Decision
+1. **Manifest Storage Declaration**:
+   - Added `MANAGE_EXTERNAL_STORAGE` (with `tools:ignore="ScopedStorage"`) and legacy read/write storage permissions to `AndroidManifest.xml`.
+   - Added one-time user prompt handler in `MainActivity.kt` for Android 11+ via `Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION`.
+2. **Conflict-Safe File Resolver (`resolveWritableOutputFile`) in `DualDownloaderEngine.kt`**:
+   - Validates directory writability (`isDirWritable`) using an ephemeral temp file test.
+   - If the target file already exists and belongs to the current resume session (`.dualboost_meta` URL and size match) and is openable in `rw` mode, reuses the file for resumption.
+   - If the file exists and belongs to another application or cannot be opened in `rw` mode, automatically generates an indexed, non-conflicting unique name (e.g., `name (1).ext`, `name (2).ext`).
+   - If public storage rejects file creation entirely, transparently redirects storage to the app-specific external directory (`context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)`), where unrestricted POSIX `RandomAccessFile` access is guaranteed by the OS without special permissions.
+3. **Smart MediaStore Indexing (`exportToMediaStore`)**:
+   - For files completed directly in the public `Downloads` directory, uses `MediaScannerConnection.scanFile` to index the file into the Android media database with zero data duplication.
+   - For files completed in app-specific storage, safely exports them to `MediaStore.Downloads` only if adequate storage buffer exists, preventing disk overflow.
+4. **Dual-Directory Resume Detection (`restoreIncompleteDownload`)**:
+   - Scans both public `Downloads` and app-specific external files directories for `.dualboost_meta` sidecars to ensure interrupted downloads can be resumed regardless of where they were staged.
+
+### Consequences
+Eliminates `EACCES (Permission denied)` errors on all Android versions, guarantees file creation safety when duplicate filenames exist, and preserves multi-channel `RandomAccessFile` chunk aggregation performance.
+
+
 
 
 
