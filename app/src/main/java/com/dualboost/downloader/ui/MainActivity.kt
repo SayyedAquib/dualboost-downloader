@@ -317,7 +317,7 @@ fun MainScreen(
                         Icon(
                             imageVector = Icons.Rounded.Security,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -774,7 +774,7 @@ fun MainScreen(
                             ) {
                                 Surface(
                                     shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
                                     modifier = Modifier.size(56.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
@@ -1284,7 +1284,7 @@ fun MainScreen(
                                     Icon(
                                         imageVector = Icons.Rounded.ErrorOutline,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
+                                        tint = MaterialTheme.colorScheme.onErrorContainer,
                                         modifier = Modifier.size(28.dp)
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))

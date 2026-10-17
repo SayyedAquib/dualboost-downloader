@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -16,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Help
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -84,17 +86,41 @@ fun SettingsBottomSheet(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header Icon & Title
+            // Header Icon & Title (Sleek Circular Hero Badge with Translucent Brand Tint)
+            val isConfigured = workerUrl.isNotBlank()
+            val isDark = isSystemInDarkTheme()
+            val brandColor = MaterialTheme.colorScheme.primary
+            val activeGreen = if (isDark) Color(0xFF69F0AE) else Color(0xFF008940)
+
+            val infiniteTransition = rememberInfiniteTransition(label = "SlicerDotPulse")
+            val dotAlpha by if (isConfigured) {
+                infiniteTransition.animateFloat(
+                    initialValue = 0.45f,
+                    targetValue = 1.0f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1200, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "DotAlpha"
+                )
+            } else {
+                remember { mutableFloatStateOf(1f) }
+            }
+
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(54.dp)
+                color = if (isConfigured) brandColor.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.8f),
+                border = BorderStroke(
+                    1.5.dp,
+                    if (isConfigured) brandColor.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.size(58.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.Rounded.CloudSync,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        imageVector = if (isConfigured) Icons.Rounded.CloudDone else Icons.Rounded.CloudQueue,
+                        contentDescription = "Personal Cloud Slicer",
+                        tint = if (isConfigured) brandColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.size(30.dp)
                     )
                 }
@@ -116,7 +142,39 @@ fun SettingsBottomSheet(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
             )
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Elegant Status Pill Badge
+            Surface(
+                shape = CircleShape,
+                color = if (isConfigured) activeGreen.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHighest,
+                border = BorderStroke(
+                    1.dp,
+                    if (isConfigured) activeGreen.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isConfigured) activeGreen.copy(alpha = dotAlpha) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                            )
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isConfigured) "Worker Active & Ready" else "Worker Not Configured",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (isConfigured) activeGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Explanatory Banner Card
             Surface(
@@ -350,7 +408,7 @@ fun SettingsBottomSheet(
                                 Icon(
                                     imageVector = Icons.Rounded.ErrorOutline,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -382,7 +440,7 @@ fun SettingsBottomSheet(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Rounded.Help,
+                                imageVector = Icons.AutoMirrored.Rounded.Help,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)

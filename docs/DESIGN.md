@@ -103,7 +103,7 @@ To ensure physical network transparency across any wallpaper palette:
 
 ### Settings Modal Sheet (`SettingsBottomSheet`)
 - Material 3 `ModalBottomSheet` with `RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)`.
-- Header: Centered circular icon `Icons.Rounded.CloudSync`, title "Personal Cloud Slicer", and subtitle.
+- Header: Centered 58.dp circular hero badge (`CircleShape`) with 14% translucent brand tint, crisp `Icons.Rounded.CloudDone` (when configured) or `Icons.Rounded.CloudQueue` (when unconfigured) (30.dp), and a dedicated status pill directly below the subtitle ("Worker Active & Ready" with pulsing emerald dot vs. "Worker Not Configured" with muted dot). Title "Personal Cloud Slicer" and subtitle.
 - Educational callout: `surfaceContainerHigh` rounded card explaining the zero-cost proxy mechanism.
 - Inputs: Outlined text fields with custom leading icons (`Language`, `VpnKey`) and clear buttons.
 - Action Buttons: "Test Worker" (with progress spinner & status banner) and "Copy Script" (with haptic feedback and toast).
@@ -118,4 +118,7 @@ To ensure physical network transparency across any wallpaper palette:
 - Do NOT use unbranded generic gray progress bars when both networks are active.
 - Do NOT bury interface status inside nested menus; Wi-Fi and 5G indicators must remain permanently visible at the top of the main screen.
 - Do NOT hide download error messages behind generic toasts; render explicit failure cards with actionable recovery steps.
+- Do NOT pair container tokens with accent tints (e.g. `primary` inside `primaryContainer`, or `error` inside `errorContainer`); strictly use designated on-tokens (`onPrimaryContainer`, `onErrorContainer`) to prevent contrast inversions across dynamic color palettes.
+- Do NOT use un-branched static hex colors across dark and light themes; always use theme tokens or branch on `isSystemInDarkTheme()`.
+
 

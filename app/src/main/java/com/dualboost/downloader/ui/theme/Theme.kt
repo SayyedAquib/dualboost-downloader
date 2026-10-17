@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
+internal val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF64D2FF),
     onPrimary = Color(0xFF003549),
     primaryContainer = Color(0xFF004D68),
@@ -43,7 +43,7 @@ private val DarkColorScheme = darkColorScheme(
     onErrorContainer = Color(0xFFFFDAD6)
 )
 
-private val LightColorScheme = lightColorScheme(
+internal val LightColorScheme = lightColorScheme(
     primary = Color(0xFF00668B),
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFFBEE9FF),

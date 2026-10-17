@@ -92,4 +92,16 @@
 - ALWAYS explain concepts, technical decisions, and answers in the simplest words possible.
 - ALWAYS accompany explanations with intuitive real-world analogies and practical examples directly from the DualBoost Downloader app.
 
+## Material 3 Contrast & Color Token Pairing Rules
+To prevent inverted contrast regressions (e.g. black-on-dark in light mode, white-on-white in dark mode, or washed-out dynamic colors):
+- **Strict Token Pairing Requirement**: Every container token MUST strictly pair with its designated `on-` content token:
+  - `primaryContainer` MUST ONLY host `onPrimaryContainer` content (NEVER `primary` or `onSurfaceVariant`).
+  - `secondaryContainer` MUST ONLY host `onSecondaryContainer` content.
+  - `tertiaryContainer` MUST ONLY host `onTertiaryContainer` content.
+  - `errorContainer` MUST ONLY host `onErrorContainer` content (NEVER `error`).
+  - `surface` / `surfaceContainer` MUST ONLY host `onSurface` or `onSurfaceVariant` content.
+- **Universal Translucent Tint Pattern**: When designing colored accent badges or circular hero icons over surfaces, NEVER mix a container token with an accent tint. ALWAYS use `brandColor.copy(alpha = 0.14f)` for the background and `brandColor` for the foreground icon/text. This mathematically guarantees > 4.5:1 WCAG contrast across both Light and Dark themes.
+- **Theme-Aware Color Literals**: NEVER use static hex color literals without branching on `isSystemInDarkTheme()`.
+
+
 
