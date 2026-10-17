@@ -15,6 +15,7 @@ DualBoost Downloader has reached full production readiness and enhanced multi-se
   - Added unit tests in `EngineComprehensiveTest.kt`: `testBuildRequest_MobileHeaders`, `testBuildRequest_DesktopSpoofingHeaders`, `testAdaptiveDesktopSpoofing_UnlocksHttp206WhenMobileFails`, and `testMetaInfo_SavesAndRestoresDesktopSpoofedFlag` (100% pass across all 85 tests).
   - Added connected Compose UI test `testDownloadingState_DisplaysDesktopModeBadgeWhenSpoofed` in `MainComposeUiTest.kt`.
   - Compiled and packaged updated debug APK (`17,210,542 bytes`) at `app/build/outputs/apk/debug/app-debug.apk`.
+  - Successfully paired via Wireless ADB (`Android_P7H2EIGK.local:34233`), installed APK onto Google Pixel 9 (`192.168.1.4:38199`), granted permissions, launched `MainActivity` (PID 23320), verified dual network bindings (`Wi-Fi network 137`, `Cellular network 150`), and captured on-screen visual confirmation.
 - **Standardized Megabytes per Second (`MB/s`) Telemetry Everywhere (ADR-018)**:
   - Converted speed calculation to binary Megabytes per second using $1024 \times 1024 = 1,048,576\text{ bytes}$ in both `DualDownloaderEngine` and `SpeedTestEngine`.
   - Created centralized formatting helpers `formatSpeed` and `formatSpeedComponents` in `DownloadModel.kt` supporting adaptive switching: $\ge 1.0\text{ MB/s}$ displays as `12.4 MB/s`, $< 1.0\text{ MB/s}$ displays as `512 KB/s`, and idle displays `0.0 MB/s`.
