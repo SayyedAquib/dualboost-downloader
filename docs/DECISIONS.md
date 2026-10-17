@@ -541,6 +541,48 @@ Accepted
 ### Consequences
 Eliminates mental math friction for users calculating download times, provides complete transparency on non-range servers, and guarantees zero data waste on unboosted links.
 
+---
+
+## ADR-019: Desktop Browser Header Spoofing & Adaptive Two-Stage Range Probe
+
+### Date
+2026-10-17
+
+### Status
+Accepted
+
+### Context
+Certain file hosting providers, CDNs, and media servers inspect incoming HTTP client headers (`User-Agent`, Sec-CH-UA hints). When encountering mobile Android clients, they frequently downgrade connections to single-stream downloads (returning `HTTP 200 OK` ignoring byte ranges or omitting `Accept-Ranges: bytes`), while serving full `HTTP 206 Partial Content` segmented byte streams to modern desktop web browsers. Without header adaptation, DualBoost Downloader would needlessly fall back to single-stream mode on such servers.
+
+### Options Considered
+- Global Desktop Spoofing on all requests (rejected: might degrade servers with mobile-optimized CDNs).
+- User toggle for Desktop Mode in settings (rejected: introduces unnecessary manual friction).
+- Smart Adaptive Two-Stage Probing with resume persistence (accepted).
+
+### Decision
+1. **Adaptive Two-Stage Range Probe Protocol**:
+   - **Stage 1 (Standard Mobile Probe)**: Probes with native Android 15 Pixel 9 headers. If the server unlocks HTTP 206 or declares `Accept-Ranges: bytes`, dual-channel segmented downloading starts immediately (`isDesktopSpoofed = false`).
+   - **Stage 2 (Adaptive Desktop Retrying)**: If Stage 1 fails to yield byte ranges or returns HTTP 200, the engine immediately initiates a Stage 2 probe with Windows 11 Chrome 131 Desktop headers and Client Hints:
+     - `User-Agent`: `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36`
+     - `Sec-CH-UA`: `"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"`
+     - `Sec-CH-UA-Mobile`: `?0`
+     - `Sec-CH-UA-Platform`: `"Windows"`
+     - `Sec-CH-UA-Platform-Version`: `"15.0.0"`
+     - `Sec-Fetch-Dest`: `empty`, `Sec-Fetch-Mode`: `cors`, `Sec-Fetch-Site`: `same-origin`
+   - If Stage 2 unlocks HTTP 206 byte ranges, the engine marks `supportsRanges = true`, sets `isDesktopSpoofed = true`, and executes all chunk workers using the desktop identity.
+   - If both Stage 1 and Stage 2 fail, the engine gracefully falls back to single-stream mode with the informative amber banner.
+2. **Sidecar State Persistence (`.dualboost_meta`)**:
+   - The `isDesktopSpoofed` boolean flag is serialized to the `.dualboost_meta` sidecar file upon every chunk completion.
+   - Resuming paused or interrupted downloads retains the spoofed state, immediately bypassing the mobile probe on resumption.
+3. **Speed Test Unthrottling (`SpeedTestEngine`)**:
+   - Applied desktop browser headers across all speed test benchmark requests to ensure CDNs provide full, unthrottled bandwidth evaluation.
+4. **Subtle UI Presentation**:
+   - In `DownloadState.Downloading`, when `isDesktopSpoofed == true`, render a subtle `⚡ Desktop Mode Active` badge tinted with `primaryContainer` and rounded corners right next to the file details.
+   - In `DownloadState.Paused`, also render a compact `⚡ Desktop Mode` tag.
+
+### Consequences
+Significantly expands the catalog of servers and CDNs supporting concurrent Wi-Fi + 5G bandwidth aggregation with zero user effort, maintaining complete fallback safety and resume integrity.
+
 
 
 

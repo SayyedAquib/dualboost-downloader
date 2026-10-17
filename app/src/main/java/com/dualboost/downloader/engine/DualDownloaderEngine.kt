@@ -96,7 +96,8 @@ class DualDownloaderEngine(
         val totalLength: Long,
         val completedChunks: Set<Int>,
         val etag: String? = null,
-        val lastModified: String? = null
+        val lastModified: String? = null,
+        val isDesktopSpoofed: Boolean = false
     )
 
     internal fun readMetaInfo(metaFile: File): MetaInfo? {
@@ -115,12 +116,15 @@ class DualDownloaderEngine(
                 chunksStr.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
             } else emptySet()
 
+            val isDesktop = metaMap["isDesktopSpoofed"]?.toBoolean() ?: false
+
             MetaInfo(
                 url = savedUrl,
                 totalLength = savedTotal,
                 completedChunks = completed,
                 etag = metaMap["etag"],
-                lastModified = metaMap["lastModified"]
+                lastModified = metaMap["lastModified"],
+                isDesktopSpoofed = isDesktop
             )
         } catch (_: Exception) {
             null
@@ -138,7 +142,8 @@ class DualDownloaderEngine(
         totalBytes: Long,
         completedIndices: Set<Int>,
         etag: String? = null,
-        lastModified: String? = null
+        lastModified: String? = null,
+        isDesktopSpoofed: Boolean = false
     ) {
         try {
             val content = buildString {
@@ -146,6 +151,7 @@ class DualDownloaderEngine(
                 appendLine("totalLength=$totalBytes")
                 if (!etag.isNullOrBlank()) appendLine("etag=$etag")
                 if (!lastModified.isNullOrBlank()) appendLine("lastModified=$lastModified")
+                appendLine("isDesktopSpoofed=$isDesktopSpoofed")
                 appendLine("completedChunks=${completedIndices.sorted().joinToString(",")}")
                 appendLine("updatedAt=${System.currentTimeMillis()}")
             }
@@ -183,7 +189,8 @@ class DualDownloaderEngine(
                 totalBytes = totalBytes,
                 downloadedBytes = completedBytes,
                 progressPercentage = progress,
-                url = metaInfo.url
+                url = metaInfo.url,
+                isDesktopSpoofed = metaInfo.isDesktopSpoofed
             )
             return true
         } catch (_: Exception) {
@@ -239,7 +246,8 @@ class DualDownloaderEngine(
                             totalBytes = lastState.totalBytes,
                             downloadedBytes = lastState.downloadedBytes,
                             progressPercentage = lastState.progressPercentage,
-                            url = currentUrl ?: sanitizedUrl
+                            url = currentUrl ?: sanitizedUrl,
+                            isDesktopSpoofed = lastState.isDesktopSpoofed
                         )
                     } else if (lastState !is DownloadState.Paused && lastState !is DownloadState.Idle) {
                         _downloadState.value = DownloadState.Paused(url = currentUrl ?: sanitizedUrl)
@@ -274,7 +282,8 @@ class DualDownloaderEngine(
                 totalBytes = lastState.totalBytes,
                 downloadedBytes = lastState.downloadedBytes,
                 progressPercentage = lastState.progressPercentage,
-                url = currentUrl ?: ""
+                url = currentUrl ?: "",
+                isDesktopSpoofed = lastState.isDesktopSpoofed
             )
         } else if (lastState !is DownloadState.Paused && lastState !is DownloadState.Idle) {
             _downloadState.value = DownloadState.Paused(url = currentUrl ?: "")
@@ -351,10 +360,19 @@ class DualDownloaderEngine(
         var fileName = extractFileName(url)
         var etag: String? = null
         var lastModified: String? = null
+        var isDesktopSpoofed = false
 
-        // Try HEAD probe with cellular failover
+        // Check if existing sidecar metadata indicates previous desktop spoofing
+        val initialMetaFile = getMetaFile(targetDir, fileName)
+        val existingInitialMeta = readMetaInfo(initialMetaFile)
+        val forceDesktop = existingInitialMeta?.isDesktopSpoofed == true
+        if (forceDesktop) {
+            isDesktopSpoofed = true
+        }
+
+        // --- STAGE 1: Standard Probe (Mobile by default, or Desktop if previously spoofed) ---
         try {
-            val headRequest = buildRequest(url).head().build()
+            val headRequest = buildRequest(url, isDesktop = isDesktopSpoofed).head().build()
             executeProbeWithFallback(headRequest).use { response ->
                 if (response.isSuccessful) {
                     contentLength = response.header("Content-Length")?.toLongOrNull() ?: -1L
@@ -373,24 +391,101 @@ class DualDownloaderEngine(
 
         // If HEAD didn't yield range or length, test with GET range 0-0
         if (contentLength <= 0 || !supportsRanges) {
-            val rangeProbeRequest = buildRequest(url)
+            val rangeProbeRequest = buildRequest(url, isDesktop = isDesktopSpoofed)
                 .addHeader("Range", "bytes=0-0")
                 .build()
 
-            executeProbeWithFallback(rangeProbeRequest).use { response ->
-                if (response.code == 206) {
-                    supportsRanges = true
-                    val contentRange = response.header("Content-Range")
-                    contentRange?.substringAfterLast('/')?.toLongOrNull()?.let {
-                        contentLength = it
+            try {
+                executeProbeWithFallback(rangeProbeRequest).use { response ->
+                    if (response.code == 206) {
+                        supportsRanges = true
+                        val contentRange = response.header("Content-Range")
+                        contentRange?.substringAfterLast('/')?.toLongOrNull()?.let {
+                            contentLength = it
+                        }
+                        if (etag == null) response.header("ETag")?.let { etag = it.trim() }
+                        if (lastModified == null) response.header("Last-Modified")?.let { lastModified = it.trim() }
+                        response.header("Content-Disposition")?.let { disposition ->
+                            extractFileNameFromDisposition(disposition)?.let { fileName = it }
+                        }
+                    } else if (response.code == 200 && contentLength <= 0) {
+                        contentLength = response.header("Content-Length")?.toLongOrNull() ?: -1L
+                        if (etag == null) response.header("ETag")?.let { etag = it.trim() }
+                        if (lastModified == null) response.header("Last-Modified")?.let { lastModified = it.trim() }
+                        response.header("Content-Disposition")?.let { disposition ->
+                            extractFileNameFromDisposition(disposition)?.let { fileName = it }
+                        }
                     }
-                    if (etag == null) response.header("ETag")?.let { etag = it.trim() }
-                    if (lastModified == null) response.header("Last-Modified")?.let { lastModified = it.trim() }
-                } else if (response.code == 200 && contentLength <= 0) {
-                    contentLength = response.header("Content-Length")?.toLongOrNull() ?: -1L
-                    if (etag == null) response.header("ETag")?.let { etag = it.trim() }
-                    if (lastModified == null) response.header("Last-Modified")?.let { lastModified = it.trim() }
                 }
+            } catch (e: Exception) {
+                Log.w(TAG, "Initial range probe failed: ${e.message}")
+            }
+        }
+
+        // --- STAGE 2: Adaptive Desktop Probe ---
+        // If mobile probe did not unlock byte ranges and we didn't already force desktop, retry with Windows Chrome Desktop headers!
+        if (!supportsRanges && !forceDesktop) {
+            Log.i(TAG, "Server rejected byte ranges on mobile headers. Triggering Stage 2 probe with Windows 11 Desktop spoofing...")
+            _downloadState.value = DownloadState.Probing("Adapting desktop mode for multi-channel support...")
+
+            var desktopRanges = false
+            var desktopLength = contentLength
+
+            // 1. Try GET Range 0-0 with Desktop headers
+            try {
+                val desktopRangeReq = buildRequest(url, isDesktop = true)
+                    .addHeader("Range", "bytes=0-0")
+                    .build()
+
+                executeProbeWithFallback(desktopRangeReq).use { response ->
+                    if (response.code == 206) {
+                        desktopRanges = true
+                        val contentRange = response.header("Content-Range")
+                        contentRange?.substringAfterLast('/')?.toLongOrNull()?.let {
+                            desktopLength = it
+                        }
+                        if (etag == null) response.header("ETag")?.let { etag = it.trim() }
+                        if (lastModified == null) response.header("Last-Modified")?.let { lastModified = it.trim() }
+                        response.header("Content-Disposition")?.let { disposition ->
+                            extractFileNameFromDisposition(disposition)?.let { fileName = it }
+                        }
+                    } else if (response.code == 200 && desktopLength <= 0) {
+                        desktopLength = response.header("Content-Length")?.toLongOrNull() ?: -1L
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Stage 2 desktop range probe failed: ${e.message}")
+            }
+
+            // 2. Try HEAD with Desktop headers if range didn't succeed
+            if (!desktopRanges) {
+                try {
+                    val desktopHeadReq = buildRequest(url, isDesktop = true).head().build()
+                    executeProbeWithFallback(desktopHeadReq).use { response ->
+                        if (response.isSuccessful) {
+                            val acceptRanges = response.header("Accept-Ranges")
+                            val len = response.header("Content-Length")?.toLongOrNull() ?: -1L
+                            if (len > 0) desktopLength = len
+                            if (acceptRanges != null && acceptRanges.contains("bytes", ignoreCase = true)) {
+                                desktopRanges = true
+                            }
+                            response.header("ETag")?.let { etag = it.trim() }
+                            response.header("Last-Modified")?.let { lastModified = it.trim() }
+                            response.header("Content-Disposition")?.let { disposition ->
+                                extractFileNameFromDisposition(disposition)?.let { fileName = it }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Stage 2 desktop HEAD probe failed: ${e.message}")
+                }
+            }
+
+            if (desktopRanges && desktopLength > 0) {
+                Log.i(TAG, "Desktop Browser Spoofing successfully unlocked HTTP 206 byte ranges! ($desktopLength bytes)")
+                supportsRanges = true
+                contentLength = desktopLength
+                isDesktopSpoofed = true
             }
         }
 
@@ -402,7 +497,7 @@ class DualDownloaderEngine(
 
         if (!supportsRanges || contentLength <= 0) {
             Log.w(TAG, "Server lacks range support or length is unknown. Falling back to single-stream download.")
-            executeSingleStreamDownload(url, outputFile, contentLength)
+            executeSingleStreamDownload(url, outputFile, contentLength, isDesktopSpoofed)
             return
         }
 
@@ -508,7 +603,8 @@ class DualDownloaderEngine(
                         cellularSpeedMBps = max(0.0, cellularSpeedMBps),
                         totalSpeedMBps = max(0.0, wifiSpeedMBps + cellularSpeedMBps),
                         progressPercentage = progress,
-                        supportsRanges = true
+                        supportsRanges = true,
+                        isDesktopSpoofed = isDesktopSpoofed
                     )
                 }
             }
@@ -574,7 +670,7 @@ class DualDownloaderEngine(
                         var success = false
 
                         try {
-                            val request = buildRequest(url)
+                            val request = buildRequest(url, isDesktop = isDesktopSpoofed)
                                 .addHeader("Range", "bytes=${chunk.startByte}-${chunk.endByte}")
                                 .build()
 
@@ -649,7 +745,7 @@ class DualDownloaderEngine(
                             if (success) {
                                 chunk.status = ChunkStatus.COMPLETED
                                 completedIndices.add(chunk.index)
-                                saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified)
+                                saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed)
                             } else {
                                 // Return chunk to pending queue for immediate re-dispatch
                                 chunk.status = ChunkStatus.PENDING
@@ -704,13 +800,18 @@ class DualDownloaderEngine(
         )
     }
 
-    private suspend fun executeSingleStreamDownload(url: String, outputFile: File, totalLength: Long) {
+    private suspend fun executeSingleStreamDownload(
+        url: String,
+        outputFile: File,
+        totalLength: Long,
+        isDesktopSpoofed: Boolean = false
+    ) {
         if (totalLength > 0) {
             checkAvailableStorage(outputFile.parentFile ?: getDefaultDownloadDir(), totalLength, outputFile)
         }
 
         val client = networkManager.getDefaultClient()
-        val request = buildRequest(url).build()
+        val request = buildRequest(url, isDesktop = isDesktopSpoofed).build()
         val call = client.newCall(request)
         if (!registerActiveCall(call)) throw CancellationException("Download paused")
 
@@ -756,7 +857,8 @@ class DualDownloaderEngine(
                                 cellularSpeedMBps = if (isWifi) 0.0 else currentSpeedMBps,
                                 totalSpeedMBps = currentSpeedMBps,
                                 progressPercentage = progress,
-                                supportsRanges = false
+                                supportsRanges = false,
+                                isDesktopSpoofed = isDesktopSpoofed
                             )
                         }
                     }
@@ -777,10 +879,26 @@ class DualDownloaderEngine(
         }
     }
 
-    internal fun buildRequest(url: String): Request.Builder {
+    internal fun buildRequest(url: String, isDesktop: Boolean = false): Request.Builder {
         val builder = Request.Builder()
             .url(url)
-            .header("User-Agent", "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.107 Mobile Safari/537.36")
+
+        if (isDesktop) {
+            builder
+                .header("User-Agent", DESKTOP_USER_AGENT)
+                .header("Sec-CH-UA", "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"")
+                .header("Sec-CH-UA-Mobile", "?0")
+                .header("Sec-CH-UA-Platform", "\"Windows\"")
+                .header("Sec-CH-UA-Platform-Version", "\"15.0.0\"")
+                .header("Sec-Fetch-Dest", "empty")
+                .header("Sec-Fetch-Mode", "cors")
+                .header("Sec-Fetch-Site", "same-origin")
+                .header("Upgrade-Insecure-Requests", "1")
+        } else {
+            builder.header("User-Agent", MOBILE_USER_AGENT)
+        }
+
+        builder
             .header("Accept", "*/*")
             .header("Accept-Encoding", "identity")
 
@@ -881,5 +999,7 @@ class DualDownloaderEngine(
 
     companion object {
         private const val TAG = "DualDownloaderEngine"
+        const val MOBILE_USER_AGENT = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.107 Mobile Safari/537.36"
+        const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     }
 }

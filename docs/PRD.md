@@ -42,6 +42,7 @@ Standard Android operating system behavior automatically deactivates or idles th
 8. **Combined Dual-Interface Speed Benchmark**: Ephemeral 3-phase throughput test measuring Wi-Fi alone (3s), 5G Cellular alone (3s), and DualBoost Combined (4s) using high-speed CDN chunk streams with zero storage consumption (0 bytes stored on disk) and displaying real-time speedometers and aggregate boost multiplier.
 9. **Google Material 3 System Harmonization**: Adaptive launcher icon designed to match Google Pixel system apps with clean white background, geometric vector stream convergence, and Monet dynamic themed icon support.
 10. **Curated Quick Test Benchmark Tiers**: Seven pre-configured download presets sorted in ascending order (10 MB, 25 MB, 50 MB, 100 MB Cloudflare, 150 MB, 500 MB, 1 GB) targeting high-capacity Google Edge and Fastly CDNs to easily stress-test dual-channel aggregation across various payload sizes with zero manual typing.
+11. **Desktop Browser Header Spoofing & Adaptive Two-Stage Range Probe**: Automatic Stage 2 probe escalation using Windows 11 Chrome Desktop headers and Client Hints (`Sec-CH-UA-Mobile: ?0`, `Sec-CH-UA-Platform: "Windows"`) when remote CDNs refuse byte ranges to mobile Android clients, unlocking multi-stream acceleration with persistent sidecar state and displaying an active `⚡ Desktop Mode Active` badge.
 
 ## User Flows
 1. **Direct URL Download Flow**:

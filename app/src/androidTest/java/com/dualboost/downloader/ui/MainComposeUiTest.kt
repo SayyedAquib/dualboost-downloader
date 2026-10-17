@@ -229,4 +229,38 @@ class MainComposeUiTest {
         // Verify inactive cellular label
         composeTestRule.onNodeWithText("5G Cellular (Inactive in Single-Stream)").performScrollTo().assertIsDisplayed()
     }
+
+    @Test
+    fun testDownloadingState_DisplaysDesktopModeBadgeWhenSpoofed() {
+        val desktopDownloadingState = kotlinx.coroutines.flow.MutableStateFlow<DownloadState>(
+            DownloadState.Downloading(
+                fileName = "desktop_spoofed_file.iso",
+                totalBytes = 104857600L,
+                downloadedBytes = 20971520L,
+                wifiDownloadedBytes = 10485760L,
+                cellularDownloadedBytes = 10485760L,
+                wifiSpeedMBps = 15.0,
+                cellularSpeedMBps = 15.0,
+                totalSpeedMBps = 30.0,
+                progressPercentage = 0.20f,
+                supportsRanges = true,
+                isDesktopSpoofed = true
+            )
+        )
+        val viewModel = MainViewModel(repository = null, downloadStateOverride = desktopDownloadingState)
+        composeTestRule.setContent {
+            DualBoostTheme {
+                MainScreen(
+                    viewModel = viewModel,
+                    onOpenFile = { _, _ -> },
+                    onShareFile = { _, _ -> }
+                )
+            }
+        }
+
+        // Verify Desktop Mode Active badge is displayed
+        composeTestRule.onNodeWithText("⚡ Desktop Mode Active").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("desktop_spoofed_file.iso").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("30.0 MB/s").performScrollTo().assertIsDisplayed()
+    }
 }

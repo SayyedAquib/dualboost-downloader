@@ -148,10 +148,7 @@ class SpeedTestEngine(
         val startTime = System.currentTimeMillis()
         var finalSpeedMbps = 0f
 
-        val request = Request.Builder()
-            .url(testUrl)
-            .header("User-Agent", "DualBoost-SpeedTest/1.0")
-            .build()
+        val request = buildSpeedTestRequest(testUrl)
 
         val call = client.newCall(request)
         activeCalls.add(call)
@@ -211,8 +208,8 @@ class SpeedTestEngine(
         val wifiClient = networkProvider.getWifiClient() ?: networkProvider.getDefaultClient()
         val cellClient = networkProvider.getCellularClient() ?: networkProvider.getDefaultClient()
 
-        val req1 = Request.Builder().url(testUrl).header("User-Agent", "DualBoost-SpeedTest-Wifi/1.0").build()
-        val req2 = Request.Builder().url(testUrl).header("User-Agent", "DualBoost-SpeedTest-Cell/1.0").build()
+        val req1 = buildSpeedTestRequest(testUrl)
+        val req2 = buildSpeedTestRequest(testUrl)
 
         val call1 = wifiClient.newCall(req1)
         val call2 = cellClient.newCall(req2)
@@ -275,6 +272,22 @@ class SpeedTestEngine(
         }
 
         return finalSpeedMbps
+    }
+
+    private fun buildSpeedTestRequest(url: String): Request {
+        return Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+            .header("Sec-CH-UA", "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"")
+            .header("Sec-CH-UA-Mobile", "?0")
+            .header("Sec-CH-UA-Platform", "\"Windows\"")
+            .header("Sec-CH-UA-Platform-Version", "\"15.0.0\"")
+            .header("Sec-Fetch-Dest", "empty")
+            .header("Sec-Fetch-Mode", "cors")
+            .header("Sec-Fetch-Site", "same-origin")
+            .header("Accept", "*/*")
+            .header("Accept-Encoding", "identity")
+            .build()
     }
 
     private fun cancelAllCalls() {

@@ -61,6 +61,9 @@ Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (81 active te
 - **EngineEdgeCasesTest** (9 tests):
   - Tests request header injection, HTTP 403, 404, 500 handling, User-Agent propagation, single-stream fallback, pause cancellation, instantaneous socket abort, and interface circuit-breaker recovery.
 
+- **EngineComprehensiveTest** (18 tests):
+  - Validates filename parsing, query stripping, Cloudflare endpoint regex, Content-Disposition header extraction (quoted, unquoted, case-insensitive), `formatBytes()` string formatting, single-stream fallback data integrity, Content-Disposition overrides, mobile request headers (`testBuildRequest_MobileHeaders`), desktop spoofing request headers (`testBuildRequest_DesktopSpoofingHeaders`), two-stage adaptive desktop spoofing unlocking HTTP 206 Partial Content on mobile-restricted servers (`testAdaptiveDesktopSpoofing_UnlocksHttp206WhenMobileFails`), and sidecar `.dualboost_meta` persistence/resumption of `isDesktopSpoofed` state (`testMetaInfo_SavesAndRestoresDesktopSpoofedFlag`).
+
 - **ChunkCalculationTest** (4 tests):
   - Tests contiguous chunk partitioning, boundary alignment, exact multiples, and single-byte edge cases.
 
@@ -120,6 +123,8 @@ End-to-end and component UI testing on Android devices is performed using Google
   3. **Custom URL Typing**: Ensures custom URL typing updates reactive StateFlow.
   4. **Download & Discard Lifecycle**: Tests starting download, pausing, and discarding, asserting complete reset back to Idle without losing the URL.
   5. **Speed Benchmark Bottom Sheet**: Tests clicking "Test Speed", opening the modal sheet, inspecting comparative metric cards, and dismissing cleanly back to dashboard.
+  6. **Single-Stream Alert & Dimming**: Confirms amber banner rendering, "Single-Channel Bandwidth" header, and dimmed inactive cellular meter.
+  7. **Desktop Mode Active Badge**: Asserts that `⚡ Desktop Mode Active` badge renders with primary container tint when `isDesktopSpoofed == true`.
 
 ## API Testing
 - Verify HTTP 206 response validation.

@@ -37,7 +37,8 @@ sealed class DownloadState {
         val cellularSpeedMBps: Double,
         val totalSpeedMBps: Double,
         val progressPercentage: Float,
-        val supportsRanges: Boolean
+        val supportsRanges: Boolean,
+        val isDesktopSpoofed: Boolean = false
     ) : DownloadState() {
         val wifiSpeedMbps: Double get() = wifiSpeedMBps
         val cellularSpeedMbps: Double get() = cellularSpeedMBps
@@ -58,7 +59,8 @@ sealed class DownloadState {
         val totalBytes: Long = 0L,
         val downloadedBytes: Long = 0L,
         val progressPercentage: Float = 0f,
-        val url: String = ""
+        val url: String = "",
+        val isDesktopSpoofed: Boolean = false
     ) : DownloadState()
 }
 

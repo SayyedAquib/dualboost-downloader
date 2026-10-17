@@ -251,5 +251,134 @@ class EngineComprehensiveTest {
 
         assertTrue("Download should complete with Content-Disposition filename", finished)
     }
+
+    // --- Desktop Header Spoofing Unit & Integration Tests ---
+
+    @Test
+    fun testBuildRequest_MobileHeaders() {
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+
+        val req = engine.buildRequest("https://example.com/file.bin", isDesktop = false).build()
+        assertEquals(DualDownloaderEngine.MOBILE_USER_AGENT, req.header("User-Agent"))
+        assertNull(req.header("Sec-CH-UA"))
+        assertNull(req.header("Sec-CH-UA-Mobile"))
+        assertNull(req.header("Sec-CH-UA-Platform"))
+    }
+
+    @Test
+    fun testBuildRequest_DesktopSpoofingHeaders() {
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+
+        val req = engine.buildRequest("https://example.com/file.bin", isDesktop = true).build()
+        assertEquals(DualDownloaderEngine.DESKTOP_USER_AGENT, req.header("User-Agent"))
+        assertEquals("?0", req.header("Sec-CH-UA-Mobile"))
+        assertEquals("\"Windows\"", req.header("Sec-CH-UA-Platform"))
+        assertNotNull(req.header("Sec-CH-UA"))
+        assertEquals("empty", req.header("Sec-Fetch-Dest"))
+        assertEquals("1", req.header("Upgrade-Insecure-Requests"))
+    }
+
+    @Test
+    fun testAdaptiveDesktopSpoofing_UnlocksHttp206WhenMobileFails() = runBlocking {
+        // Server rejects byte ranges when client is Mobile, but unlocks HTTP 206 for Desktop headers
+        val payload = ByteArray(512 * 1024) // 512 KB payload
+        Random(42).nextBytes(payload)
+        val expectedHash = sha256(payload)
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val ua = request.getHeader("User-Agent") ?: ""
+                val isDesktop = ua.contains("Windows") && ua.contains("Chrome")
+
+                if (!isDesktop) {
+                    // Mobile client: reject byte ranges, return 200
+                    if (request.method == "HEAD") {
+                        return MockResponse()
+                            .setResponseCode(200)
+                            .setHeader("Content-Length", payload.size.toString())
+                    }
+                    return MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Length", payload.size.toString())
+                        .setBody(Buffer().write(payload))
+                } else {
+                    // Desktop client: unlock full HTTP 206 Partial Content!
+                    val range = request.getHeader("Range")
+                    if (range != null && range.startsWith("bytes=")) {
+                        val parts = range.removePrefix("bytes=").split("-")
+                        val start = parts[0].toIntOrNull() ?: 0
+                        val end = parts.getOrNull(1)?.toIntOrNull() ?: (payload.size - 1)
+                        val slice = payload.copyOfRange(start, minOf(end + 1, payload.size))
+
+                        return MockResponse()
+                            .setResponseCode(206)
+                            .setHeader("Content-Range", "bytes $start-$end/${payload.size}")
+                            .setHeader("Content-Length", slice.size.toString())
+                            .setHeader("Accept-Ranges", "bytes")
+                            .setBody(Buffer().write(slice))
+                    }
+                    return MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Length", payload.size.toString())
+                        .setBody(Buffer().write(payload))
+                }
+            }
+        }
+
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+
+        engine.startDownload(server.url("/adaptive_spoof_test.bin").toString(), tempDir)
+
+        var finished = false
+        var timeoutMs = 8_000L
+        while (!finished && timeoutMs > 0) {
+            val state = engine.downloadState.value
+            if (state is DownloadState.Completed) {
+                finished = true
+                val file = File(state.filePath)
+                assertTrue("Downloaded file must exist", file.exists())
+                assertEquals(payload.size.toLong(), file.length())
+                assertEquals(expectedHash, sha256(file.readBytes()))
+            } else if (state is DownloadState.Failed) {
+                fail("Download failed unexpectedly: ${state.error}")
+            }
+            Thread.sleep(50)
+            timeoutMs -= 50
+        }
+
+        assertTrue("Adaptive desktop spoofing should complete download successfully", finished)
+    }
+
+    @Test
+    fun testMetaInfo_SavesAndRestoresDesktopSpoofedFlag() {
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+
+        val metaFile = engine.getMetaFile(tempDir, "test_resume.bin")
+        engine.saveCompletedChunks(
+            metaFile = metaFile,
+            url = "https://example.com/test_resume.bin",
+            totalBytes = 10485760L,
+            completedIndices = setOf(0, 1),
+            etag = "\"abc123etag\"",
+            lastModified = "Wed, 21 Oct 2025 07:28:00 GMT",
+            isDesktopSpoofed = true
+        )
+
+        val metaInfo = engine.readMetaInfo(metaFile)
+        assertNotNull("MetaInfo must be readable", metaInfo)
+        assertEquals(true, metaInfo?.isDesktopSpoofed)
+        assertEquals(setOf(0, 1), metaInfo?.completedChunks)
+        assertEquals("\"abc123etag\"", metaInfo?.etag)
+
+        // Verify restoreIncompleteDownload populates Paused state with isDesktopSpoofed = true
+        val restored = engine.restoreIncompleteDownload(tempDir)
+        assertTrue("restoreIncompleteDownload should succeed", restored)
+        val pausedState = engine.downloadState.value as DownloadState.Paused
+        assertTrue("Paused state must preserve isDesktopSpoofed flag", pausedState.isDesktopSpoofed)
+    }
 }
 
