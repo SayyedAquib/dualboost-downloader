@@ -1,7 +1,7 @@
 # Project Rules
 
 ## General Rules
-- Always verify builds with `.\gradlew.bat assembleDebug` before committing changes.
+- Always build, verify, and install the Production / Release build (`.\gradlew.bat assembleRelease` producing `app-release.apk`) by permanent user rule.
 - Never add dependencies or files that require the Android Studio GUI to function.
 - Keep the project 100% buildable and deployable via CLI and ADB.
 

@@ -4,6 +4,10 @@
 DualBoost Downloader is fully updated with **ADR-023 (Advanced Security Architecture: DNS Rebinding SSRF Defense, Metadata Isolation, Header-Only Auth & Cryptographic Integrity)** on top of **ADR-022**, **ADR-021**, and **ADR-020**. All unit tests pass with 100% success rate. The application and Cloudflare Worker feature end-to-end defense-in-depth: mandatory HTTPS enforcement (`usesCleartextTraffic="false"`), DNS-over-HTTPS pre-fetch validation against DNS rebinding SSRF, dynamic DNS wildcard blocking, header-only key authentication (`X-Slicer-Key`), isolated sidecar metadata in `context.noBackupFilesDir`, canonical path traversal containment, and post-download SHA-256 cryptographic verification in Compose UI.
 
 ## Recently Completed
+- **Mandatory Production (Release Build) Policy Enforced**:
+  - Permanently updated `docs/RULES.md` and `AGENTS.md` to enforce `.\gradlew.bat assembleRelease` and `app-release.apk` for all connected device installations.
+  - Successfully assembled and installed `app/build/outputs/apk/release/app-release.apk` on physical Google Pixel 9 (`53201VDAQ00067`).
+  - Verified on-device telemetry (`dumpsys package`) confirming release flags (`DEBUGGABLE=false`, `allowBackup="false"`), and verified `DualNetworkManager` binding to both physical interfaces (`Wi-Fi 158` and `Cellular 154`).
 - **Advanced Security Architecture (ADR-023)**:
   - **DNS Rebinding SSRF Defense (`SEC-012`)**: Implemented pre-fetch DNS-over-HTTPS (`https://cloudflare-dns.com/dns-query`) in `cloud-slicer/worker.js` resolving and verifying that domain A records do not resolve to private RFC 1918, loopback, or metadata IPs. Blocked wildcard dynamic DNS providers (`*.nip.io`, `*.sslip.io`, etc.) and internal TLDs (`.local`, `.internal`, `.lan`).
   - **Strict Header-Only Worker Authentication (`SEC-011`)**: Deprecated and removed query string authentication (`?key=`), strictly authenticating via `X-Slicer-Key` HTTP header to prevent credential leakage in logs, Referer headers, and browser history.

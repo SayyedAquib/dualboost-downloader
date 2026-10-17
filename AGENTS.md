@@ -46,9 +46,9 @@ DualBoost Downloader is an Android application for Google Pixel 9 (Android 14/15
 
 ## Build Commands
 - Clean project: `.\gradlew.bat clean`
-- Assemble debug APK: `.\gradlew.bat assembleDebug`
-- Assemble and install directly onto device: `.\gradlew.bat installDebug`
-- Alternative manual ADB install: `adb install -r app/build/outputs/apk/debug/app-debug.apk`
+- Assemble production release APK: `.\gradlew.bat assembleRelease`
+- Assemble and install directly onto device: `.\gradlew.bat installRelease`
+- Alternative manual ADB install: `adb install -r app/build/outputs/apk/release/app-release.apk`
 - Launch app via ADB: `adb shell am start -n com.dualboost.downloader/.ui.MainActivity`
 
 ## Testing Commands
@@ -101,8 +101,8 @@ DualBoost Downloader is an Android application for Google Pixel 9 (Android 14/15
 | **Any Task / Session** | Concluding any working session or delivering a code change | Update [`docs/MEMORY.md`](file:///A:/Development/dualboost-downloader/docs/MEMORY.md) ("Recently Completed", "Current Status", "Next Steps") |
 
 ## Verification Checklist
-1. Run `.\gradlew.bat assembleDebug` (must exit with code 0).
-2. Install APK with `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+1. Run `.\gradlew.bat assembleRelease` (must exit with code 0).
+2. Install APK with `adb install -r app/build/outputs/apk/release/app-release.apk`.
 3. Launch app with `adb shell am start -n com.dualboost.downloader/.ui.MainActivity`.
 4. Inspect logs via `adb logcat -d -s DualNetworkManager DualDownloaderEngine`.
 5. **Verify Documentation**: Update all relevant documents according to the Documentation Maintenance Protocol before concluding.
