@@ -85,6 +85,7 @@ open class MainViewModel(
     val speedTestState: StateFlow<com.dualboost.downloader.data.SpeedTestState> = repository?.speedTestState ?: MutableStateFlow(com.dualboost.downloader.data.SpeedTestState.Idle)
     val isWifiAvailable: StateFlow<Boolean> = repository?.isWifiAvailable ?: MutableStateFlow(false)
     val isCellularAvailable: StateFlow<Boolean> = repository?.isCellularAvailable ?: MutableStateFlow(false)
+    val isDeviceRooted: Boolean = com.dualboost.downloader.security.RootDetector.isDeviceRooted()
 
     private val _urlInput = MutableStateFlow("")
     val urlInput: StateFlow<String> = _urlInput.asStateFlow()

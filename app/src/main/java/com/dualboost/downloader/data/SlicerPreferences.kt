@@ -82,6 +82,11 @@ function validateTargetUrl(rawUrl) {
     return { valid: false, error: 'Prohibited protocol: Only HTTP and HTTPS are permitted' };
   }
 
+  const port = parsed.port;
+  if (port && port !== '80' && port !== '443') {
+    return { valid: false, error: 'Prohibited port (' + port + '): Only standard web ports (80, 443) are permitted' };
+  }
+
   const hostname = parsed.hostname.toLowerCase();
   const blockedHostnames = ['localhost', 'metadata.google.internal', 'instance-data', '169.254.169.254'];
   if (blockedHostnames.includes(hostname)) {
@@ -124,10 +129,13 @@ async function verifyDnsResolution(hostname) {
     return { valid: true };
   }
   try {
-    const dohUrl = 'https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(hostname) + '&type=A';
-    const res = await fetch(dohUrl, { headers: { 'Accept': 'application/dns-json' } });
-    if (res.ok) {
-      const data = await res.json();
+    const [resA, resAAAA] = await Promise.all([
+      fetch('https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(hostname) + '&type=A', { headers: { 'Accept': 'application/dns-json' } }),
+      fetch('https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(hostname) + '&type=AAAA', { headers: { 'Accept': 'application/dns-json' } })
+    ]);
+
+    if (resA.ok) {
+      const data = await resA.json();
       if (data.Answer && Array.isArray(data.Answer)) {
         for (const ans of data.Answer) {
           if (ans.type === 1 && ans.data) {
@@ -135,8 +143,31 @@ async function verifyDnsResolution(hostname) {
             if (parts.length === 4) {
               const check = isPrivateIpv4(parts[0], parts[1]);
               if (check.isPrivate) {
-                return { valid: false, error: 'DNS Rebinding: Hostname resolves to prohibited private IP (' + ans.data + ')' };
+                return { valid: false, error: 'DNS Rebinding: Hostname resolves to prohibited private IPv4 (' + ans.data + ')' };
               }
+            }
+          }
+        }
+      }
+    }
+
+    if (resAAAA.ok) {
+      const data = await resAAAA.json();
+      if (data.Answer && Array.isArray(data.Answer)) {
+        for (const ans of data.Answer) {
+          if (ans.type === 28 && ans.data) {
+            const ip6 = ans.data.toLowerCase().trim();
+            if (
+              ip6 === '::1' ||
+              ip6 === '0:0:0:0:0:0:0:1' ||
+              ip6.startsWith('fe80:') ||
+              ip6.startsWith('fc00:') ||
+              ip6.startsWith('fd00:') ||
+              ip6.startsWith('::ffff:127.') ||
+              ip6.startsWith('::ffff:10.') ||
+              ip6.startsWith('::ffff:192.168.')
+            ) {
+              return { valid: false, error: 'DNS Rebinding: Hostname resolves to prohibited private IPv6 (' + ans.data + ')' };
             }
           }
         }

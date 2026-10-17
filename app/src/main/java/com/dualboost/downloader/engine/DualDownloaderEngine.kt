@@ -24,12 +24,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.util.Locale
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -371,7 +373,16 @@ class DualDownloaderEngine(
     }
 
     fun startDownload(url: String, targetDir: File = getDefaultDownloadDir()) {
-        val sanitizedUrl = url.trim()
+        val rawTrimmed = url.trim()
+        val parsedHttpUrl = runCatching { rawTrimmed.toHttpUrlOrNull() }.getOrNull()
+        val host = parsedHttpUrl?.host?.lowercase(Locale.ROOT)
+        val isLoopbackOrLocal = host == "localhost" || host == "127.0.0.1" || host == "::1" || host?.endsWith(".local") == true
+        val sanitizedUrl = if (rawTrimmed.startsWith("http://", ignoreCase = true) && !isLoopbackOrLocal) {
+            rawTrimmed.replaceFirst("http://", "https://", ignoreCase = true)
+        } else {
+            rawTrimmed
+        }
+
         val previousState = _downloadState.value
         if (previousState is DownloadState.Downloading && currentUrl == sanitizedUrl) return
 
@@ -409,7 +420,12 @@ class DualDownloaderEngine(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Download failed", e)
-                _downloadState.value = DownloadState.Failed(e.localizedMessage ?: "Unknown error")
+                val errorMessage = if (e.message?.contains("CLEARTEXT", ignoreCase = true) == true) {
+                    "Unencrypted HTTP communication is blocked by security policy. Target server must support HTTPS."
+                } else {
+                    e.localizedMessage ?: "Unknown error"
+                }
+                _downloadState.value = DownloadState.Failed(errorMessage)
             }
         }
     }

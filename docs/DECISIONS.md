@@ -845,6 +845,45 @@ Following Phase 1, three Phase 2 security and compliance items remained from the
 - Protects intellectual property and application internals from reverse engineering.
 - 100% passing test suite and verified live on physical Google Pixel 9.
 
+---
+
+## ADR-027: Advanced Edge & Runtime Security Hardening (Dual-Stack DoH SSRF Defense, Strict Web Port Enforcement, HTTPS Upgrade Assist, and Advisory Root Awareness)
+
+### Date
+2026-10-17
+
+### Status
+Accepted
+
+### Context
+Following the completion of Phase 1 and Phase 2 security hardening, a final round of security audits identified advanced attack vectors and runtime considerations across edge workers and the Android client:
+1. **Edge SSRF IPv6 Bypass (`SEC-AUDIT-07` / OWASP M1 / CWE-918)**: `cloud-slicer/worker.js` only checked IPv4 (`type=A`) records via Cloudflare DoH. An attacker could configure a domain with an IPv6 `AAAA` record resolving to loopback (`::1`), link-local (`fe80::`), unique local (`fc00::`, `fd00::`), or IPv4-mapped IPv6 ranges, completely bypassing the DoH SSRF filter.
+2. **Non-Standard Port Scanning (`SEC-AUDIT-08` / OWASP M1 / CWE-918)**: The edge worker allowed arbitrary TCP target ports in URLs (e.g., `https://target:8080`, `https://target:22`), enabling malicious actors to use the worker as a port scanner or to abuse internal cloud services.
+3. **Cleartext Downgrade & Rejection UX (`SEC-AUDIT-09` / OWASP M2)**: Due to `android:usesCleartextTraffic="false"`, entering an `http://` URL caused an unhandled network security policy crash. DualBoost should proactively upgrade `http://` to `https://` for external domains and provide clear, informative guidance if cleartext is blocked.
+4. **Environment Integrity & Root Awareness (`SEC-AUDIT-11` / OWASP M7)**: DualBoost runs on user devices where root privileges (Magisk, KernelSU, test-keys) can compromise OS app sandboxing and allow memory inspection. However, power users on Pixel custom ROMs should not be blocked from using the app.
+
+### Decision
+1. **Dual-Stack IPv4 + IPv6 DoH SSRF Defense (`SEC-AUDIT-07`)**:
+   - Updated `cloud-slicer/worker.js` and `SlicerPreferences.kt` to query Cloudflare DoH concurrently for both `A` and `AAAA` records using `Promise.all`.
+   - Validated both IPv4 and IPv6 resolved records, blocking `::1`, `fe80::`, `fc00::`, `fd00::`, and IPv4-mapped IPv6 address ranges.
+2. **Strict Web Port Enforcement (`SEC-AUDIT-08`)**:
+   - Enforced target port whitelist (`80`, `443`, or unspecified default) in `cloud-slicer/worker.js` and `SlicerPreferences.kt`. Rejects all non-standard ports with HTTP 403 Forbidden.
+3. **Intelligent Non-Loopback HTTPS Upgrade Assist (`SEC-AUDIT-09`)**:
+   - Updated `DualDownloaderEngine.startDownload()` to automatically upgrade `http://` URLs to `https://` while preserving loopback/test addresses (`localhost`, `127.0.0.1`, `::1`) for offline and unit test compatibility.
+   - Mapped cleartext policy exceptions (`CLEARTEXT communication not permitted`) to user-friendly UI explanations.
+4. **Advisory Root & Tamper Awareness (`SEC-AUDIT-11`)**:
+   - Created `RootDetector.kt` inspecting `Build.TAGS` for `test-keys`, searching standard `su` binary locations (`/system/bin/su`, `/system/xbin/su`, `/sbin/su`, etc.), and scanning directories in the `PATH` environment.
+   - Exposed `isDeviceRooted` in `MainViewModel`.
+   - Rendered a non-intrusive advisory banner in `MainActivity.kt` informing users that root environment was detected and OS sandboxing may be bypassed, while preserving full app functionality for power users.
+
+### Consequences
+- Edge worker is fully hardened against dual-stack DNS rebinding and port scanning attacks.
+- Seamless upgrade to HTTPS for user input without crashing on cleartext rejection.
+- Offline and local mock testing preserved with 100% test suite pass (101 tests).
+- Root environment transparency delivered without breaking custom ROM usability.
+- Production release APK installed and running verified on physical Google Pixel 9.
+
+
 
 
 

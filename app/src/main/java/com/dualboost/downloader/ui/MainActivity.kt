@@ -300,6 +300,36 @@ fun MainScreen(
             val wifiColor = if (isDark) Color(0xFF00E5FF) else Color(0xFF00838F)
             val cellularColor = if (isDark) Color(0xFFB388FF) else Color(0xFF651FFF)
 
+            // Advisory Root & Tamper Awareness Banner (SEC-AUDIT-11)
+            if (viewModel.isDeviceRooted) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Security,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Root environment detected: OS sandboxing may be bypassed by privileged root processes.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
             // Network Aggregation Hero Cards
             Row(
                 modifier = Modifier.fillMaxWidth(),

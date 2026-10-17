@@ -66,9 +66,15 @@ function validateTargetUrl(rawUrl) {
     return { valid: false, error: 'Prohibited protocol: Only HTTP and HTTPS are permitted' };
   }
 
+  // 2. Enforce standard web ports only (SEC-AUDIT-08)
+  const port = parsed.port;
+  if (port && port !== '80' && port !== '443') {
+    return { valid: false, error: `Prohibited port (${port}): Only standard web ports (80, 443) are permitted` };
+  }
+
   const hostname = parsed.hostname.toLowerCase();
 
-  // 2. Reject localhost and cloud metadata hostnames
+  // 3. Reject localhost and cloud metadata hostnames
   const blockedHostnames = [
     'localhost',
     'metadata.google.internal',
@@ -79,7 +85,7 @@ function validateTargetUrl(rawUrl) {
     return { valid: false, error: 'Access to internal or metadata host is strictly prohibited' };
   }
 
-  // 3. Block dynamic DNS wildcard rebinding services
+  // 4. Block dynamic DNS wildcard rebinding services
   const blockedDynamicDns = [
     'nip.io', 'sslip.io', 'xip.io', 'localtest.me', 'vcap.me', 'lvh.me'
   ];
@@ -89,7 +95,7 @@ function validateTargetUrl(rawUrl) {
     }
   }
 
-  // 4. Block internal and non-routable TLDs
+  // 5. Block internal and non-routable TLDs
   const blockedTlds = ['.local', '.internal', '.lan', '.home', '.corp', '.intra'];
   for (const tld of blockedTlds) {
     if (hostname.endsWith(tld)) {
@@ -97,7 +103,7 @@ function validateTargetUrl(rawUrl) {
     }
   }
 
-  // 5. Block private / loopback / link-local IP addresses (IPv4 & IPv6)
+  // 6. Block private / loopback / link-local IP addresses (IPv4 & IPv6)
   const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipv4Match) {
     const o1 = parseInt(ipv4Match[1], 10);
@@ -117,8 +123,9 @@ function validateTargetUrl(rawUrl) {
 }
 
 /**
- * Pre-fetch DNS resolution check using Cloudflare DNS-over-HTTPS (DoH).
- * Detects and blocks DNS rebinding attacks where public domain names resolve to private IPs.
+ * Enhanced Pre-fetch DNS resolution check using Cloudflare DNS-over-HTTPS (DoH).
+ * Detects and blocks DNS rebinding attacks where public domain names resolve to private IPv4 or IPv6 IPs.
+ * (SEC-AUDIT-07)
  */
 async function verifyDnsResolution(hostname) {
   // Skip if hostname is already an IP literal (checked in validateTargetUrl)
@@ -126,10 +133,18 @@ async function verifyDnsResolution(hostname) {
     return { valid: true };
   }
   try {
-    const dohUrl = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`;
-    const res = await fetch(dohUrl, { headers: { 'Accept': 'application/dns-json' } });
-    if (res.ok) {
-      const data = await res.json();
+    const [resA, resAAAA] = await Promise.all([
+      fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`, {
+        headers: { 'Accept': 'application/dns-json' }
+      }),
+      fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=AAAA`, {
+        headers: { 'Accept': 'application/dns-json' }
+      })
+    ]);
+
+    // 1. Inspect IPv4 Answers
+    if (resA.ok) {
+      const data = await resA.json();
       if (data.Answer && Array.isArray(data.Answer)) {
         for (const ans of data.Answer) {
           if (ans.type === 1 && ans.data) {
@@ -137,8 +152,32 @@ async function verifyDnsResolution(hostname) {
             if (parts.length === 4) {
               const check = isPrivateIpv4(parts[0], parts[1]);
               if (check.isPrivate) {
-                return { valid: false, error: `DNS Rebinding: Hostname resolves to prohibited private IP (${ans.data})` };
+                return { valid: false, error: `DNS Rebinding: Hostname resolves to prohibited private IPv4 (${ans.data})` };
               }
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Inspect IPv6 Answers (SEC-AUDIT-07)
+    if (resAAAA.ok) {
+      const data = await resAAAA.json();
+      if (data.Answer && Array.isArray(data.Answer)) {
+        for (const ans of data.Answer) {
+          if (ans.type === 28 && ans.data) {
+            const ip6 = ans.data.toLowerCase().trim();
+            if (
+              ip6 === '::1' ||
+              ip6 === '0:0:0:0:0:0:0:1' ||
+              ip6.startsWith('fe80:') ||
+              ip6.startsWith('fc00:') ||
+              ip6.startsWith('fd00:') ||
+              ip6.startsWith('::ffff:127.') ||
+              ip6.startsWith('::ffff:10.') ||
+              ip6.startsWith('::ffff:192.168.')
+            ) {
+              return { valid: false, error: `DNS Rebinding: Hostname resolves to prohibited private IPv6 (${ans.data})` };
             }
           }
         }
