@@ -701,6 +701,42 @@ A senior web application security audit of DualBoost Downloader and Cloud Slicer
 ### Consequences
 Guarantees end-to-end defense-in-depth: the edge worker cannot be abused as an open proxy or SSRF vector, file downloads cannot escape designated directories, third-party apps cannot trigger stealth downloads, and user credentials remain isolated.
 
+---
+
+## ADR-023: Advanced Security Architecture (DNS Rebinding SSRF Defense, Metadata Isolation, Header-Only Auth & Cryptographic Integrity)
+
+### Date
+2026-10-17
+
+### Status
+Accepted
+
+### Context
+Following initial baseline hardening, a comprehensive architectural security assessment identified five deeper vulnerabilities and design vectors across the OWASP Top 10:
+1. **Public Sidecar Metadata Exposure (OWASP A01: Broken Access Control / CWE-200)**: `.dualboost_meta` files in `/storage/emulated/0/Download/` exposed sensitive download URLs (including pre-signed tokens), ETags, and chunk states to any third-party app with media or storage read access.
+2. **Cleartext HTTP MitM Tampering (OWASP A02: Cryptographic Failures & A08)**: Cleartext HTTP connections on untrusted public/captive Wi-Fi networks were vulnerable to man-in-the-middle packet injection and payload manipulation.
+3. **Secret Key Exposure in Query Strings (OWASP A02 / CWE-598)**: Cloud Slicer accepted secret keys via `?key=` query parameters, leaking credentials into URL share sheets, browser histories, proxy access logs, and HTTP Referer headers.
+4. **SSRF DNS Rebinding via Public Domains (OWASP A10: Server-Side Request Forgery)**: Regex-only hostname filters could be bypassed by public domains or wildcard DNS services (`*.nip.io`, `*.sslip.io`) resolving to `127.0.0.1` or internal private IPs.
+5. **Cryptographic Integrity Validation (OWASP A08: Software and Data Integrity Failures)**: Multi-channel segmented transfers across disparate physical routes lacked transparent end-to-end checksum verification to prove bit-level integrity to the user.
+
+### Decision
+1. **Sidecar Metadata Sandboxing (`context.noBackupFilesDir`)**:
+   - Relocated `.dualboost_meta` sidecars to the app's private, non-backed-up internal storage (`getInternalMetaDir()`).
+   - Maintained transparent backward-compatible detection for legacy metadata files in `targetDir`.
+2. **Cleartext HTTP Lockdown**:
+   - Enforced `android:usesCleartextTraffic="false"` in `AndroidManifest.xml` to mandate TLS 1.3 / HTTPS across all network requests.
+3. **Strict Header-Only Slicer Authentication**:
+   - Cloud Slicer strictly authenticates via the `X-Slicer-Key` HTTP header. Completely removed `&key=` query parameters from `buildSlicedUrl()`.
+4. **Pre-Fetch DNS Rebinding SSRF Defense**:
+   - Implemented static blocking of wildcard dynamic DNS providers (`nip.io`, `sslip.io`, `xip.io`, `localtest.me`) and internal TLDs (`.local`, `.internal`, `.lan`, etc.).
+   - Implemented pre-fetch DNS verification via Cloudflare DNS-over-HTTPS (`https://cloudflare-dns.com/dns-query?name=...&type=A`), validating that resolved A records do not map to private, loopback, link-local, or CGNAT subnets.
+5. **Cryptographic SHA-256 Integrity Verification**:
+   - Implemented streaming `computeSha256(file: File)` upon 100% download completion.
+   - Added `sha256Checksum: String?` to `DownloadState.Completed` and rendered an interactive 1-click "Copy SHA-256" integrity badge in the Completed card.
+
+### Consequences
+Eliminates all remaining metadata exposure vectors, shields credentials from URL leakage, prevents sophisticated DNS rebinding SSRF attacks, guarantees strict HTTPS transport, and provides bit-level cryptographic verification to users.
+
 
 
 

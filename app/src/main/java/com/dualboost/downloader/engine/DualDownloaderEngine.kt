@@ -194,8 +194,22 @@ class DualDownloaderEngine(
         return candidate
     }
 
+    internal fun getInternalMetaDir(): File {
+        val base = context.noBackupFilesDir ?: context.filesDir
+        val dir = File(base, "dualboost_meta")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
     internal fun getMetaFile(targetDir: File, fileName: String): File {
-        return File(targetDir, "$fileName.dualboost_meta")
+        val internalDir = getInternalMetaDir()
+        val privateMeta = File(internalDir, "$fileName.dualboost_meta")
+        val legacyMeta = File(targetDir, "$fileName.dualboost_meta")
+        return if (!privateMeta.exists() && legacyMeta.exists()) {
+            legacyMeta
+        } else {
+            privateMeta
+        }
     }
 
     data class MetaInfo(
@@ -277,6 +291,8 @@ class DualDownloaderEngine(
     fun restoreIncompleteDownload(targetDir: File = getDefaultDownloadDir()): Boolean {
         try {
             val candidateDirs = mutableListOf<File>()
+            val internalMetaDir = getInternalMetaDir()
+            if (internalMetaDir.exists()) candidateDirs.add(internalMetaDir)
             if (targetDir.exists()) candidateDirs.add(targetDir)
             val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             if (appDir != null && appDir.exists() && appDir != targetDir) {
@@ -292,7 +308,16 @@ class DualDownloaderEngine(
             val metaInfo = readMetaInfo(latestMeta) ?: return false
 
             val fileName = latestMeta.name.removeSuffix(".dualboost_meta")
-            val targetFile = File(latestMeta.parentFile ?: targetDir, fileName)
+            val targetFile = if (File(targetDir, fileName).exists()) {
+                File(targetDir, fileName)
+            } else {
+                val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                if (appDir != null && File(appDir, fileName).exists()) {
+                    File(appDir, fileName)
+                } else {
+                    File(targetDir, fileName)
+                }
+            }
             val totalBytes = metaInfo.totalLength
 
             val completedBytes = metaInfo.completedChunks.sumOf { chunkIndex ->
@@ -430,16 +455,24 @@ class DualDownloaderEngine(
                 if (file.exists()) file.delete()
                 val meta = getMetaFile(file.parentFile ?: targetDir, file.name)
                 if (meta.exists()) meta.delete()
-                val tmp = File(file.parentFile ?: targetDir, "${meta.name}.tmp")
+                val tmp = File(meta.parentFile ?: (file.parentFile ?: targetDir), "${meta.name}.tmp")
                 if (tmp.exists()) tmp.delete()
+                val internalMeta = File(getInternalMetaDir(), "${file.name}.dualboost_meta")
+                if (internalMeta.exists()) internalMeta.delete()
+                val internalTmp = File(getInternalMetaDir(), "${file.name}.dualboost_meta.tmp")
+                if (internalTmp.exists()) internalTmp.delete()
             }
             if (fileName != null) {
                 val orphan = File(targetDir, fileName)
                 if (orphan.exists()) orphan.delete()
                 val meta = getMetaFile(targetDir, fileName)
                 if (meta.exists()) meta.delete()
-                val tmp = File(targetDir, "${meta.name}.tmp")
+                val tmp = File(meta.parentFile ?: targetDir, "${meta.name}.tmp")
                 if (tmp.exists()) tmp.delete()
+                val internalMeta = File(getInternalMetaDir(), "$fileName.dualboost_meta")
+                if (internalMeta.exists()) internalMeta.delete()
+                val internalTmp = File(getInternalMetaDir(), "$fileName.dualboost_meta.tmp")
+                if (internalTmp.exists()) internalTmp.delete()
             }
         } catch (_: Exception) {}
         currentOutputFile = null
@@ -1016,8 +1049,15 @@ class DualDownloaderEngine(
             if (metaFile.exists()) metaFile.delete()
             val tmp = File(actualTargetDir, "${metaFile.name}.tmp")
             if (tmp.exists()) tmp.delete()
+            val internalMeta = File(getInternalMetaDir(), "$fileName.dualboost_meta")
+            if (internalMeta.exists()) internalMeta.delete()
+            val internalTmp = File(getInternalMetaDir(), "$fileName.dualboost_meta.tmp")
+            if (internalTmp.exists()) internalTmp.delete()
+            val legacyMeta = File(actualTargetDir, "$fileName.dualboost_meta")
+            if (legacyMeta.exists()) legacyMeta.delete()
         } catch (_: Exception) {}
 
+        val sha256 = computeSha256(outputFile)
         val contentUri = exportToMediaStore(outputFile, fileName)
         val elapsedSeconds = max(1L, (System.currentTimeMillis() - startTime) / 1000L)
 
@@ -1026,7 +1066,8 @@ class DualDownloaderEngine(
             filePath = outputFile.absolutePath,
             totalBytes = contentLength,
             durationSeconds = elapsedSeconds,
-            contentUriString = contentUri?.toString()
+            contentUriString = contentUri?.toString(),
+            sha256Checksum = sha256
         )
     }
 
@@ -1108,6 +1149,7 @@ class DualDownloaderEngine(
                     }
                 }
 
+                val sha256 = computeSha256(outputFile)
                 val contentUri = exportToMediaStore(outputFile, outputFile.name)
                 val elapsedSeconds = max(1L, (System.currentTimeMillis() - startTime) / 1000L)
                 _downloadState.value = DownloadState.Completed(
@@ -1115,11 +1157,29 @@ class DualDownloaderEngine(
                     filePath = outputFile.absolutePath,
                     totalBytes = totalLength,
                     durationSeconds = elapsedSeconds,
-                    contentUriString = contentUri?.toString()
+                    contentUriString = contentUri?.toString(),
+                    sha256Checksum = sha256
                 )
             }
         } finally {
             activeCalls.remove(call)
+        }
+    }
+
+    internal fun computeSha256(file: File): String? {
+        if (!file.exists() || file.length() <= 0) return null
+        return try {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                var bytesRead: Int
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    digest.update(buffer, 0, bytesRead)
+                }
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        } catch (_: Exception) {
+            null
         }
     }
 

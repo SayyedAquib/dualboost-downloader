@@ -1,6 +1,7 @@
 package com.dualboost.downloader.ui
 
 import android.Manifest
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -19,6 +20,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -1026,6 +1028,60 @@ fun MainScreen(
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
+
+                                if (!state.sha256Checksum.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                clipboard.setPrimaryClip(ClipData.newPlainText("SHA-256 Checksum", state.sha256Checksum))
+                                                Toast.makeText(context, "SHA-256 copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                            }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.VerifiedUser,
+                                                contentDescription = "SHA-256 Checksum",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "SHA-256 Integrity (Tap to copy)",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = state.sha256Checksum,
+                                                    style = MaterialTheme.typography.bodySmall.copy(
+                                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                        fontSize = 11.sp
+                                                    ),
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Icon(
+                                                imageVector = Icons.Rounded.ContentCopy,
+                                                contentDescription = "Copy Hash",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
 
                                 Spacer(modifier = Modifier.height(16.dp))
 

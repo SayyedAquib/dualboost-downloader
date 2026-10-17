@@ -459,8 +459,38 @@ class EngineComprehensiveTest {
             targetUrl = "https://example.com/bigfile.iso",
             secretKey = "myKey@123"
         )
+        // SEC-011: Secrets are strictly isolated to X-Slicer-Key HTTP headers and omitted from URLs
         assertTrue(urlWithSecret.startsWith("https://my-worker.workers.dev/slice?url=https%3A%2F%2Fexample.com%2Fbigfile.iso"))
-        assertTrue(urlWithSecret.contains("&key=myKey%40123"))
+        assertFalse(urlWithSecret.contains("&key="))
+    }
+
+    @Test
+    fun testMetadataIsolation_StoredInPrivateDirectory() {
+        val client = OkHttpClient.Builder().build()
+        val context = DummyTestContext(tempDir)
+        val engine = DualDownloaderEngine(context, TestNetworkProvider(client))
+
+        val metaFile = engine.getMetaFile(tempDir, "isolated_download.zip")
+        val internalDir = engine.getInternalMetaDir()
+
+        // Metadata file must be inside private internal storage, NOT in tempDir (public downloads)
+        assertTrue("Meta file must be in internal directory", metaFile.canonicalPath.startsWith(internalDir.canonicalPath))
+        assertFalse("Meta file must NOT be in public download directory", metaFile.parentFile?.canonicalPath == tempDir.canonicalPath)
+    }
+
+    @Test
+    fun testComputeSha256_ValidDigest() {
+        val client = OkHttpClient.Builder().build()
+        val context = DummyTestContext(tempDir)
+        val engine = DualDownloaderEngine(context, TestNetworkProvider(client))
+
+        val payload = "DualBoost Integrity Test Content".toByteArray(Charsets.UTF_8)
+        val testFile = File(tempDir, "sha_test.txt")
+        testFile.writeBytes(payload)
+
+        val computed = engine.computeSha256(testFile)
+        val expected = sha256(payload)
+        assertEquals(expected, computed)
     }
 
     @Test

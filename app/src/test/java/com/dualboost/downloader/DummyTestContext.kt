@@ -10,6 +10,7 @@ class DummyTestContext(private val baseDir: File) : ContextWrapper(null) {
 
     override fun getExternalFilesDir(type: String?): File = baseDir
     override fun getFilesDir(): File = baseDir
+    override fun getNoBackupFilesDir(): File = File(baseDir, "no_backup").apply { mkdirs() }
 
     override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences {
         return prefsMap.computeIfAbsent(name ?: "default") {

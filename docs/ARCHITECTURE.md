@@ -154,14 +154,16 @@ sequenceDiagram
 - Concurrency is capped at 4 simultaneous coroutines (2 Wi-Fi, 2 5G) to avoid socket thrashing or TCP congestion collapses on mobile networks.
 
 ## Security Architecture
-- **Transport Security**: TLS 1.3 / HTTPS supported natively through OkHttp.
-- **Fail-Closed Edge Worker Authentication (`SEC-002`)**: Cloud Slicer enforces mandatory `SECRET_KEY` matching via constant-time string comparison (`timingSafeEqual`) to defeat timing side-channel attacks and prevent open proxy abuse.
-- **Anti-SSRF Protection (`SEC-001`)**: Cloud Slicer validates target URLs (`validateTargetUrl`), rejecting non-HTTP/HTTPS protocols, RFC 1918 private IPv4 subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.1`, `localhost`), link-local/cloud metadata (`169.254.169.254`), and CGNAT ranges.
+- **Transport Security**: TLS 1.3 / HTTPS strictly enforced via `android:usesCleartextTraffic="false"` in `AndroidManifest.xml`. Cleartext HTTP is blocked across all network requests.
+- **Fail-Closed Header-Only Worker Authentication (`SEC-002`, `SEC-011`)**: Cloud Slicer strictly checks the `X-Slicer-Key` HTTP header using constant-time string comparison (`timingSafeEqual`) to prevent timing side-channel attacks and open proxy abuse. Secret keys are never transmitted via URL query parameters (`?key=`), protecting credentials from exposure in browser history, logs, and HTTP Referer headers.
+- **Anti-SSRF & DNS Rebinding Protection (`SEC-001`, `SEC-012`)**: Cloud Slicer validates target URLs (`validateTargetUrl`), rejecting non-HTTP/HTTPS protocols, RFC 1918 private subnets, loopback (`127.0.0.1`, `localhost`), link-local/cloud metadata (`169.254.169.254`), CGNAT, wildcard dynamic DNS rebinding services (`*.nip.io`, `*.sslip.io`, etc.), and internal TLDs (`.local`, `.internal`, `.lan`). In addition, pre-fetch DNS verification via Cloudflare DNS-over-HTTPS resolves and validates A records prior to fetching.
 - **Edge Stream Bounds (`SEC-005`)**: Maximum slice sizes are clamped to 16 MB (`MAX_SLICE_SIZE = 16 * 1024 * 1024`) to eliminate edge memory exhaustion.
 - **Path Traversal Containment (`SEC-003`)**: Android filename extraction from `Content-Disposition` and URL paths strips all directory traversal sequences (`/`, `\`) and sanitizes special characters (`[a-zA-Z0-9._\-\s()]`). `resolveWritableOutputFile` strictly enforces canonical directory containment (`candidate.canonicalPath.startsWith(safeBaseCanonical)`).
+- **Sidecar Metadata Isolation (`SEC-009`)**: `.dualboost_meta` session files are stored strictly within the application's private internal storage (`context.noBackupFilesDir/dualboost_meta`), completely shielding download URLs, ETags, and tokens from third-party app inspection.
 - **Intent Injection Defense (`SEC-004`)**: Exported `MainActivity` strictly pre-populates shared URLs without unauthenticated background download execution (`auto_start` removed).
 - **Backup & Credential Isolation (`SEC-006`)**: `android:allowBackup="false"` prevents extraction of SharedPreferences or user secrets via ADB or physical backups.
 - **Logcat Privacy Sanitization (`SEC-007`)**: All logged URLs are stripped of query parameters (`?`) via `sanitizeUrlForLog` to protect pre-signed authorization tokens from exposure.
+- **Cryptographic File Integrity (`SEC-013`)**: Streaming SHA-256 integrity calculation upon download completion with interactive 1-click clipboard verification badge in the Compose UI.
 
 ## Deployment Architecture
 - Built via Gradle CLI (`.\gradlew.bat assembleDebug`).

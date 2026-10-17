@@ -50,7 +50,8 @@ sealed class DownloadState {
         val filePath: String,
         val totalBytes: Long,
         val durationSeconds: Long,
-        val contentUriString: String? = null
+        val contentUriString: String? = null,
+        val sha256Checksum: String? = null
     ) : DownloadState()
     data class AutoRecovering(val message: String, val retryAttempt: Int) : DownloadState()
     data class Failed(val error: String) : DownloadState()

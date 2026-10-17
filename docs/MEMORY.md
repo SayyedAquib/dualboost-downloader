@@ -1,9 +1,16 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is fully updated with **ADR-022 (Defense-in-Depth Security Hardening)** on top of **ADR-021 (Android Scoped Storage Conflict-Free File Resolution & Resilient Directory Fallback)** and **ADR-020 (Personal Cloud Slicer)**. All unit tests pass with 100% success rate. The application and companion Cloudflare Worker are protected against Server-Side Request Forgery (SSRF), open proxy relay abuse, timing side-channels, edge DoS memory exhaustion, directory path traversal (CWE-22), unauthenticated intent hijacking, physical ADB backup data extraction, and Logcat credential exposure.
+DualBoost Downloader is fully updated with **ADR-023 (Advanced Security Architecture: DNS Rebinding SSRF Defense, Metadata Isolation, Header-Only Auth & Cryptographic Integrity)** on top of **ADR-022**, **ADR-021**, and **ADR-020**. All unit tests pass with 100% success rate. The application and Cloudflare Worker feature end-to-end defense-in-depth: mandatory HTTPS enforcement (`usesCleartextTraffic="false"`), DNS-over-HTTPS pre-fetch validation against DNS rebinding SSRF, dynamic DNS wildcard blocking, header-only key authentication (`X-Slicer-Key`), isolated sidecar metadata in `context.noBackupFilesDir`, canonical path traversal containment, and post-download SHA-256 cryptographic verification in Compose UI.
 
 ## Recently Completed
+- **Advanced Security Architecture (ADR-023)**:
+  - **DNS Rebinding SSRF Defense (`SEC-012`)**: Implemented pre-fetch DNS-over-HTTPS (`https://cloudflare-dns.com/dns-query`) in `cloud-slicer/worker.js` resolving and verifying that domain A records do not resolve to private RFC 1918, loopback, or metadata IPs. Blocked wildcard dynamic DNS providers (`*.nip.io`, `*.sslip.io`, etc.) and internal TLDs (`.local`, `.internal`, `.lan`).
+  - **Strict Header-Only Worker Authentication (`SEC-011`)**: Deprecated and removed query string authentication (`?key=`), strictly authenticating via `X-Slicer-Key` HTTP header to prevent credential leakage in logs, Referer headers, and browser history.
+  - **Sidecar Metadata Isolation (`SEC-009`)**: Moved `.dualboost_meta` files from public `Downloads` into `context.noBackupFilesDir/dualboost_meta` (app-private sandbox), completely preventing third-party apps from reading download URLs, ETags, or session state.
+  - **Cleartext HTTP Lockdown (`SEC-010`)**: Added `android:usesCleartextTraffic="false"` to `AndroidManifest.xml` ensuring all network connections are encrypted via TLS/HTTPS.
+  - **Cryptographic File Integrity (`SEC-013`)**: Implemented `computeSha256(file: File)` in `DualDownloaderEngine.kt` and added an interactive 1-click "Copy SHA-256" integrity chip in `MainActivity.kt`.
+  - **Unit Test Expansion**: Added unit tests in `EngineComprehensiveTest.kt` for SHA-256 digest computation, metadata sandbox isolation, and URL secret omission.
 - **Defense-in-Depth Security Hardening (ADR-022)**:
   - **Cloud Slicer Worker Hardening (`worker.js` & `SlicerPreferences.kt`)**:
     - **Fail-Closed Auth (`SEC-002`)**: Cloud Slicer strictly checks `SECRET_KEY`; returns HTTP 500 if unset in worker environment, HTTP 401 if invalid.
@@ -77,6 +84,7 @@ DualBoost Downloader is fully updated with **ADR-022 (Defense-in-Depth Security 
 - ADR-020: Personal Cloud Slicer (Serverless Stream Slicing via Cloudflare Worker).
 - ADR-021: Android Scoped Storage Conflict-Free File Resolution & Resilient Directory Fallback.
 - ADR-022: Defense-in-Depth Security Hardening (SSRF, Path Traversal, Intent Isolation, Anti-DoS).
+- ADR-023: Advanced Security Architecture (DNS Rebinding SSRF Defense, Metadata Isolation, Header-Only Auth & Cryptographic Integrity).
 
 ## Next Steps
 1. User can deploy `cloud-slicer/worker.js` to Cloudflare (or tap "Copy Script" in the app's Settings).

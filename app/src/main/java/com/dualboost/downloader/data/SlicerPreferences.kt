@@ -31,16 +31,11 @@ object SlicerPreferences {
         getPrefs(context).edit().putString(KEY_SLICER_SECRET, secret.trim()).apply()
     }
 
-    fun buildSlicedUrl(slicerBaseUrl: String, targetUrl: String, secretKey: String? = null): String {
+    fun buildSlicedUrl(slicerBaseUrl: String, targetUrl: String, @Suppress("UNUSED_PARAMETER") secretKey: String? = null): String {
         val cleanBase = slicerBaseUrl.trim().trimEnd('/')
         val encodedUrl = URLEncoder.encode(targetUrl.trim(), StandardCharsets.UTF_8.name())
         val endpoint = if (cleanBase.endsWith("/slice")) cleanBase else "$cleanBase/slice"
-        val builder = StringBuilder("$endpoint?url=$encodedUrl")
-        if (!secretKey.isNullOrBlank()) {
-            val encodedKey = URLEncoder.encode(secretKey.trim(), StandardCharsets.UTF_8.name())
-            builder.append("&key=$encodedKey")
-        }
-        return builder.toString()
+        return "$endpoint?url=$encodedUrl"
     }
 
     const val WORKER_SCRIPT_SOURCE = """/**
@@ -48,7 +43,7 @@ object SlicerPreferences {
  * Slices non-range web streams into HTTP 206 Partial Content byte ranges
  * for high-speed dual-network (Wi-Fi + 5G) download aggregation.
  *
- * Security: Anti-SSRF, Fail-Closed Auth, Timing-Safe Token Check, 16MB DoS Bounds.
+ * Security: Anti-SSRF, DNS Rebinding Defense, Fail-Closed Header Auth, 16MB DoS Bounds.
  */
 
 function timingSafeEqual(a, b) {
@@ -62,6 +57,17 @@ function timingSafeEqual(a, b) {
     diff |= bufA[i] ^ bufB[i];
   }
   return diff === 0;
+}
+
+function isPrivateIpv4(o1, o2) {
+  if (o1 === 127) return { isPrivate: true, reason: 'Loopback IP addresses prohibited' };
+  if (o1 === 10) return { isPrivate: true, reason: 'Private RFC 1918 IP addresses prohibited' };
+  if (o1 === 172 && o2 >= 16 && o2 <= 31) return { isPrivate: true, reason: 'Private RFC 1918 IP addresses prohibited' };
+  if (o1 === 192 && o2 === 168) return { isPrivate: true, reason: 'Private RFC 1918 IP addresses prohibited' };
+  if (o1 === 169 && o2 === 254) return { isPrivate: true, reason: 'Link-local and cloud metadata IPs prohibited' };
+  if (o1 === 100 && o2 >= 64 && o2 <= 127) return { isPrivate: true, reason: 'Carrier-Grade NAT IPs prohibited' };
+  if (o1 === 0) return { isPrivate: true, reason: 'Invalid target IP address' };
+  return { isPrivate: false };
 }
 
 function validateTargetUrl(rawUrl) {
@@ -82,16 +88,28 @@ function validateTargetUrl(rawUrl) {
     return { valid: false, error: 'Access to internal or metadata host is strictly prohibited' };
   }
 
+  const blockedDynamicDns = ['nip.io', 'sslip.io', 'xip.io', 'localtest.me', 'vcap.me', 'lvh.me'];
+  for (const service of blockedDynamicDns) {
+    if (hostname === service || hostname.endsWith('.' + service)) {
+      return { valid: false, error: 'Dynamic DNS service (' + service + ') is prohibited' };
+    }
+  }
+
+  const blockedTlds = ['.local', '.internal', '.lan', '.home', '.corp', '.intra'];
+  for (const tld of blockedTlds) {
+    if (hostname.endsWith(tld)) {
+      return { valid: false, error: 'Internal TLD (' + tld + ') is prohibited' };
+    }
+  }
+
   const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipv4Match) {
     const o1 = parseInt(ipv4Match[1], 10);
     const o2 = parseInt(ipv4Match[2], 10);
-    if (o1 === 127) return { valid: false, error: 'Loopback IP addresses prohibited' };
-    if (o1 === 10) return { valid: false, error: 'Private RFC 1918 IP addresses prohibited' };
-    if (o1 === 172 && o2 >= 16 && o2 <= 31) return { valid: false, error: 'Private RFC 1918 IP addresses prohibited' };
-    if (o1 === 192 && o2 === 168) return { valid: false, error: 'Private RFC 1918 IP addresses prohibited' };
-    if (o1 === 169 && o2 === 254) return { valid: false, error: 'Link-local and cloud metadata IPs prohibited' };
-    if (o1 === 0) return { valid: false, error: 'Invalid target IP address' };
+    const check = isPrivateIpv4(o1, o2);
+    if (check.isPrivate) {
+      return { valid: false, error: check.reason };
+    }
   }
 
   if (hostname === '[::1]' || hostname.startsWith('[fe80:') || hostname.startsWith('[fc00:') || hostname.startsWith('[fd00:')) {
@@ -99,6 +117,33 @@ function validateTargetUrl(rawUrl) {
   }
 
   return { valid: true, parsed };
+}
+
+async function verifyDnsResolution(hostname) {
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.startsWith('[')) {
+    return { valid: true };
+  }
+  try {
+    const dohUrl = 'https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(hostname) + '&type=A';
+    const res = await fetch(dohUrl, { headers: { 'Accept': 'application/dns-json' } });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.Answer && Array.isArray(data.Answer)) {
+        for (const ans of data.Answer) {
+          if (ans.type === 1 && ans.data) {
+            const parts = ans.data.split('.').map(Number);
+            if (parts.length === 4) {
+              const check = isPrivateIpv4(parts[0], parts[1]);
+              if (check.isPrivate) {
+                return { valid: false, error: 'DNS Rebinding: Hostname resolves to prohibited private IP (' + ans.data + ')' };
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (_) {}
+  return { valid: true };
 }
 
 export default {
@@ -110,7 +155,7 @@ export default {
       return new Response(JSON.stringify({
         status: 'ok',
         service: 'DualBoost Cloud Slicer',
-        version: '1.1.0-hardened',
+        version: '1.2.0-hardened',
         secured: isSecured,
         timestamp: Date.now()
       }), {
@@ -144,6 +189,14 @@ export default {
       });
     }
 
+    const dnsCheck = await verifyDnsResolution(ssrfCheck.parsed.hostname);
+    if (!dnsCheck.valid) {
+      return new Response(`DualBoost Cloud Slicer Security Alert: ${'$'}{dnsCheck.error}`, {
+        status: 403,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
     const configuredKey = env?.SECRET_KEY;
     if (!configuredKey || configuredKey.trim() === '') {
       return new Response(JSON.stringify({
@@ -155,9 +208,9 @@ export default {
       });
     }
 
-    const clientKey = request.headers.get('X-Slicer-Key') || url.searchParams.get('key');
+    const clientKey = request.headers.get('X-Slicer-Key');
     if (!clientKey || !timingSafeEqual(clientKey, configuredKey)) {
-      return new Response('Unauthorized: Invalid or missing Slicer Key', {
+      return new Response('Unauthorized: Missing or invalid X-Slicer-Key header', {
         status: 401,
         headers: { 'Access-Control-Allow-Origin': '*' }
       });

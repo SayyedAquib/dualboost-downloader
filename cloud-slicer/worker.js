@@ -29,6 +29,27 @@ function timingSafeEqual(a, b) {
 }
 
 /**
+ * Helper to identify private/prohibited IPv4 ranges.
+ */
+function isPrivateIpv4(o1, o2) {
+  // Loopback (127.0.0.0/8)
+  if (o1 === 127) return { isPrivate: true, reason: 'Loopback IP addresses prohibited' };
+  // RFC 1918 Private (10.0.0.0/8)
+  if (o1 === 10) return { isPrivate: true, reason: 'Private RFC 1918 IP addresses prohibited' };
+  // RFC 1918 Private (172.16.0.0/12: 172.16.x.x - 172.31.x.x)
+  if (o1 === 172 && o2 >= 16 && o2 <= 31) return { isPrivate: true, reason: 'Private RFC 1918 IP addresses prohibited' };
+  // RFC 1918 Private (192.168.0.0/16)
+  if (o1 === 192 && o2 === 168) return { isPrivate: true, reason: 'Private RFC 1918 IP addresses prohibited' };
+  // Link-local / Cloud metadata (169.254.0.0/16)
+  if (o1 === 169 && o2 === 254) return { isPrivate: true, reason: 'Link-local and cloud metadata IPs prohibited' };
+  // Carrier-Grade NAT (100.64.0.0/10)
+  if (o1 === 100 && o2 >= 64 && o2 <= 127) return { isPrivate: true, reason: 'Carrier-Grade NAT IPs prohibited' };
+  // Broadcast / Zero (0.0.0.0/8)
+  if (o1 === 0) return { isPrivate: true, reason: 'Invalid target IP address' };
+  return { isPrivate: false };
+}
+
+/**
  * Validates target URL against SSRF (Server-Side Request Forgery) attacks.
  * Only permits valid public HTTP and HTTPS endpoints.
  */
@@ -58,24 +79,33 @@ function validateTargetUrl(rawUrl) {
     return { valid: false, error: 'Access to internal or metadata host is strictly prohibited' };
   }
 
-  // 3. Block private / loopback / link-local IP addresses (IPv4 & IPv6)
+  // 3. Block dynamic DNS wildcard rebinding services
+  const blockedDynamicDns = [
+    'nip.io', 'sslip.io', 'xip.io', 'localtest.me', 'vcap.me', 'lvh.me'
+  ];
+  for (const service of blockedDynamicDns) {
+    if (hostname === service || hostname.endsWith('.' + service)) {
+      return { valid: false, error: `Dynamic DNS service (${service}) is prohibited` };
+    }
+  }
+
+  // 4. Block internal and non-routable TLDs
+  const blockedTlds = ['.local', '.internal', '.lan', '.home', '.corp', '.intra'];
+  for (const tld of blockedTlds) {
+    if (hostname.endsWith(tld)) {
+      return { valid: false, error: `Internal TLD (${tld}) is prohibited` };
+    }
+  }
+
+  // 5. Block private / loopback / link-local IP addresses (IPv4 & IPv6)
   const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipv4Match) {
     const o1 = parseInt(ipv4Match[1], 10);
     const o2 = parseInt(ipv4Match[2], 10);
-
-    // Loopback (127.0.0.0/8)
-    if (o1 === 127) return { valid: false, error: 'Loopback IP addresses prohibited' };
-    // RFC 1918 Private (10.0.0.0/8)
-    if (o1 === 10) return { valid: false, error: 'Private RFC 1918 IP addresses prohibited' };
-    // RFC 1918 Private (172.16.0.0/12: 172.16.x.x - 172.31.x.x)
-    if (o1 === 172 && o2 >= 16 && o2 <= 31) return { valid: false, error: 'Private RFC 1918 IP addresses prohibited' };
-    // RFC 1918 Private (192.168.0.0/16)
-    if (o1 === 192 && o2 === 168) return { valid: false, error: 'Private RFC 1918 IP addresses prohibited' };
-    // Link-local / Cloud metadata (169.254.0.0/16)
-    if (o1 === 169 && o2 === 254) return { valid: false, error: 'Link-local and cloud metadata IPs prohibited' };
-    // Broadcast / Zero (0.0.0.0/8)
-    if (o1 === 0) return { valid: false, error: 'Invalid target IP address' };
+    const check = isPrivateIpv4(o1, o2);
+    if (check.isPrivate) {
+      return { valid: false, error: check.reason };
+    }
   }
 
   // Check IPv6 loopback / private
@@ -84,6 +114,40 @@ function validateTargetUrl(rawUrl) {
   }
 
   return { valid: true, parsed };
+}
+
+/**
+ * Pre-fetch DNS resolution check using Cloudflare DNS-over-HTTPS (DoH).
+ * Detects and blocks DNS rebinding attacks where public domain names resolve to private IPs.
+ */
+async function verifyDnsResolution(hostname) {
+  // Skip if hostname is already an IP literal (checked in validateTargetUrl)
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.startsWith('[')) {
+    return { valid: true };
+  }
+  try {
+    const dohUrl = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`;
+    const res = await fetch(dohUrl, { headers: { 'Accept': 'application/dns-json' } });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.Answer && Array.isArray(data.Answer)) {
+        for (const ans of data.Answer) {
+          if (ans.type === 1 && ans.data) {
+            const parts = ans.data.split('.').map(Number);
+            if (parts.length === 4) {
+              const check = isPrivateIpv4(parts[0], parts[1]);
+              if (check.isPrivate) {
+                return { valid: false, error: `DNS Rebinding: Hostname resolves to prohibited private IP (${ans.data})` };
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (_) {
+    // If DoH lookup fails, continue with static validations
+  }
+  return { valid: true };
 }
 
 export default {
@@ -96,7 +160,7 @@ export default {
       return new Response(JSON.stringify({
         status: 'ok',
         service: 'DualBoost Cloud Slicer',
-        version: '1.1.0-hardened',
+        version: '1.2.0-hardened',
         secured: isSecured,
         timestamp: Date.now()
       }), {
@@ -136,7 +200,16 @@ export default {
       });
     }
 
-    // 5. Fail-Closed Authentication Check: Prevent open proxy relay abuse
+    // 5. Pre-fetch DNS resolution check against DNS rebinding
+    const dnsCheck = await verifyDnsResolution(ssrfCheck.parsed.hostname);
+    if (!dnsCheck.valid) {
+      return new Response(`DualBoost Cloud Slicer Security Alert: ${dnsCheck.error}`, {
+        status: 403,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    // 6. Fail-Closed Authentication: Strictly header-only authentication (X-Slicer-Key)
     const configuredKey = env?.SECRET_KEY;
     if (!configuredKey || configuredKey.trim() === '') {
       return new Response(JSON.stringify({
@@ -148,9 +221,9 @@ export default {
       });
     }
 
-    const clientKey = request.headers.get('X-Slicer-Key') || url.searchParams.get('key');
+    const clientKey = request.headers.get('X-Slicer-Key');
     if (!clientKey || !timingSafeEqual(clientKey, configuredKey)) {
-      return new Response('Unauthorized: Invalid or missing Slicer Key', {
+      return new Response('Unauthorized: Missing or invalid X-Slicer-Key header', {
         status: 401,
         headers: { 'Access-Control-Allow-Origin': '*' }
       });
