@@ -125,9 +125,6 @@ class MainActivity : ComponentActivity() {
                 val extracted = extractUrl(sharedText)
                 if (extracted.isNotBlank()) {
                     viewModel.onUrlChanged(extracted)
-                    if (intent.getBooleanExtra("auto_start", false)) {
-                        viewModel.startDownload(extracted)
-                    }
                 }
             }
         }

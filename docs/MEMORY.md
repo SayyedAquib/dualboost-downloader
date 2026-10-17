@@ -1,9 +1,27 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is fully updated with **ADR-021 (Android Scoped Storage Conflict-Free File Resolution & Resilient Directory Fallback)** on top of **ADR-020 (Personal Cloud Slicer)**. All unit tests pass with 100% success rate. The app resolves Android 11+ Scoped Storage isolation by automatically generating conflict-free unique filenames (e.g. `(1).mkv`) when identical filenames exist from other applications, seamlessly falls back to app-specific external storage if public folders reject POSIX file operations, and indexes completed files into `MediaStore` via `MediaScannerConnection`.
+DualBoost Downloader is fully updated with **ADR-022 (Defense-in-Depth Security Hardening)** on top of **ADR-021 (Android Scoped Storage Conflict-Free File Resolution & Resilient Directory Fallback)** and **ADR-020 (Personal Cloud Slicer)**. All unit tests pass with 100% success rate. The application and companion Cloudflare Worker are protected against Server-Side Request Forgery (SSRF), open proxy relay abuse, timing side-channels, edge DoS memory exhaustion, directory path traversal (CWE-22), unauthenticated intent hijacking, physical ADB backup data extraction, and Logcat credential exposure.
 
 ## Recently Completed
+- **Defense-in-Depth Security Hardening (ADR-022)**:
+  - **Cloud Slicer Worker Hardening (`worker.js` & `SlicerPreferences.kt`)**:
+    - **Fail-Closed Auth (`SEC-002`)**: Cloud Slicer strictly checks `SECRET_KEY`; returns HTTP 500 if unset in worker environment, HTTP 401 if invalid.
+    - **Timing-Safe Token Comparison**: Implemented `timingSafeEqual()` constant-time check to prevent timing side-channel attacks.
+    - **Anti-SSRF Protection (`SEC-001`)**: Implemented `validateTargetUrl()` blocking non-HTTP/HTTPS protocols, loopback (`127.0.0.1`, `localhost`), link-local/cloud metadata (`169.254.169.254`), private IP subnets (RFC 1918 `10.x`, `172.16-31.x`, `192.168.x`), and CGNAT (`100.64.x`).
+    - **Anti-DoS Byte Bounds (`SEC-005`)**: Enforced 16 MB maximum slice limit (`MAX_SLICE_SIZE = 16 * 1024 * 1024`) preventing edge memory exhaustion.
+    - **Live Health Security Check**: Updated `/health` endpoint to expose `secured: Boolean`.
+  - **Android Path Traversal Containment (`SEC-003`)**:
+    - Sanitized `extractFileNameFromDisposition` and `extractFileName` by stripping all directory path separators (`/`, `\`) and restricting to safe alphanumeric characters (`[a-zA-Z0-9._\-\s()]`).
+    - Added strict canonical directory boundary validation in `resolveWritableOutputFile` (`candidate.canonicalPath.startsWith(safeBaseCanonical)`).
+  - **Intent Auto-Start Hijacking Neutralization (`SEC-004`)**:
+    - Removed `auto_start` intent extra execution in `MainActivity.kt`. Shared URLs strictly pre-populate the input field and display details, requiring deliberate user initiation.
+  - **Credential & Backup Protection (`SEC-006`)**:
+    - Set `android:allowBackup="false"` in `AndroidManifest.xml` preventing physical and ADB backup extraction of `SharedPreferences`.
+  - **Logcat Query Parameter & Token Sanitization (`SEC-007`)**:
+    - Added `sanitizeUrlForLog(url: String)` in `DualDownloaderEngine.kt` to strip query parameters (`?`) prior to logging, shielding HMAC tokens and signed URLs.
+  - **Comprehensive Security Unit Tests**:
+    - Added unit tests in `EngineComprehensiveTest.kt` verifying Unix/Windows path traversal neutralization, character sanitization, URL log query stripping, and directory containment.
 - **Scoped Storage Conflict Resolution & Directory Fallback (ADR-021)**:
   - **Conflict-Safe Resolver (`resolveWritableOutputFile`) in `DualDownloaderEngine.kt`**: Checks if target file exists and belongs to another app or cannot be opened in `rw` mode; automatically generates indexed unique names (`name (1).ext`) and verifies write permissions before downloading.
   - **Graceful Directory Fallback**: Validates directory writability (`isDirWritable`); transparently routes to `context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)` if public Downloads rejects direct POSIX creation.
@@ -58,6 +76,7 @@ DualBoost Downloader is fully updated with **ADR-021 (Android Scoped Storage Con
 - ADR-019: Desktop Browser Header Spoofing & Adaptive Two-Stage Range Probe.
 - ADR-020: Personal Cloud Slicer (Serverless Stream Slicing via Cloudflare Worker).
 - ADR-021: Android Scoped Storage Conflict-Free File Resolution & Resilient Directory Fallback.
+- ADR-022: Defense-in-Depth Security Hardening (SSRF, Path Traversal, Intent Isolation, Anti-DoS).
 
 ## Next Steps
 1. User can deploy `cloud-slicer/worker.js` to Cloudflare (or tap "Copy Script" in the app's Settings).

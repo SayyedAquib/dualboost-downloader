@@ -149,6 +149,56 @@ class EngineComprehensiveTest {
         assertNull(engine.extractFileNameFromDisposition(""))
     }
 
+    @Test
+    fun testExtractFileNameFromDisposition_PathTraversalNeutralized() {
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+
+        // Unix path traversal
+        assertEquals("malicious.sh", engine.extractFileNameFromDisposition("""attachment; filename="../../malicious.sh""""))
+        assertEquals("passwd", engine.extractFileNameFromDisposition("""attachment; filename="../../../../etc/passwd""""))
+
+        // Windows path traversal
+        assertEquals("cmd.exe", engine.extractFileNameFromDisposition("""attachment; filename="..\\..\\Windows\\System32\\cmd.exe""""))
+
+        // Pure traversal strings collapse or return null
+        assertNull(engine.extractFileNameFromDisposition("""attachment; filename="../../../""""))
+        assertNull(engine.extractFileNameFromDisposition("""attachment; filename="..""""))
+    }
+
+    @Test
+    fun testExtractFileNameFromDisposition_IllegalCharactersSanitized() {
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+
+        // Illegal characters replaced with underscores
+        val sanitized = engine.extractFileNameFromDisposition("""attachment; filename="test<script>:run*?.zip"""")
+        assertEquals("test_script__run__.zip", sanitized)
+    }
+
+    @Test
+    fun testSanitizeUrlForLog_RemovesQueryParams() {
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+
+        val signedUrl = "https://storage.googleapis.com/bucket/file.mp4?X-Goog-Signature=abcdef123456&Expires=1700000000"
+        val sanitized = engine.sanitizeUrlForLog(signedUrl)
+        assertEquals("https://storage.googleapis.com/bucket/file.mp4", sanitized)
+
+        val cleanUrl = "https://speed.cloudflare.com/100mb.bin"
+        assertEquals(cleanUrl, engine.sanitizeUrlForLog(cleanUrl))
+    }
+
+    @Test
+    fun testResolveWritableOutputFile_PathTraversalContained() {
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+
+        // Attempting to resolve a path traversing above tempDir
+        val resolved = engine.resolveWritableOutputFile(tempDir, "../../../evil.bin", "https://example.com/evil.bin")
+        assertTrue("Output file must be strictly inside target directory", resolved.canonicalPath.startsWith(tempDir.canonicalPath))
+    }
+
     // --- Format Bytes Unit Tests ---
 
     @Test

@@ -663,6 +663,44 @@ On Android 11+ through Android 15/17 (Pixel 9), Android Scoped Storage imposes s
 ### Consequences
 Eliminates `EACCES (Permission denied)` errors on all Android versions, guarantees file creation safety when duplicate filenames exist, and preserves multi-channel `RandomAccessFile` chunk aggregation performance.
 
+---
+
+## ADR-022: Defense-in-Depth Security Hardening (SSRF, Path Traversal, Intent Isolation, Anti-DoS)
+
+### Date
+2026-10-17
+
+### Status
+Accepted
+
+### Context
+A senior web application security audit of DualBoost Downloader and Cloud Slicer revealed several potential vulnerabilities and implementation risks:
+1. **SSRF & Open Proxy Relay in Cloud Slicer Worker (`SEC-001`, `SEC-002`)**: Cloud Slicer forwarded `fetch` requests without IP/host filtering, permitting requests to internal RFC 1918 subnets, loopback addresses, or cloud metadata services (`169.254.169.254`). Furthermore, authentication was fail-open when `SECRET_KEY` was not configured.
+2. **Edge DoS via Unbounded Range Request (`SEC-005`)**: Without slice size constraints, unbounded range requests could cause Cloudflare worker edge memory exhaustion or infinite streams.
+3. **Path Traversal & Arbitrary File Writes on Android (`SEC-003`)**: Unsanitized `filename` parameters in `Content-Disposition` or URL paths could contain directory traversal sequences (`../../`), potentially writing outside safe directories.
+4. **Intent Injection via Exported Activity Extra (`SEC-004`)**: `MainActivity` supported an undocumented `auto_start` boolean extra on exported `ACTION_SEND` intents, allowing rogue apps to initiate unprompted network downloads.
+5. **Data Exposure via ADB Backups (`SEC-006`)**: `android:allowBackup="true"` enabled physical device or debug bridge extraction of `SharedPreferences` holding secret keys.
+6. **Token Leakage in Logs (`SEC-007`)**: Unsanitized URLs logged to Logcat could expose signed HMAC query tokens.
+
+### Decision
+1. **Cloud Slicer Worker Hardening (`worker.js` & `SlicerPreferences.kt`)**:
+   - Enforce fail-closed authentication: if `SECRET_KEY` is not defined in worker environment variables, fail with HTTP 500; if provided token does not match, return HTTP 401.
+   - Implement timing-safe constant-time string comparison (`timingSafeEqual`) to eliminate timing side-channel attacks.
+   - Implement `validateTargetUrl(rawUrl)` blocking non-HTTP/HTTPS protocols, loopback (`127.0.0.1`, `localhost`), link-local/cloud metadata (`169.254.x.x`), private IP ranges (RFC 1918: `10.x`, `172.16-31.x`, `192.168.x`), and carrier-grade NAT (`100.64.x.x`).
+   - Bound maximum slice size to 16 MB (`MAX_SLICE_SIZE = 16 * 1024 * 1024`).
+2. **Android Path Traversal Containment (`DualDownloaderEngine.kt`)**:
+   - In `extractFileNameFromDisposition`, strip path separators (`/`, `\`), extract the base name, and sanitize characters to alphanumeric and safe symbols (`[a-zA-Z0-9._\-\s()]`).
+   - In `resolveWritableOutputFile`, enforce canonical directory containment (`candidate.canonicalPath.startsWith(safeBaseCanonical)`), redirecting to a safe random name if a boundary violation is detected.
+3. **Intent Hijacking Defense (`MainActivity.kt`)**:
+   - Removed `auto_start` intent extra execution. Shared URLs now strictly pre-populate the input field and display details, requiring the user to tap "Boost Download".
+4. **Application Backup Protection (`AndroidManifest.xml`)**:
+   - Set `android:allowBackup="false"` to prevent USB ADB backup extraction of application data and preferences.
+5. **Logcat Privacy Sanitization (`DualDownloaderEngine.kt`)**:
+   - Introduced `sanitizeUrlForLog(url: String)` stripping query strings (`?`) before outputting URLs to Logcat.
+
+### Consequences
+Guarantees end-to-end defense-in-depth: the edge worker cannot be abused as an open proxy or SSRF vector, file downloads cannot escape designated directories, third-party apps cannot trigger stealth downloads, and user credentials remain isolated.
+
 
 
 

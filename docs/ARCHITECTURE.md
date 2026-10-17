@@ -154,8 +154,14 @@ sequenceDiagram
 - Concurrency is capped at 4 simultaneous coroutines (2 Wi-Fi, 2 5G) to avoid socket thrashing or TCP congestion collapses on mobile networks.
 
 ## Security Architecture
-- TLS 1.3 / HTTPS supported natively through OkHttp.
-- Downloaded assets are placed in standard external storage without granting arbitrary system-wide file manipulation privileges.
+- **Transport Security**: TLS 1.3 / HTTPS supported natively through OkHttp.
+- **Fail-Closed Edge Worker Authentication (`SEC-002`)**: Cloud Slicer enforces mandatory `SECRET_KEY` matching via constant-time string comparison (`timingSafeEqual`) to defeat timing side-channel attacks and prevent open proxy abuse.
+- **Anti-SSRF Protection (`SEC-001`)**: Cloud Slicer validates target URLs (`validateTargetUrl`), rejecting non-HTTP/HTTPS protocols, RFC 1918 private IPv4 subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.1`, `localhost`), link-local/cloud metadata (`169.254.169.254`), and CGNAT ranges.
+- **Edge Stream Bounds (`SEC-005`)**: Maximum slice sizes are clamped to 16 MB (`MAX_SLICE_SIZE = 16 * 1024 * 1024`) to eliminate edge memory exhaustion.
+- **Path Traversal Containment (`SEC-003`)**: Android filename extraction from `Content-Disposition` and URL paths strips all directory traversal sequences (`/`, `\`) and sanitizes special characters (`[a-zA-Z0-9._\-\s()]`). `resolveWritableOutputFile` strictly enforces canonical directory containment (`candidate.canonicalPath.startsWith(safeBaseCanonical)`).
+- **Intent Injection Defense (`SEC-004`)**: Exported `MainActivity` strictly pre-populates shared URLs without unauthenticated background download execution (`auto_start` removed).
+- **Backup & Credential Isolation (`SEC-006`)**: `android:allowBackup="false"` prevents extraction of SharedPreferences or user secrets via ADB or physical backups.
+- **Logcat Privacy Sanitization (`SEC-007`)**: All logged URLs are stripped of query parameters (`?`) via `sanitizeUrlForLog` to protect pre-signed authorization tokens from exposure.
 
 ## Deployment Architecture
 - Built via Gradle CLI (`.\gradlew.bat assembleDebug`).

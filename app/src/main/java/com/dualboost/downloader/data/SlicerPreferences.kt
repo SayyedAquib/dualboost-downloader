@@ -44,43 +44,77 @@ object SlicerPreferences {
     }
 
     const val WORKER_SCRIPT_SOURCE = """/**
- * DualBoost Cloud Slicer - Cloudflare Worker
+ * DualBoost Cloud Slicer - Cloudflare Worker (Hardened Production Build)
  * Slices non-range web streams into HTTP 206 Partial Content byte ranges
  * for high-speed dual-network (Wi-Fi + 5G) download aggregation.
+ *
+ * Security: Anti-SSRF, Fail-Closed Auth, Timing-Safe Token Check, 16MB DoS Bounds.
  */
+
+function timingSafeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const enc = new TextEncoder();
+  const bufA = enc.encode(a);
+  const bufB = enc.encode(b);
+  if (bufA.byteLength !== bufB.byteLength) return false;
+  let diff = 0;
+  for (let i = 0; i < bufA.byteLength; i++) {
+    diff |= bufA[i] ^ bufB[i];
+  }
+  return diff === 0;
+}
+
+function validateTargetUrl(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch (_) {
+    return { valid: false, error: 'Invalid URL syntax' };
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { valid: false, error: 'Prohibited protocol: Only HTTP and HTTPS are permitted' };
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  const blockedHostnames = ['localhost', 'metadata.google.internal', 'instance-data', '169.254.169.254'];
+  if (blockedHostnames.includes(hostname)) {
+    return { valid: false, error: 'Access to internal or metadata host is strictly prohibited' };
+  }
+
+  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const o1 = parseInt(ipv4Match[1], 10);
+    const o2 = parseInt(ipv4Match[2], 10);
+    if (o1 === 127) return { valid: false, error: 'Loopback IP addresses prohibited' };
+    if (o1 === 10) return { valid: false, error: 'Private RFC 1918 IP addresses prohibited' };
+    if (o1 === 172 && o2 >= 16 && o2 <= 31) return { valid: false, error: 'Private RFC 1918 IP addresses prohibited' };
+    if (o1 === 192 && o2 === 168) return { valid: false, error: 'Private RFC 1918 IP addresses prohibited' };
+    if (o1 === 169 && o2 === 254) return { valid: false, error: 'Link-local and cloud metadata IPs prohibited' };
+    if (o1 === 0) return { valid: false, error: 'Invalid target IP address' };
+  }
+
+  if (hostname === '[::1]' || hostname.startsWith('[fe80:') || hostname.startsWith('[fc00:') || hostname.startsWith('[fd00:')) {
+    return { valid: false, error: 'Internal IPv6 addresses prohibited' };
+  }
+
+  return { valid: true, parsed };
+}
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     if (url.pathname === '/health') {
+      const isSecured = Boolean(env?.SECRET_KEY && env.SECRET_KEY.trim() !== '');
       return new Response(JSON.stringify({
         status: 'ok',
         service: 'DualBoost Cloud Slicer',
-        version: '1.0.0',
+        version: '1.1.0-hardened',
+        secured: isSecured,
         timestamp: Date.now()
       }), {
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        }
-      });
-    }
-
-    const targetUrl = url.searchParams.get('url');
-    if (!targetUrl) {
-      return new Response('Missing target URL (?url=https://...)', {
-        status: 400,
-        headers: { 'Access-Control-Allow-Origin': '*' }
-      });
-    }
-
-    const clientKey = request.headers.get('X-Slicer-Key') || url.searchParams.get('key');
-    const configuredKey = env?.SECRET_KEY;
-    if (configuredKey && clientKey !== configuredKey) {
-      return new Response('Unauthorized: Invalid Slicer Key', {
-        status: 401,
-        headers: { 'Access-Control-Allow-Origin': '*' }
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
 
@@ -91,6 +125,41 @@ export default {
           'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
           'Access-Control-Allow-Headers': 'Range, X-Slicer-Key, Content-Type'
         }
+      });
+    }
+
+    const targetUrl = url.searchParams.get('url');
+    if (!targetUrl) {
+      return new Response('DualBoost Cloud Slicer: Missing target URL parameter (?url=https://...)', {
+        status: 400,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    const ssrfCheck = validateTargetUrl(targetUrl);
+    if (!ssrfCheck.valid) {
+      return new Response(`DualBoost Cloud Slicer Security Alert: ${'$'}{ssrfCheck.error}`, {
+        status: 403,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    const configuredKey = env?.SECRET_KEY;
+    if (!configuredKey || configuredKey.trim() === '') {
+      return new Response(JSON.stringify({
+        error: 'Slicer Configuration Error',
+        message: 'SECRET_KEY is not configured in Cloudflare Worker environment variables. Set SECRET_KEY in Cloudflare Dashboard to enable secure slicing.'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    const clientKey = request.headers.get('X-Slicer-Key') || url.searchParams.get('key');
+    if (!clientKey || !timingSafeEqual(clientKey, configuredKey)) {
+      return new Response('Unauthorized: Invalid or missing Slicer Key', {
+        status: 401,
+        headers: { 'Access-Control-Allow-Origin': '*' }
       });
     }
 
@@ -129,13 +198,16 @@ export default {
 
     const totalLengthHeader = forwardResponse.headers.get('Content-Length');
     const totalLength = totalLengthHeader ? parseInt(totalLengthHeader, 10) : -1;
-    const rangeEnd = (rangeEndRequested !== null && rangeEndRequested >= rangeStart)
-      ? rangeEndRequested
-      : (totalLength > 0 ? totalLength - 1 : rangeStart + 4 * 1024 * 1024 - 1);
 
-    const sliceLength = (rangeEnd - rangeStart) + 1;
+    const MAX_SLICE_SIZE = 16 * 1024 * 1024;
+    const requestedSlice = (rangeEndRequested !== null && rangeEndRequested >= rangeStart)
+      ? (rangeEndRequested - rangeStart + 1)
+      : (totalLength > 0 ? (totalLength - rangeStart) : 4 * 1024 * 1024);
+    const boundedSlice = Math.min(Math.max(1, requestedSlice), MAX_SLICE_SIZE);
+    const rangeEnd = rangeStart + boundedSlice - 1;
+    const sliceLength = boundedSlice;
+
     const bodyReader = forwardResponse.body.getReader();
-
     let bytesSkipped = 0;
     let bytesYielded = 0;
 
@@ -147,10 +219,8 @@ export default {
             controller.close();
             return;
           }
-
           const chunk = value;
           const chunkSize = chunk.length;
-
           if (bytesSkipped < rangeStart) {
             const needToSkip = rangeStart - bytesSkipped;
             if (chunkSize <= needToSkip) {
@@ -162,7 +232,8 @@ export default {
               const remainingToTake = sliceLength - bytesYielded;
               const availableInChunk = chunkSize - sliceStart;
               const take = Math.min(availableInChunk, remainingToTake);
-              controller.enqueue(chunk.subarray(sliceStart, sliceStart + take));
+              const subChunk = chunk.subarray(sliceStart, sliceStart + take);
+              controller.enqueue(subChunk);
               bytesYielded += take;
               if (bytesYielded >= sliceLength) {
                 controller.close();
@@ -173,7 +244,8 @@ export default {
           } else {
             const remainingToTake = sliceLength - bytesYielded;
             const take = Math.min(chunkSize, remainingToTake);
-            controller.enqueue(chunk.subarray(0, take));
+            const subChunk = chunk.subarray(0, take);
+            controller.enqueue(subChunk);
             bytesYielded += take;
             if (bytesYielded >= sliceLength) {
               controller.close();
@@ -200,4 +272,3 @@ export default {
   }
 };"""
 }
-

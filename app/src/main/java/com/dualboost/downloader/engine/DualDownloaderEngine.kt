@@ -113,6 +113,8 @@ class DualDownloaderEngine(
             appDir
         }
 
+        val safeBaseCanonical = safeDir.canonicalPath
+
         fun findAvailableFile(dir: File): File {
             var candidateName = initialFileName
             var file = File(dir, candidateName)
@@ -146,6 +148,17 @@ class DualDownloaderEngine(
 
         var candidate = findAvailableFile(safeDir)
 
+        // Strict canonical path boundary check: prevent path traversal out of safeDir
+        try {
+            if (!candidate.canonicalPath.startsWith(safeBaseCanonical)) {
+                val safeFallbackName = "download_${System.currentTimeMillis()}.bin"
+                candidate = File(safeDir, safeFallbackName)
+            }
+        } catch (_: Exception) {
+            val safeFallbackName = "download_${System.currentTimeMillis()}.bin"
+            candidate = File(safeDir, safeFallbackName)
+        }
+
         // Verify write access to candidate file
         val canWrite = try {
             if (!candidate.exists()) {
@@ -167,6 +180,15 @@ class DualDownloaderEngine(
             val fallbackDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
             if (!fallbackDir.exists()) fallbackDir.mkdirs()
             candidate = findAvailableFile(fallbackDir)
+            try {
+                if (!candidate.canonicalPath.startsWith(fallbackDir.canonicalPath)) {
+                    val safeFallbackName = "download_${System.currentTimeMillis()}.bin"
+                    candidate = File(fallbackDir, safeFallbackName)
+                }
+            } catch (_: Exception) {
+                val safeFallbackName = "download_${System.currentTimeMillis()}.bin"
+                candidate = File(fallbackDir, safeFallbackName)
+            }
         }
 
         return candidate
@@ -631,7 +653,7 @@ class DualDownloaderEngine(
             if (slicerUrl.isNotBlank()) {
                 val slicerSecret = SlicerPreferences.getSlicerSecret(context)
                 val targetSlicedUrl = SlicerPreferences.buildSlicedUrl(slicerUrl, url, slicerSecret)
-                Log.i(TAG, "Server rejected direct byte ranges. Triggering Stage 3 probe via Personal Cloud Slicer: $slicerUrl")
+                Log.i(TAG, "Server rejected direct byte ranges. Triggering Stage 3 probe via Personal Cloud Slicer: ${sanitizeUrlForLog(slicerUrl)}")
                 _downloadState.value = DownloadState.Probing("Connecting to Personal Cloud Slicer...")
 
                 var slicerRanges = false
@@ -1142,13 +1164,15 @@ class DualDownloaderEngine(
     internal fun extractFileName(url: String): String {
         return try {
             val path = java.net.URL(url).path
-            var name = path.substringAfterLast('/')
-            if (name.isBlank() || name == "__down") {
+            val rawName = path.substringAfterLast('/')
+            val baseName = File(rawName).name.substringAfterLast('/').substringAfterLast('\\')
+            val clean = baseName.replace(Regex("[^a-zA-Z0-9._\\-\\s()]"), "_").trim()
+            if (clean.isBlank() || clean == "." || clean == ".." || clean == "__down") {
                 "speedtest_${System.currentTimeMillis()}.bin"
-            } else if (!name.contains('.')) {
-                "$name.bin"
+            } else if (!clean.contains('.')) {
+                "$clean.bin"
             } else {
-                name
+                clean
             }
         } catch (_: Exception) {
             "download_${System.currentTimeMillis()}.bin"
@@ -1160,12 +1184,31 @@ class DualDownloaderEngine(
         val index = disposition.indexOf(filenameTag, ignoreCase = true)
         if (index != -1) {
             var raw = disposition.substring(index + filenameTag.length).trim()
-            if (raw.startsWith("\"") && raw.endsWith("\"")) {
-                raw = raw.substring(1, raw.length - 1)
+            if (raw.startsWith("\"")) {
+                val endQuote = raw.indexOf('"', 1)
+                raw = if (endQuote != -1) raw.substring(1, endQuote) else raw.substring(1)
+            } else {
+                val semi = raw.indexOf(';')
+                if (semi != -1) {
+                    raw = raw.substring(0, semi).trim()
+                }
             }
-            return raw
+            // Strip any directory traversal components (both / and \)
+            val baseName = File(raw).name.substringAfterLast('/').substringAfterLast('\\')
+            // Sanitize illegal filename characters
+            val clean = baseName.replace(Regex("[^a-zA-Z0-9._\\-\\s()]"), "_").trim()
+            return if (clean.isNotBlank() && clean != "." && clean != "..") clean else null
         }
         return null
+    }
+
+    internal fun sanitizeUrlForLog(url: String): String {
+        return try {
+            val qIndex = url.indexOf('?')
+            if (qIndex != -1) url.substring(0, qIndex) else url
+        } catch (_: Exception) {
+            "[redacted-url]"
+        }
     }
 
     internal fun formatBytes(bytes: Long): String {
