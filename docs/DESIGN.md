@@ -96,6 +96,18 @@ To ensure physical network transparency across any wallpaper palette:
 - Zero-Flicker State Transitions: `AnimatedContent` uses `contentKey = { it::class }` so animations only fire when transitioning between major lifecycle states (`Idle`, `Probing`, `Downloading`, `Completed`), maintaining 100% solid opacity during active byte-stream updates.
 
 
+### Badges & Status Indicators
+- **Desktop Mode Active**: `primaryContainer` with 8.dp rounded corners, `1.dp` border at `primary.copy(alpha = 0.35f)`, displaying `⚡ Desktop Mode Active`.
+- **Cloud Slicer Active**: `tertiaryContainer.copy(alpha = 0.85f)` with 8.dp rounded corners, `1.dp` border at `tertiary.copy(alpha = 0.35f)`, displaying `⚡ Cloud Slicer Active`. Rendered in both Downloading and Paused cards when stage 3 cloud stream slicing is engaged.
+
+### Settings Modal Sheet (`SettingsBottomSheet`)
+- Material 3 `ModalBottomSheet` with `RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)`.
+- Header: Centered circular icon `Icons.Rounded.CloudSync`, title "Personal Cloud Slicer", and subtitle.
+- Educational callout: `surfaceContainerHigh` rounded card explaining the zero-cost proxy mechanism.
+- Inputs: Outlined text fields with custom leading icons (`Language`, `VpnKey`) and clear buttons.
+- Action Buttons: "Test Worker" (with progress spinner & status banner) and "Copy Script" (with haptic feedback and toast).
+- Expandable setup accordion: Clean numbered steps for 60-second Cloudflare deployment.
+
 ### Accessibility
 - Minimum touch targets of 48x48dp for all buttons.
 - Contrast ratio exceeding 4.5:1 for all text against backgrounds.

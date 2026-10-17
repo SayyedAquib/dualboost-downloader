@@ -583,6 +583,51 @@ Certain file hosting providers, CDNs, and media servers inspect incoming HTTP cl
 ### Consequences
 Significantly expands the catalog of servers and CDNs supporting concurrent Wi-Fi + 5G bandwidth aggregation with zero user effort, maintaining complete fallback safety and resume integrity.
 
+---
+
+## ADR-020: Personal Cloud Slicer (Serverless Stream Slicing via Cloudflare Worker)
+
+### Date
+2026-10-17
+
+### Status
+Accepted
+
+### Context
+Certain content distribution networks (such as dynamic speed test streams, legacy media servers, and CDNs like Cloudflare's dynamic test links) explicitly forbid or omit `Accept-Ranges` and reject `Range: bytes=X-Y` requests regardless of whether mobile or desktop browser headers are sent. These dynamic streams ordinarily limit downloads to single-stream single-channel Wi-Fi mode. DualBoost required a zero-cost, private mechanism to transform these raw byte streams into parallel `HTTP 206 Partial Content` segments without running paid backend servers.
+
+### Options Considered
+- Commercial proxy or self-hosted VPS (rejected: costly, requires constant server management).
+- Local VPN / TUN interface (rejected: high battery drain, duplicate IP stack overhead).
+- Free Personal Cloud Slicer via Cloudflare Worker (accepted).
+
+### Decision
+1. **Cloudflare Worker Stream Slicer (`cloud-slicer/worker.js`)**:
+   - Engineered a serverless JavaScript worker deployed to Cloudflare's free edge network (100,000 requests/day free).
+   - Features on-the-fly byte stream slicing using JavaScript `ReadableStream` and `TextEncoder`: fetches the target stream from the origin, skips to `rangeStart`, enqueues exact byte slices up to `rangeEnd`, and closes the upstream reader.
+   - Responds with standard `HTTP 206 Partial Content`, `Content-Range: bytes START-END/TOTAL`, and CORS headers.
+   - Includes `/health` verification endpoint returning status JSON and optional `SECRET_KEY` token validation via `X-Slicer-Key` or `?key=...`.
+2. **3-Stage Adaptive Range Probe in `DualDownloaderEngine`**:
+   - **Stage 1**: Native Android 15 Pixel 9 probe.
+   - **Stage 2**: Windows 11 Chrome Desktop Spoofing probe (ADR-019).
+   - **Stage 3 (Personal Cloud Slicer Fallback)**: If Stage 1 and Stage 2 fail to unlock byte ranges, the engine checks `SlicerPreferences.getSlicerUrl(context)`. If configured, sends `Range: bytes=0-0` to `${slicerUrl}/slice?url=...`. When HTTP 206 is returned, sets `isCloudSlicerActive = true`, adjusts `contentLength`, and routes all chunk worker requests through the personal worker.
+3. **In-App Configuration & Deployment UI (`SettingsBottomSheet`)**:
+   - Added TopAppBar Settings gear icon `(⚙️)` in `MainActivity`.
+   - Built Material 3 `SettingsBottomSheet`:
+     - Worker URL input field with clear action.
+     - Optional Secret Key input field.
+     - "Test Worker" button making an asynchronous `/health` check with green/red status banner.
+     - 1-click "Copy Script" button copying `SlicerPreferences.WORKER_SCRIPT_SOURCE` to clipboard.
+     - Expandable 60-Second Setup Guide.
+     - Disable/Clear option.
+4. **Visual Telemetry & Persistence**:
+   - When `isCloudSlicerActive == true`, renders an eye-catching `⚡ Cloud Slicer Active` badge with `tertiaryContainer` styling in `DownloadState.Downloading` and `DownloadState.Paused`.
+   - Persists `isCloudSlicerActive` in `.dualboost_meta` sidecar files for pause/resume continuity.
+
+### Consequences
+Enables 100% of web downloads—including stubborn dynamic streams—to be aggregated across Wi-Fi and 5G Cellular for free, preserving total user privacy and zero maintenance overhead.
+
+
 
 
 

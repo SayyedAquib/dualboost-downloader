@@ -263,4 +263,64 @@ class MainComposeUiTest {
         composeTestRule.onNodeWithText("desktop_spoofed_file.iso").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("30.0 MB/s").performScrollTo().assertIsDisplayed()
     }
+
+    @Test
+    fun testDownloadingState_DisplaysCloudSlicerBadgeWhenActive() {
+        val slicerDownloadingState = kotlinx.coroutines.flow.MutableStateFlow<DownloadState>(
+            DownloadState.Downloading(
+                fileName = "cloud_sliced_file.bin",
+                totalBytes = 104857600L,
+                downloadedBytes = 20971520L,
+                wifiDownloadedBytes = 10485760L,
+                cellularDownloadedBytes = 10485760L,
+                wifiSpeedMBps = 15.0,
+                cellularSpeedMBps = 15.0,
+                totalSpeedMBps = 30.0,
+                progressPercentage = 0.20f,
+                supportsRanges = true,
+                isDesktopSpoofed = false,
+                isCloudSlicerActive = true
+            )
+        )
+        val viewModel = MainViewModel(repository = null, downloadStateOverride = slicerDownloadingState)
+        composeTestRule.setContent {
+            DualBoostTheme {
+                MainScreen(
+                    viewModel = viewModel,
+                    onOpenFile = { _, _ -> },
+                    onShareFile = { _, _ -> }
+                )
+            }
+        }
+
+        // Verify Cloud Slicer Active badge is displayed
+        composeTestRule.onNodeWithText("⚡ Cloud Slicer Active").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("cloud_sliced_file.bin").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("30.0 MB/s").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun testSettingsSheet_OpensAndDisplaysElements() {
+        val viewModel = MainViewModel(repository = null)
+        composeTestRule.setContent {
+            DualBoostTheme {
+                MainScreen(
+                    viewModel = viewModel,
+                    onOpenFile = { _, _ -> },
+                    onShareFile = { _, _ -> }
+                )
+            }
+        }
+
+        // Click on the Settings icon in TopAppBar
+        composeTestRule.onNodeWithContentDescription("Settings").performClick()
+
+        // Verify Settings Modal Sheet opens and displays headers and inputs
+        composeTestRule.onNodeWithText("Personal Cloud Slicer").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Cloudflare Worker URL").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Secret Key (Optional)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Test Worker").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Copy Script").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Save Settings").assertIsDisplayed()
+    }
 }

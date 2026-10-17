@@ -173,6 +173,7 @@ fun MainScreen(
     val haptic = LocalHapticFeedback.current
     var showInfoDialog by remember { mutableStateOf(false) }
     var showSpeedTestSheet by remember { mutableStateOf(false) }
+    var showSettingsSheet by remember { mutableStateOf(false) }
 
     val downloadState by viewModel.downloadState.collectAsState()
     val wifiAvailable by viewModel.isWifiAvailable.collectAsState()
@@ -220,6 +221,13 @@ fun MainScreen(
                             imageVector = Icons.Rounded.Speed,
                             contentDescription = "Speed Benchmark",
                             tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(onClick = { showSettingsSheet = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Settings,
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(onClick = { showInfoDialog = true }) {
@@ -702,7 +710,21 @@ fun MainScreen(
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                        if (state.isDesktopSpoofed) {
+                                        if (state.isCloudSlicerActive) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f))
+                                            ) {
+                                                Text(
+                                                    text = "⚡ Cloud Slicer Active",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        } else if (state.isDesktopSpoofed) {
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Surface(
                                                 shape = RoundedCornerShape(8.dp),
@@ -1104,7 +1126,20 @@ fun MainScreen(
                                                     overflow = TextOverflow.Ellipsis
                                                 )
                                             }
-                                            if (state.isDesktopSpoofed) {
+                                             if (state.isCloudSlicerActive) {
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.75f)
+                                                ) {
+                                                    Text(
+                                                        text = "⚡ Cloud Slicer",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+                                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                                    )
+                                                }
+                                            } else if (state.isDesktopSpoofed) {
                                                 Spacer(modifier = Modifier.height(2.dp))
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
@@ -1227,6 +1262,12 @@ fun MainScreen(
         SpeedTestBottomSheet(
             viewModel = viewModel,
             onDismiss = { showSpeedTestSheet = false }
+        )
+    }
+
+    if (showSettingsSheet) {
+        SettingsBottomSheet(
+            onDismiss = { showSettingsSheet = false }
         )
     }
 }

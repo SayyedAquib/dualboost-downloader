@@ -125,6 +125,14 @@ End-to-end and component UI testing on Android devices is performed using Google
   5. **Speed Benchmark Bottom Sheet**: Tests clicking "Test Speed", opening the modal sheet, inspecting comparative metric cards, and dismissing cleanly back to dashboard.
   6. **Single-Stream Alert & Dimming**: Confirms amber banner rendering, "Single-Channel Bandwidth" header, and dimmed inactive cellular meter.
   7. **Desktop Mode Active Badge**: Asserts that `⚡ Desktop Mode Active` badge renders with primary container tint when `isDesktopSpoofed == true`.
+  8. **Cloud Slicer Active Badge**: Asserts that `⚡ Cloud Slicer Active` badge renders with tertiary container tint when `isCloudSlicerActive == true`.
+  9. **Settings Modal Sheet**: Asserts that tapping Settings gear icon opens `SettingsBottomSheet` and renders Worker URL, Secret Key, Test Worker, Copy Script, and Save buttons.
+
+### Personal Cloud Slicer & Stage 3 Unit Tests (`EngineComprehensiveTest.kt`)
+- `testSlicerPreferences_SaveAndRetrieveUrlAndSecret`: Asserts SharedPreferences storage and retrieval of worker URL and optional secret token.
+- `testSlicerPreferences_BuildSlicedUrl_WithAndWithoutSecret`: Asserts correct URL encoding, `/slice` endpoint construction, and secret key query parameter handling.
+- `testMetaInfo_SavesAndRestoresCloudSlicerActiveFlag`: Asserts `.dualboost_meta` sidecar serialization and restoration of `isCloudSlicerActive = true` into `DownloadState.Paused`.
+- `testAdaptiveProbe_Stage3_CloudSlicerFallback`: End-to-end MockWebServer test where standard mobile and desktop spoofing probes fail (returning HTTP 200 without ranges), triggering Stage 3 Personal Cloud Slicer probe, downloading chunks via slicer, setting `isCloudSlicerActive = true`, and validating 100% SHA-256 byte payload integrity.
 
 ## API Testing
 - Verify HTTP 206 response validation.

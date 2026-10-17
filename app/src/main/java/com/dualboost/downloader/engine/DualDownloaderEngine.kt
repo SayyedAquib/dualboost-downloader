@@ -13,6 +13,7 @@ import com.dualboost.downloader.data.ChunkStatus
 import com.dualboost.downloader.data.DownloadChunk
 import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.data.NetworkInterfaceType
+import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.network.NetworkProvider
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -97,7 +98,8 @@ class DualDownloaderEngine(
         val completedChunks: Set<Int>,
         val etag: String? = null,
         val lastModified: String? = null,
-        val isDesktopSpoofed: Boolean = false
+        val isDesktopSpoofed: Boolean = false,
+        val isCloudSlicerActive: Boolean = false
     )
 
     internal fun readMetaInfo(metaFile: File): MetaInfo? {
@@ -117,6 +119,7 @@ class DualDownloaderEngine(
             } else emptySet()
 
             val isDesktop = metaMap["isDesktopSpoofed"]?.toBoolean() ?: false
+            val isSlicer = metaMap["isCloudSlicerActive"]?.toBoolean() ?: false
 
             MetaInfo(
                 url = savedUrl,
@@ -124,7 +127,8 @@ class DualDownloaderEngine(
                 completedChunks = completed,
                 etag = metaMap["etag"],
                 lastModified = metaMap["lastModified"],
-                isDesktopSpoofed = isDesktop
+                isDesktopSpoofed = isDesktop,
+                isCloudSlicerActive = isSlicer
             )
         } catch (_: Exception) {
             null
@@ -143,7 +147,8 @@ class DualDownloaderEngine(
         completedIndices: Set<Int>,
         etag: String? = null,
         lastModified: String? = null,
-        isDesktopSpoofed: Boolean = false
+        isDesktopSpoofed: Boolean = false,
+        isCloudSlicerActive: Boolean = false
     ) {
         try {
             val content = buildString {
@@ -152,6 +157,7 @@ class DualDownloaderEngine(
                 if (!etag.isNullOrBlank()) appendLine("etag=$etag")
                 if (!lastModified.isNullOrBlank()) appendLine("lastModified=$lastModified")
                 appendLine("isDesktopSpoofed=$isDesktopSpoofed")
+                appendLine("isCloudSlicerActive=$isCloudSlicerActive")
                 appendLine("completedChunks=${completedIndices.sorted().joinToString(",")}")
                 appendLine("updatedAt=${System.currentTimeMillis()}")
             }
@@ -190,7 +196,8 @@ class DualDownloaderEngine(
                 downloadedBytes = completedBytes,
                 progressPercentage = progress,
                 url = metaInfo.url,
-                isDesktopSpoofed = metaInfo.isDesktopSpoofed
+                isDesktopSpoofed = metaInfo.isDesktopSpoofed,
+                isCloudSlicerActive = metaInfo.isCloudSlicerActive
             )
             return true
         } catch (_: Exception) {
@@ -247,7 +254,8 @@ class DualDownloaderEngine(
                             downloadedBytes = lastState.downloadedBytes,
                             progressPercentage = lastState.progressPercentage,
                             url = currentUrl ?: sanitizedUrl,
-                            isDesktopSpoofed = lastState.isDesktopSpoofed
+                            isDesktopSpoofed = lastState.isDesktopSpoofed,
+                            isCloudSlicerActive = lastState.isCloudSlicerActive
                         )
                     } else if (lastState !is DownloadState.Paused && lastState !is DownloadState.Idle) {
                         _downloadState.value = DownloadState.Paused(url = currentUrl ?: sanitizedUrl)
@@ -283,7 +291,8 @@ class DualDownloaderEngine(
                 downloadedBytes = lastState.downloadedBytes,
                 progressPercentage = lastState.progressPercentage,
                 url = currentUrl ?: "",
-                isDesktopSpoofed = lastState.isDesktopSpoofed
+                isDesktopSpoofed = lastState.isDesktopSpoofed,
+                isCloudSlicerActive = lastState.isCloudSlicerActive
             )
         } else if (lastState !is DownloadState.Paused && lastState !is DownloadState.Idle) {
             _downloadState.value = DownloadState.Paused(url = currentUrl ?: "")
@@ -361,18 +370,37 @@ class DualDownloaderEngine(
         var etag: String? = null
         var lastModified: String? = null
         var isDesktopSpoofed = false
+        var isCloudSlicerActive = false
+        var effectiveUrl = url
 
-        // Check if existing sidecar metadata indicates previous desktop spoofing
+        // Check if existing sidecar metadata indicates previous desktop spoofing or cloud slicer
         val initialMetaFile = getMetaFile(targetDir, fileName)
         val existingInitialMeta = readMetaInfo(initialMetaFile)
         val forceDesktop = existingInitialMeta?.isDesktopSpoofed == true
         if (forceDesktop) {
             isDesktopSpoofed = true
         }
+        val forceCloudSlicer = existingInitialMeta?.isCloudSlicerActive == true
+        if (forceCloudSlicer) {
+            val slicerUrl = SlicerPreferences.getSlicerUrl(context)
+            if (slicerUrl.isNotBlank()) {
+                val slicerSecret = SlicerPreferences.getSlicerSecret(context)
+                effectiveUrl = SlicerPreferences.buildSlicedUrl(slicerUrl, url, slicerSecret)
+                isCloudSlicerActive = true
+            }
+        }
 
-        // --- STAGE 1: Standard Probe (Mobile by default, or Desktop if previously spoofed) ---
+        // --- STAGE 1: Standard Probe (Mobile by default, or Desktop/Slicer if previously engaged) ---
         try {
-            val headRequest = buildRequest(url, isDesktop = isDesktopSpoofed).head().build()
+            val headRequest = if (isCloudSlicerActive) {
+                val secret = SlicerPreferences.getSlicerSecret(context)
+                Request.Builder().url(effectiveUrl).head().apply {
+                    if (secret.isNotBlank()) header("X-Slicer-Key", secret)
+                }.build()
+            } else {
+                buildRequest(effectiveUrl, isDesktop = isDesktopSpoofed).head().build()
+            }
+
             executeProbeWithFallback(headRequest).use { response ->
                 if (response.isSuccessful) {
                     contentLength = response.header("Content-Length")?.toLongOrNull() ?: -1L
@@ -391,9 +419,16 @@ class DualDownloaderEngine(
 
         // If HEAD didn't yield range or length, test with GET range 0-0
         if (contentLength <= 0 || !supportsRanges) {
-            val rangeProbeRequest = buildRequest(url, isDesktop = isDesktopSpoofed)
-                .addHeader("Range", "bytes=0-0")
-                .build()
+            val rangeProbeRequest = if (isCloudSlicerActive) {
+                val secret = SlicerPreferences.getSlicerSecret(context)
+                Request.Builder().url(effectiveUrl).header("Range", "bytes=0-0").apply {
+                    if (secret.isNotBlank()) header("X-Slicer-Key", secret)
+                }.build()
+            } else {
+                buildRequest(effectiveUrl, isDesktop = isDesktopSpoofed)
+                    .addHeader("Range", "bytes=0-0")
+                    .build()
+            }
 
             try {
                 executeProbeWithFallback(rangeProbeRequest).use { response ->
@@ -489,6 +524,63 @@ class DualDownloaderEngine(
             }
         }
 
+        // --- STAGE 3: Personal Cloud Slicer Probe ---
+        // If server still rejected byte ranges after Desktop spoofing, check if user configured a personal Cloud Slicer worker
+        if (!supportsRanges && !isCloudSlicerActive) {
+            val slicerUrl = SlicerPreferences.getSlicerUrl(context)
+            if (slicerUrl.isNotBlank()) {
+                val slicerSecret = SlicerPreferences.getSlicerSecret(context)
+                val targetSlicedUrl = SlicerPreferences.buildSlicedUrl(slicerUrl, url, slicerSecret)
+                Log.i(TAG, "Server rejected direct byte ranges. Triggering Stage 3 probe via Personal Cloud Slicer: $slicerUrl")
+                _downloadState.value = DownloadState.Probing("Connecting to Personal Cloud Slicer...")
+
+                var slicerRanges = false
+                var slicerLength = contentLength
+
+                try {
+                    val slicerProbeReq = Request.Builder()
+                        .url(targetSlicedUrl)
+                        .header("Range", "bytes=0-0")
+                        .apply {
+                            if (slicerSecret.isNotBlank()) {
+                                header("X-Slicer-Key", slicerSecret)
+                            }
+                        }
+                        .build()
+
+                    executeProbeWithFallback(slicerProbeReq).use { response ->
+                        if (response.code == 206) {
+                            slicerRanges = true
+                            val contentRange = response.header("Content-Range")
+                            contentRange?.substringAfterLast('/')?.toLongOrNull()?.let {
+                                if (it > 0) slicerLength = it
+                            }
+                            if (slicerLength <= 0) {
+                                response.header("Content-Length")?.toLongOrNull()?.let {
+                                    if (it > 0) slicerLength = it
+                                }
+                            }
+                            if (etag == null) response.header("ETag")?.let { etag = it.trim() }
+                            if (lastModified == null) response.header("Last-Modified")?.let { lastModified = it.trim() }
+                            response.header("Content-Disposition")?.let { disposition ->
+                                extractFileNameFromDisposition(disposition)?.let { fileName = it }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Stage 3 Cloud Slicer probe failed: ${e.message}")
+                }
+
+                if (slicerRanges && slicerLength > 0) {
+                    Log.i(TAG, "Personal Cloud Slicer successfully unlocked HTTP 206 byte ranges! ($slicerLength bytes)")
+                    supportsRanges = true
+                    contentLength = slicerLength
+                    isCloudSlicerActive = true
+                    effectiveUrl = targetSlicedUrl
+                }
+            }
+        }
+
         val outputFile = File(targetDir, fileName)
         currentOutputFile = outputFile
         currentUrl = url
@@ -497,7 +589,7 @@ class DualDownloaderEngine(
 
         if (!supportsRanges || contentLength <= 0) {
             Log.w(TAG, "Server lacks range support or length is unknown. Falling back to single-stream download.")
-            executeSingleStreamDownload(url, outputFile, contentLength, isDesktopSpoofed)
+            executeSingleStreamDownload(url, outputFile, contentLength, isDesktopSpoofed, isCloudSlicerActive)
             return
         }
 
@@ -604,7 +696,8 @@ class DualDownloaderEngine(
                         totalSpeedMBps = max(0.0, wifiSpeedMBps + cellularSpeedMBps),
                         progressPercentage = progress,
                         supportsRanges = true,
-                        isDesktopSpoofed = isDesktopSpoofed
+                        isDesktopSpoofed = isDesktopSpoofed,
+                        isCloudSlicerActive = isCloudSlicerActive
                     )
                 }
             }
@@ -670,9 +763,22 @@ class DualDownloaderEngine(
                         var success = false
 
                         try {
-                            val request = buildRequest(url, isDesktop = isDesktopSpoofed)
-                                .addHeader("Range", "bytes=${chunk.startByte}-${chunk.endByte}")
-                                .build()
+                            val request = if (isCloudSlicerActive) {
+                                val slicerSecret = SlicerPreferences.getSlicerSecret(context)
+                                Request.Builder()
+                                    .url(effectiveUrl)
+                                    .header("Range", "bytes=${chunk.startByte}-${chunk.endByte}")
+                                    .apply {
+                                        if (slicerSecret.isNotBlank()) {
+                                            header("X-Slicer-Key", slicerSecret)
+                                        }
+                                    }
+                                    .build()
+                            } else {
+                                buildRequest(url, isDesktop = isDesktopSpoofed)
+                                    .addHeader("Range", "bytes=${chunk.startByte}-${chunk.endByte}")
+                                    .build()
+                            }
 
                             val call = client.newCall(request)
                             if (!registerActiveCall(call)) throw CancellationException("Worker paused")
@@ -745,7 +851,7 @@ class DualDownloaderEngine(
                             if (success) {
                                 chunk.status = ChunkStatus.COMPLETED
                                 completedIndices.add(chunk.index)
-                                saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed)
+                                saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive)
                             } else {
                                 // Return chunk to pending queue for immediate re-dispatch
                                 chunk.status = ChunkStatus.PENDING
@@ -804,14 +910,27 @@ class DualDownloaderEngine(
         url: String,
         outputFile: File,
         totalLength: Long,
-        isDesktopSpoofed: Boolean = false
+        isDesktopSpoofed: Boolean = false,
+        isCloudSlicerActive: Boolean = false
     ) {
         if (totalLength > 0) {
             checkAvailableStorage(outputFile.parentFile ?: getDefaultDownloadDir(), totalLength, outputFile)
         }
 
         val client = networkManager.getDefaultClient()
-        val request = buildRequest(url, isDesktop = isDesktopSpoofed).build()
+        val request = if (isCloudSlicerActive) {
+            val slicerSecret = SlicerPreferences.getSlicerSecret(context)
+            Request.Builder()
+                .url(url)
+                .apply {
+                    if (slicerSecret.isNotBlank()) {
+                        header("X-Slicer-Key", slicerSecret)
+                    }
+                }
+                .build()
+        } else {
+            buildRequest(url, isDesktop = isDesktopSpoofed).build()
+        }
         val call = client.newCall(request)
         if (!registerActiveCall(call)) throw CancellationException("Download paused")
 
@@ -858,7 +977,8 @@ class DualDownloaderEngine(
                                 totalSpeedMBps = currentSpeedMBps,
                                 progressPercentage = progress,
                                 supportsRanges = false,
-                                isDesktopSpoofed = isDesktopSpoofed
+                                isDesktopSpoofed = isDesktopSpoofed,
+                                isCloudSlicerActive = isCloudSlicerActive
                             )
                         }
                     }

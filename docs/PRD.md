@@ -59,6 +59,12 @@ Standard Android operating system behavior automatically deactivates or idles th
    - User starts download and locks phone or switches to another app.
    - Foreground notification maintains ongoing download without OS termination.
    - Notification updates live transfer rates and dual-network breakdown.
+4. **Personal Cloud Slicer Flow**:
+   - User navigates to Settings (gear icon in TopAppBar).
+   - Taps "Copy Script" to copy the pre-built serverless slice worker to clipboard.
+   - Deploys it to Cloudflare Workers in 60 seconds (free tier, 100k requests/day).
+   - Enters their worker URL into DualBoost and taps "Test Worker".
+   - Any future file download on servers that reject byte ranges automatically routes through the Cloud Slicer, transforming the single stream into parallel HTTP 206 byte chunks and rendering the `⚡ Cloud Slicer Active` badge.
 
 ## Future Features
 - Multi-file batch download queue.

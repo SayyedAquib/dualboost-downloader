@@ -1,6 +1,7 @@
 package com.dualboost.downloader
 
 import com.dualboost.downloader.data.DownloadState
+import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.engine.DualDownloaderEngine
 import com.dualboost.downloader.network.NetworkProvider
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -379,6 +380,150 @@ class EngineComprehensiveTest {
         assertTrue("restoreIncompleteDownload should succeed", restored)
         val pausedState = engine.downloadState.value as DownloadState.Paused
         assertTrue("Paused state must preserve isDesktopSpoofed flag", pausedState.isDesktopSpoofed)
+    }
+
+    @Test
+    fun testSlicerPreferences_SaveAndRetrieveUrlAndSecret() {
+        val testContext = DummyTestContext(tempDir)
+        assertEquals("", SlicerPreferences.getSlicerUrl(testContext))
+        assertEquals("", SlicerPreferences.getSlicerSecret(testContext))
+
+        SlicerPreferences.setSlicerUrl(testContext, "https://my-worker.workers.dev")
+        SlicerPreferences.setSlicerSecret(testContext, "secret123")
+
+        assertEquals("https://my-worker.workers.dev", SlicerPreferences.getSlicerUrl(testContext))
+        assertEquals("secret123", SlicerPreferences.getSlicerSecret(testContext))
+    }
+
+    @Test
+    fun testSlicerPreferences_BuildSlicedUrl_WithAndWithoutSecret() {
+        val urlWithoutSecret = SlicerPreferences.buildSlicedUrl(
+            slicerBaseUrl = "https://my-worker.workers.dev",
+            targetUrl = "https://example.com/bigfile.iso"
+        )
+        assertTrue(urlWithoutSecret.startsWith("https://my-worker.workers.dev/slice?url=https%3A%2F%2Fexample.com%2Fbigfile.iso"))
+        assertFalse(urlWithoutSecret.contains("&key="))
+
+        val urlWithSecret = SlicerPreferences.buildSlicedUrl(
+            slicerBaseUrl = "https://my-worker.workers.dev/",
+            targetUrl = "https://example.com/bigfile.iso",
+            secretKey = "myKey@123"
+        )
+        assertTrue(urlWithSecret.startsWith("https://my-worker.workers.dev/slice?url=https%3A%2F%2Fexample.com%2Fbigfile.iso"))
+        assertTrue(urlWithSecret.contains("&key=myKey%40123"))
+    }
+
+    @Test
+    fun testMetaInfo_SavesAndRestoresCloudSlicerActiveFlag() {
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+
+        val metaFile = engine.getMetaFile(tempDir, "test_slicer_resume.bin")
+        engine.saveCompletedChunks(
+            metaFile = metaFile,
+            url = "https://example.com/test_slicer_resume.bin",
+            totalBytes = 10485760L,
+            completedIndices = setOf(0, 1),
+            etag = "\"slicerEtag\"",
+            lastModified = "Wed, 21 Oct 2025 07:28:00 GMT",
+            isDesktopSpoofed = false,
+            isCloudSlicerActive = true
+        )
+
+        val metaInfo = engine.readMetaInfo(metaFile)
+        assertNotNull("MetaInfo must be readable", metaInfo)
+        assertEquals(true, metaInfo?.isCloudSlicerActive)
+        assertEquals(false, metaInfo?.isDesktopSpoofed)
+        assertEquals(setOf(0, 1), metaInfo?.completedChunks)
+
+        // Verify restoreIncompleteDownload populates Paused state with isCloudSlicerActive = true
+        val restored = engine.restoreIncompleteDownload(tempDir)
+        assertTrue("restoreIncompleteDownload should succeed", restored)
+        val pausedState = engine.downloadState.value as DownloadState.Paused
+        assertTrue("Paused state must preserve isCloudSlicerActive flag", pausedState.isCloudSlicerActive)
+    }
+
+    @Test
+    fun testAdaptiveProbe_Stage3_CloudSlicerFallback() {
+        val payload = ByteArray(8 * 1024 * 1024) { (it % 256).toByte() }
+        val expectedHash = sha256(payload)
+
+        // Dispatcher:
+        // /origin/stream rejects ranges for both Mobile and Desktop (returns 200 OK without Accept-Ranges or 200 OK on Range: bytes=0-0)
+        // /slice endpoint acts as Cloud Slicer: validates X-Slicer-Key (or query param), slices payload for Range requests and returns 206 Partial Content!
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val path = request.path ?: ""
+                if (path.startsWith("/origin/stream")) {
+                    if (request.method == "HEAD") {
+                        return MockResponse()
+                            .setResponseCode(200)
+                            .setHeader("Content-Length", payload.size.toString())
+                    }
+                    // For both Range: bytes=0-0 and full stream, return 200 OK without Accept-Ranges
+                    return MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Length", payload.size.toString())
+                        .setBody(Buffer().write(payload))
+                } else if (path.startsWith("/slice")) {
+                    val keyHeader = request.getHeader("X-Slicer-Key")
+                    val hasKeyInQuery = path.contains("key=TestSecretKey123")
+                    if (keyHeader != "TestSecretKey123" && !hasKeyInQuery) {
+                        return MockResponse().setResponseCode(401).setBody("Unauthorized")
+                    }
+
+                    val range = request.getHeader("Range")
+                    if (range != null && range.startsWith("bytes=")) {
+                        val parts = range.removePrefix("bytes=").split("-")
+                        val start = parts[0].toIntOrNull() ?: 0
+                        val end = parts.getOrNull(1)?.toIntOrNull() ?: (payload.size - 1)
+                        val slice = payload.copyOfRange(start, minOf(end + 1, payload.size))
+
+                        return MockResponse()
+                            .setResponseCode(206)
+                            .setHeader("Content-Range", "bytes $start-$end/${payload.size}")
+                            .setHeader("Content-Length", slice.size.toString())
+                            .setHeader("Accept-Ranges", "bytes")
+                            .setBody(Buffer().write(slice))
+                    }
+                    return MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Length", payload.size.toString())
+                        .setBody(Buffer().write(payload))
+                }
+                return MockResponse().setResponseCode(404)
+            }
+        }
+
+        val testContext = DummyTestContext(tempDir)
+        val slicerBaseUrl = server.url("").toString().trimEnd('/')
+        SlicerPreferences.setSlicerUrl(testContext, slicerBaseUrl)
+        SlicerPreferences.setSlicerSecret(testContext, "TestSecretKey123")
+
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(testContext, TestNetworkProvider(client))
+
+        val originUrl = server.url("/origin/stream/test_slicer.bin").toString()
+        engine.startDownload(originUrl, tempDir)
+
+        var finished = false
+        var timeoutMs = 10_000L
+        while (!finished && timeoutMs > 0) {
+            val state = engine.downloadState.value
+            if (state is DownloadState.Completed) {
+                finished = true
+                val file = File(state.filePath)
+                assertTrue("Downloaded file must exist", file.exists())
+                assertEquals(payload.size.toLong(), file.length())
+                assertEquals(expectedHash, sha256(file.readBytes()))
+            } else if (state is DownloadState.Failed) {
+                fail("Download failed unexpectedly: ${state.error}")
+            }
+            Thread.sleep(50)
+            timeoutMs -= 50
+        }
+
+        assertTrue("Stage 3 Cloud Slicer fallback should complete download successfully", finished)
     }
 }
 
