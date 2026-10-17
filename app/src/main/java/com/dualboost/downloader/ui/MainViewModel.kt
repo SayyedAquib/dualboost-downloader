@@ -92,6 +92,29 @@ open class MainViewModel(
     private val _selectedPreset = MutableStateFlow<QuickTestPreset?>(null)
     val selectedPreset: StateFlow<QuickTestPreset?> = _selectedPreset.asStateFlow()
 
+    private val _detectedClipboardUrl = MutableStateFlow<String?>(null)
+    val detectedClipboardUrl: StateFlow<String?> = _detectedClipboardUrl.asStateFlow()
+
+    fun onClipboardChecked(url: String?) {
+        val trimmed = url?.trim()
+        if (!trimmed.isNullOrBlank() && (trimmed.startsWith("http://") || trimmed.startsWith("https://"))) {
+            if (_urlInput.value.isBlank() && _detectedClipboardUrl.value != trimmed) {
+                _detectedClipboardUrl.value = trimmed
+            }
+        }
+    }
+
+    fun acceptClipboardUrl() {
+        _detectedClipboardUrl.value?.let {
+            onUrlChanged(it)
+            _detectedClipboardUrl.value = null
+        }
+    }
+
+    fun dismissClipboardUrl() {
+        _detectedClipboardUrl.value = null
+    }
+
     init {
         val currentState = downloadState.value
         if (currentState is DownloadState.Paused && currentState.url.isNotBlank()) {

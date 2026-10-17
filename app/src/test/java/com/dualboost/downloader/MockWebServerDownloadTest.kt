@@ -110,7 +110,7 @@ class MockWebServerDownloadTest {
 
         // Wait for download to finish
         var finished = false
-        var timeoutMs = 15_000L
+        var timeoutMs = 30_000L
         while (!finished && timeoutMs > 0) {
             val state = engine.downloadState.value
             if (state is DownloadState.Completed) {

@@ -1,9 +1,18 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is fully updated with **ADR-023 (Advanced Security Architecture: DNS Rebinding SSRF Defense, Metadata Isolation, Header-Only Auth & Cryptographic Integrity)** on top of **ADR-022**, **ADR-021**, and **ADR-020**. All unit tests pass with 100% success rate. The application and Cloudflare Worker feature end-to-end defense-in-depth: mandatory HTTPS enforcement (`usesCleartextTraffic="false"`), DNS-over-HTTPS pre-fetch validation against DNS rebinding SSRF, dynamic DNS wildcard blocking, header-only key authentication (`X-Slicer-Key`), isolated sidecar metadata in `context.noBackupFilesDir`, canonical path traversal containment, and post-download SHA-256 cryptographic verification in Compose UI.
+DualBoost Downloader is fully updated with **ADR-024 (Expressive Telemetry & Real-Time UX Architecture: Segmented Dynamic Chunk Strip, Countdown ETA, Smart Clipboard Suggestion & Build Acceleration)** on top of **ADR-023**, **ADR-022**, and **ADR-021**. The application features real-time multi-block chunk visualizers (`SegmentedChunkStrip`), human-readable ETA countdowns (`formatEta`), auto-detected clipboard link pills, streaming pulse animations on active interfaces, celebratory completion summaries, and high-speed Gradle caching for rapid release iteration. All unit tests pass with 100% success rate and the updated Release APK is live and verified on the connected Google Pixel 9.
 
 ## Recently Completed
+- **Expressive Telemetry & Real-Time UX Architecture (ADR-024)**:
+  - **Dynamic Chunk Snapshot Visualizer (`SegmentedChunkStrip`)**: Divided active range downloads into multi-block chunk strips where chunks light up in Cyan (Wi-Fi) or Violet (5G) with real-time animated shimmer during active streaming.
+  - **ETA Countdown & Remaining Bytes Telemetry**: Implemented `estimatedSecondsRemaining` and `formatEta(seconds)` in `DownloadModel.kt` & `DualDownloaderEngine.kt`, rendering formatted countdown timers (e.g. `• 45s left (35.2 MB left)`).
+  - **Smart Context Pill Banner**: Added automatic clipboard URL detection on app open and resume (`MainActivity.onResume()`), displaying an expressive dismissible suggestion pill with 1-tap "Paste".
+  - **Active Streaming Pulse & Breathing Indicators**: Integrated infinite transition pulse animations on `NetworkCard` status dots and `SpeedDetailRow` streaming indicators when packets are active.
+  - **Celebratory Completion Summary**: Enhanced the Completed card to showcase total duration, average speed in MB/s, and dual-channel boost gain.
+  - **Build & Compilation Acceleration**: Configured `org.gradle.caching=true`, `org.gradle.parallel=true`, `org.gradle.vfs.watch=true` in `gradle.properties`, and disabled redundant `lintVitalRelease` during local cycles (`checkReleaseBuilds = false`).
+  - **Unit Test Expansion**: Added unit tests for `formatEta`, `ChunkSnapshot`, and `MainViewModel` clipboard detection (100% pass across all 95+ unit tests).
+  - **Device Verification**: Built and installed production release APK (`app-release.apk`) on physical Google Pixel 9 (`53201VDAQ00067`), verified dual interface binding (`Wi-Fi 158` & `Cellular 159`).
 - **Mandatory Production (Release Build) Policy Enforced**:
   - Permanently updated `docs/RULES.md` and `AGENTS.md` to enforce `.\gradlew.bat assembleRelease` and `app-release.apk` for all connected device installations.
   - Successfully assembled and installed `app/build/outputs/apk/release/app-release.apk` on physical Google Pixel 9 (`53201VDAQ00067`).
@@ -89,6 +98,7 @@ DualBoost Downloader is fully updated with **ADR-023 (Advanced Security Architec
 - ADR-021: Android Scoped Storage Conflict-Free File Resolution & Resilient Directory Fallback.
 - ADR-022: Defense-in-Depth Security Hardening (SSRF, Path Traversal, Intent Isolation, Anti-DoS).
 - ADR-023: Advanced Security Architecture (DNS Rebinding SSRF Defense, Metadata Isolation, Header-Only Auth & Cryptographic Integrity).
+- ADR-024: Expressive Telemetry & Real-Time UX Architecture (Segmented Dynamic Chunk Strip, Countdown ETA, Smart Clipboard Suggestion & Build Acceleration).
 
 ## Next Steps
 1. User can deploy `cloud-slicer/worker.js` to Cloudflare (or tap "Copy Script" in the app's Settings).

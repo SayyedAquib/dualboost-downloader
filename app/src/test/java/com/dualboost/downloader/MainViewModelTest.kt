@@ -209,6 +209,71 @@ class MainViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun testClipboardUrlDetection_AndAcceptance() {
+        val viewModel = MainViewModel(repository = null)
+        assertNull(viewModel.detectedClipboardUrl.value)
+
+        // Non-URL clipboard content should be ignored
+        viewModel.onClipboardChecked("Not a url")
+        assertNull(viewModel.detectedClipboardUrl.value)
+
+        // Valid HTTP/HTTPS url should be detected when urlInput is empty
+        val validUrl = "https://speed.cloudflare.com/100mb.bin"
+        viewModel.onClipboardChecked(validUrl)
+        assertEquals(validUrl, viewModel.detectedClipboardUrl.value)
+
+        // Accepting clipboard URL should populate urlInput and clear detectedClipboardUrl
+        viewModel.acceptClipboardUrl()
+        assertEquals(validUrl, viewModel.urlInput.value)
+        assertNull(viewModel.detectedClipboardUrl.value)
+    }
+
+    @Test
+    fun testClipboardUrlDetection_Dismissal() {
+        val viewModel = MainViewModel(repository = null)
+        val validUrl = "https://example.com/test.zip"
+        viewModel.onClipboardChecked(validUrl)
+        assertEquals(validUrl, viewModel.detectedClipboardUrl.value)
+
+        viewModel.dismissClipboardUrl()
+        assertNull(viewModel.detectedClipboardUrl.value)
+        assertEquals("", viewModel.urlInput.value)
+    }
+
+    @Test
+    fun testClipboardUrlDetection_IgnoredWhenUrlInputAlreadyPresent() {
+        val viewModel = MainViewModel(repository = null)
+        viewModel.onUrlChanged("https://existing.com/file.iso")
+
+        viewModel.onClipboardChecked("https://new.com/file.iso")
+        assertNull("Should not detect when input already contains URL", viewModel.detectedClipboardUrl.value)
+    }
+
+    @Test
+    fun testFormatEta_ProducesAccurateCountdownStrings() {
+        assertEquals("< 1s", com.dualboost.downloader.data.formatEta(0L))
+        assertEquals("< 1s", com.dualboost.downloader.data.formatEta(-5L))
+        assertEquals("45s", com.dualboost.downloader.data.formatEta(45L))
+        assertEquals("1m 20s", com.dualboost.downloader.data.formatEta(80L))
+        assertEquals("5m", com.dualboost.downloader.data.formatEta(300L))
+        assertEquals("1h 15m", com.dualboost.downloader.data.formatEta(4500L))
+    }
+
+    @Test
+    fun testChunkSnapshot_DataClassIntegrity() {
+        val snapshot = com.dualboost.downloader.data.ChunkSnapshot(
+            index = 0,
+            progress = 0.75f,
+            networkType = com.dualboost.downloader.data.NetworkInterfaceType.WIFI,
+            status = com.dualboost.downloader.data.ChunkStatus.DOWNLOADING
+        )
+        assertEquals(0, snapshot.index)
+        assertEquals(0.75f, snapshot.progress, 0.001f)
+        assertEquals(com.dualboost.downloader.data.NetworkInterfaceType.WIFI, snapshot.networkType)
+        assertEquals(com.dualboost.downloader.data.ChunkStatus.DOWNLOADING, snapshot.status)
+    }
 }
 
 

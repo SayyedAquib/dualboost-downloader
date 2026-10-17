@@ -737,6 +737,46 @@ Following initial baseline hardening, a comprehensive architectural security ass
 ### Consequences
 Eliminates all remaining metadata exposure vectors, shields credentials from URL leakage, prevents sophisticated DNS rebinding SSRF attacks, guarantees strict HTTPS transport, and provides bit-level cryptographic verification to users.
 
+---
+
+## ADR-024: Expressive Telemetry & Real-Time UX Architecture (Segmented Dynamic Chunk Strip, ETA Countdown, Smart Clipboard Suggestion & Build Acceleration)
+
+### Date
+2026-10-17
+
+### Status
+Accepted
+
+### Context
+Following the stabilization and security hardening of DualBoost Downloader, user feedback highlighted four key usability and telemetry enhancements:
+1. **Real-Time Chunk Visibility**: While the dual-color progress bar visualized total Wi-Fi vs. 5G byte ratios, users lacked visibility into individual chunk states, active concurrent interface assignments, and segment completion.
+2. **Download Time Estimation**: Users had real-time speed in MB/s and percentage, but no estimated time of arrival (ETA) or remaining byte countdown.
+3. **Clipboard Insertion Ergonomics**: Sharing or copying URLs required manual paste clicks or Android Intent share triggers. Users desired an automatic, non-intrusive suggestion pill when opening the app with a link in clipboard.
+4. **Active Streaming & Completion Feedback**: Interface indicators lacked tactile visual motion when actively transmitting packets, and download completion lacked celebratory performance summaries.
+5. **Release Build Compilation Overhead**: Packaging Release builds spent excessive time in `lintVitalRelease` and un-cached cold builds.
+
+### Decision
+1. **Dynamic Chunk Snapshot Pipeline (`ChunkSnapshot`)**:
+   - Added `ChunkSnapshot(index, progress, networkType, status)` emitted dynamically by `DualDownloaderEngine.kt` inside the telemetry monitor loop.
+   - Designed `SegmentedChunkStrip` in `MainActivity.kt` displaying multi-block chunk visualizers where each chunk block dynamically fills with Cyan (Wi-Fi) or Violet (5G), pulses with shimmer during active transfer, and marks completion.
+2. **Real-Time ETA Countdown & Remaining Bytes Header**:
+   - Added `estimatedSecondsRemaining: Long?` to `DownloadState.Downloading`, formatted via `formatEta(seconds)` into clean strings (e.g. `45s`, `1m 20s`, `5m`).
+   - Integrated into download header: `${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} • ${formatEta(eta)} left (${formatBytes(remainingBytes)} left)`.
+3. **Smart Context Pill Banner**:
+   - Added clipboard inspection in `MainActivity.onResume()` and `onCreate()`.
+   - Populates `MainViewModel.detectedClipboardUrl` when the input field is blank.
+   - Renders an expressive Material 3 suggestion pill (`secondaryContainer`) above the input field with 1-tap "Paste" and dismiss affordances.
+4. **Expressive Motion & Celebratory Transfer Summary**:
+   - Animated breathing pulse on `NetworkCard` status dots when interfaces are bound.
+   - Active packet streaming pulse animation on `SpeedDetailRow` when interface speed > 0.05 MB/s.
+   - Celebratory completion banner summarizing transfer elapsed time, average throughput, and 5G+Wi-Fi aggregation boost (`⚡ 150 MB downloaded in 6s at 25.0 MB/s avg • Aggregated Wi-Fi + 5G Boost ⚡`).
+5. **Build Acceleration**:
+   - Enabled `org.gradle.caching=true`, `org.gradle.parallel=true`, and `org.gradle.vfs.watch=true` in `gradle.properties`.
+   - Set `lint.checkReleaseBuilds = false` in `app/build.gradle.kts` to eliminate redundant static analysis during rapid release build-and-install cycles.
+
+### Consequences
+Significantly elevates the user experience with transparent, high-tech chunk telemetry and one-handed link insertion, while accelerating incremental release builds on the development workstation.
+
 
 
 

@@ -24,6 +24,13 @@ data class DownloadChunk(
     val totalBytes: Long get() = (endByte - startByte) + 1
 }
 
+data class ChunkSnapshot(
+    val index: Int,
+    val progress: Float, // 0.0f .. 1.0f
+    val networkType: NetworkInterfaceType,
+    val status: ChunkStatus
+)
+
 sealed class DownloadState {
     object Idle : DownloadState()
     data class Probing(val message: String) : DownloadState()
@@ -39,7 +46,9 @@ sealed class DownloadState {
         val progressPercentage: Float,
         val supportsRanges: Boolean,
         val isDesktopSpoofed: Boolean = false,
-        val isCloudSlicerActive: Boolean = false
+        val isCloudSlicerActive: Boolean = false,
+        val chunkSnapshots: List<ChunkSnapshot> = emptyList(),
+        val estimatedSecondsRemaining: Long? = null
     ) : DownloadState() {
         val wifiSpeedMbps: Double get() = wifiSpeedMBps
         val cellularSpeedMbps: Double get() = cellularSpeedMBps
@@ -51,7 +60,9 @@ sealed class DownloadState {
         val totalBytes: Long,
         val durationSeconds: Long,
         val contentUriString: String? = null,
-        val sha256Checksum: String? = null
+        val sha256Checksum: String? = null,
+        val averageSpeedMBps: Double = 0.0,
+        val isDualChannel: Boolean = true
     ) : DownloadState()
     data class AutoRecovering(val message: String, val retryAttempt: Int) : DownloadState()
     data class Failed(val error: String) : DownloadState()
@@ -93,6 +104,26 @@ fun formatSpeedComponents(speedMBps: Float): Pair<String, String> {
             Pair(String.format(java.util.Locale.US, "%.0f", kbps), "KB/s")
         }
         else -> Pair(String.format(java.util.Locale.US, "%.1f", speedMBps), "MB/s")
+    }
+}
+
+/**
+ * Formats seconds remaining into a clean human-readable countdown string (e.g. "45s", "1m 20s", "1h 5m").
+ */
+fun formatEta(seconds: Long): String {
+    return when {
+        seconds <= 0L -> "< 1s"
+        seconds < 60L -> "${seconds}s"
+        seconds < 3600L -> {
+            val minutes = seconds / 60
+            val remainingSecs = seconds % 60
+            if (remainingSecs == 0L) "${minutes}m" else "${minutes}m ${remainingSecs}s"
+        }
+        else -> {
+            val hours = seconds / 3600
+            val minutes = (seconds % 3600) / 60
+            "${hours}h ${minutes}m"
+        }
     }
 }
 

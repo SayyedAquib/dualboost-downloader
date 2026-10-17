@@ -45,8 +45,8 @@ To ensure physical network transparency across any wallpaper palette:
 ## Layout & Components
 - **Top Bar**: `CenterAlignedTopAppBar` with branded lightning bolt badge, dynamic title, and technical information dialog.
 - **Hero Network Cards**: Dual `Card` containers with live status indicators, connection state badges, dynamic active/inactive iconography (`Wifi`/`WifiOff`, `SignalCellularAlt`/`SignalCellularOff`), and Developer Options guidance.
-- **Download Action Card**: 24dp rounded elevated container with quick clipboard paste, text clear, dynamic quick-test benchmark presets arranged in ascending order (10MB, 25MB, 50MB, 100MB Cloudflare, 150MB, 500MB, 1GB), selected chip visual state with primary border and lightning bolt (`⚡`) range indicators, dynamic server capability captions, and prominent "Boost Download" button.
-- **Dual-Color Progress Bar**: Stacked proportional bar visualizing the real-time byte contribution between Wi-Fi and 5G.
+- **Download Action Card**: 24dp rounded elevated container with Smart Context Pill Banner (auto-detecting URLs in clipboard), quick clipboard paste, text clear, dynamic quick-test benchmark presets arranged in ascending order (10MB, 25MB, 50MB, 100MB Cloudflare, 150MB, 500MB, 1GB), selected chip visual state with primary border and lightning bolt (`⚡`) range indicators, dynamic server capability captions, and prominent "Boost Download" button.
+- **Dual-Color Progress Bar & Dynamic Chunk Strip**: Stacked proportional bar visualizing the real-time byte contribution between Wi-Fi and 5G, paired with a Segmented Dynamic Chunk Strip displaying multi-block chunk visualizers where individual chunks light up in Cyan (Wi-Fi) or Violet (5G) with live animated shimmer.
 - **File Provider Integration**: Direct "Open File" launcher upon download completion.
 
 ## Responsive Breakpoints
@@ -59,14 +59,15 @@ To ensure physical network transparency across any wallpaper palette:
 - **Primary Action ("Start Dual Download")**: Filled `Button`, full width or weighted, primary container color.
 - **Secondary / Control Action ("Pause", "Resume")**: `OutlinedButton` with 12dp corner radius.
 
-### Forms
+### Forms & Suggestions
+- **Smart Context Pill Banner**: Expressive Material 3 pill (`secondaryContainer`) displaying detected clipboard download URLs with 1-tap "Paste" button and dismiss affordance.
 - **URL Input Field**: `OutlinedTextField` spanning full width, single line, with explicit placeholder and clear affordance.
 
 ### Cards
 - **Speed Benchmark Quick Card**: 18dp rounded container (`surfaceContainer`) with primary container icon badge, live subtitle, and quick-action "Test Speed" button launching the benchmark modal.
-- **Download Telemetry Card**: High-contrast card with 4dp elevation containing filename, subtle primary-tinted `⚡ Desktop Mode Active` badge (when desktop browser spoofing is engaged), progress bar, real-time speed in `MB/s` (or `KB/s`), individual Wi-Fi and 5G meters, and an amber alert banner (`tertiaryContainer`) displaying *"Single-Stream Mode: Server does not support dual-channel splitting • Running on Wi-Fi to preserve mobile data"* when non-range servers are detected with inactive rows dimmed (0.45f opacity).
+- **Download Telemetry Card**: High-contrast card with 4dp elevation containing filename, real-time ETA countdown (`• 45s left (35.2 MB left)`), subtle primary-tinted `⚡ Desktop Mode Active` badge, dual-color progress bar, `SegmentedChunkStrip` multi-block chunk aggregation grid, real-time speed in `MB/s`, individual Wi-Fi and 5G streaming meters with live pulse animations, and an amber alert banner (`tertiaryContainer`) when non-range servers are detected.
 - **Download Paused Card**: Elevated card (2dp elevation) displaying frozen progress percentage, progress bar, preserved byte count, primary filled "Resume" button with Play icon, and error-tinted outlined "Discard" button with trash icon.
-- **Download Completed Card**: Container card (`primaryContainer`) displaying successful transfer summary, elapsed time, primary filled "Open File" button (`ACTION_VIEW`), and adjacent tonal "Share" button (`ACTION_SEND`).
+- **Download Completed Card**: Container card (`primaryContainer`) displaying celebratory transfer summary (`⚡ 150 MB downloaded in 6s at 25.0 MB/s avg • Aggregated Wi-Fi + 5G Boost ⚡`), elapsed time, primary filled "Open File" button (`ACTION_VIEW`), adjacent tonal "Share" button (`ACTION_SEND`), and interactive 1-click "Copy SHA-256" cryptographic verification chip.
 - **System Tip Banner**: Flat card with `tertiaryContainer` background highlighting required OS settings (Developer Options).
 
 

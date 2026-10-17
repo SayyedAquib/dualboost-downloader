@@ -56,9 +56,9 @@ app/src/main/
 
 ## Application Layers
 1. **Presentation Layer (`com.dualboost.downloader.ui`)**:
-   - `MainActivity`: Lifecycle observer, Intent handler (`ACTION_SEND`), and Compose layout renderer.
-   - `MainViewModel`: Application-scoped ViewModel orchestrating URL inputs, preset selection models (`QuickTestPreset`), and action enablement state machine.
-   - Collects `StateFlow` from `DownloadRepository` to display live speed gauges, dual-color interface ratios, and error recovery states.
+   - `MainActivity`: Lifecycle observer, clipboard monitor, Intent handler (`ACTION_SEND`), and Compose layout renderer featuring Smart Context Pill Banner, `SegmentedChunkStrip`, and celebratory completion banner.
+   - `MainViewModel`: Application-scoped ViewModel orchestrating URL inputs, clipboard auto-detection (`detectedClipboardUrl`), preset selection models (`QuickTestPreset`), and action enablement state machine.
+   - Collects `StateFlow` from `DownloadRepository` to display live speed gauges, countdown ETA remaining, dual-color interface ratios, multi-block chunk visualizers (`ChunkSnapshot`), and error recovery states.
 2. **Repository & Application Layer (`com.dualboost.downloader.data`, `DualBoostApp`)**:
    - `DualBoostApp`: `Application` class holding the singleton `DownloadRepository`.
    - `DownloadRepository`: Coordinates `DualNetworkManager` and `DualDownloaderEngine`, dispatching background tasks to `DownloadForegroundService` without relying on ephemeral service bindings.
@@ -68,7 +68,7 @@ app/src/main/
    - Manages Android `NotificationManager` with a 1000ms throttler to avoid system message shedding.
    - Guards against race conditions by checking current engine state before initiating downloads.
 4. **Execution Engine Layer (`com.dualboost.downloader.engine`)**:
-   - `DualDownloaderEngine`: Dynamically computes headers (`Referer`, `Origin`, `Accept-Encoding`), probes remote servers, validates storage via `StatFs`, partitions files into 4MB byte segments, manages work queues, computes binary Megabytes per second (`MB/s`) speed with adaptive `KB/s` formatting (`formatSpeed`), handles single-stream non-range server fallbacks, and writes to disk via `RandomAccessFile`.
+   - `DualDownloaderEngine`: Dynamically computes headers, probes remote servers, validates storage via `StatFs`, partitions files into 10MB byte segments, manages concurrent work queues, produces live `ChunkSnapshot` arrays, calculates ETA countdown seconds (`formatEta`), computes binary Megabytes per second (`MB/s`) speed with adaptive `KB/s` formatting (`formatSpeed`), handles single-stream non-range server fallbacks, and writes to disk via `RandomAccessFile`.
    - `SpeedTestEngine`: Ephemeral 3-phase throughput benchmark engine (Wi-Fi 3s -> 5G 3s -> DualBoost 4s) streaming bytes directly into an in-memory discard buffer (0 bytes stored on disk) and reporting real-time speeds in `MB/s`.
 5. **Transport Layer (`com.dualboost.downloader.network`)**:
    - `NetworkProvider`: Decoupled interface defining interface availability and client factories, allowing seamless MockWebServer integration testing.

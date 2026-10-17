@@ -10,6 +10,7 @@ import android.os.StatFs
 import android.provider.MediaStore
 import android.util.Log
 import android.webkit.MimeTypeMap
+import com.dualboost.downloader.data.ChunkSnapshot
 import com.dualboost.downloader.data.ChunkStatus
 import com.dualboost.downloader.data.DownloadChunk
 import com.dualboost.downloader.data.DownloadState
@@ -841,6 +842,23 @@ class DualDownloaderEngine(
 
                     val downloaded = totalDownloadedBytes.get()
                     val progress = if (contentLength > 0) downloaded.toFloat() / contentLength.toFloat() else 0f
+                    val totalSpeed = max(0.0, wifiSpeedMBps + cellularSpeedMBps)
+                    val etaSeconds = if (contentLength > 0 && totalSpeed > 0.05) {
+                        val remainingBytes = max(0L, contentLength - downloaded)
+                        (remainingBytes / (totalSpeed * 1024.0 * 1024.0)).toLong()
+                    } else {
+                        null
+                    }
+
+                    val snapshots = chunks.map { c: DownloadChunk ->
+                        val cTotal = c.totalBytes.coerceAtLeast(1L)
+                        ChunkSnapshot(
+                            index = c.index,
+                            progress = (c.downloadedBytes.toFloat() / cTotal.toFloat()).coerceIn(0f, 1f),
+                            networkType = c.assignedNetwork,
+                            status = c.status
+                        )
+                    }
 
                     _downloadState.value = DownloadState.Downloading(
                         fileName = fileName,
@@ -850,11 +868,13 @@ class DualDownloaderEngine(
                         cellularDownloadedBytes = currentCell,
                         wifiSpeedMBps = max(0.0, wifiSpeedMBps),
                         cellularSpeedMBps = max(0.0, cellularSpeedMBps),
-                        totalSpeedMBps = max(0.0, wifiSpeedMBps + cellularSpeedMBps),
+                        totalSpeedMBps = totalSpeed,
                         progressPercentage = progress,
                         supportsRanges = true,
                         isDesktopSpoofed = isDesktopSpoofed,
-                        isCloudSlicerActive = isCloudSlicerActive
+                        isCloudSlicerActive = isCloudSlicerActive,
+                        chunkSnapshots = snapshots,
+                        estimatedSecondsRemaining = etaSeconds
                     )
                 }
             }
@@ -1060,6 +1080,8 @@ class DualDownloaderEngine(
         val sha256 = computeSha256(outputFile)
         val contentUri = exportToMediaStore(outputFile, fileName)
         val elapsedSeconds = max(1L, (System.currentTimeMillis() - startTime) / 1000L)
+        val avgSpeed = if (elapsedSeconds > 0) (contentLength.toDouble() / (1024.0 * 1024.0)) / elapsedSeconds else 0.0
+        val isDual = cellularDownloadedBytes.get() > 0 && wifiDownloadedBytes.get() > 0
 
         _downloadState.value = DownloadState.Completed(
             fileName = fileName,
@@ -1067,7 +1089,9 @@ class DualDownloaderEngine(
             totalBytes = contentLength,
             durationSeconds = elapsedSeconds,
             contentUriString = contentUri?.toString(),
-            sha256Checksum = sha256
+            sha256Checksum = sha256,
+            averageSpeedMBps = avgSpeed,
+            isDualChannel = isDual
         )
     }
 
@@ -1131,6 +1155,13 @@ class DualDownloaderEngine(
 
                             val isWifi = networkManager.isWifiAvailable.value
                             val progress = if (totalLength > 0) totalRead.toFloat() / totalLength.toFloat() else 0f
+                            val eta = if (totalLength > 0 && currentSpeedMBps > 0.05) {
+                                val rem = max(0L, totalLength - totalRead)
+                                (rem / (currentSpeedMBps * 1024.0 * 1024.0)).toLong()
+                            } else {
+                                null
+                            }
+
                             _downloadState.value = DownloadState.Downloading(
                                 fileName = outputFile.name,
                                 totalBytes = totalLength,
@@ -1143,7 +1174,9 @@ class DualDownloaderEngine(
                                 progressPercentage = progress,
                                 supportsRanges = false,
                                 isDesktopSpoofed = isDesktopSpoofed,
-                                isCloudSlicerActive = isCloudSlicerActive
+                                isCloudSlicerActive = isCloudSlicerActive,
+                                chunkSnapshots = emptyList(),
+                                estimatedSecondsRemaining = eta
                             )
                         }
                     }
@@ -1152,13 +1185,17 @@ class DualDownloaderEngine(
                 val sha256 = computeSha256(outputFile)
                 val contentUri = exportToMediaStore(outputFile, outputFile.name)
                 val elapsedSeconds = max(1L, (System.currentTimeMillis() - startTime) / 1000L)
+                val avgSpeed = if (elapsedSeconds > 0 && totalLength > 0) (totalLength.toDouble() / (1024.0 * 1024.0)) / elapsedSeconds else 0.0
+
                 _downloadState.value = DownloadState.Completed(
                     fileName = outputFile.name,
                     filePath = outputFile.absolutePath,
                     totalBytes = totalLength,
                     durationSeconds = elapsedSeconds,
                     contentUriString = contentUri?.toString(),
-                    sha256Checksum = sha256
+                    sha256Checksum = sha256,
+                    averageSpeedMBps = avgSpeed,
+                    isDualChannel = false
                 )
             }
         } finally {

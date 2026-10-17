@@ -16,10 +16,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.*
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -112,6 +112,20 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+        checkClipboardForUrl()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkClipboardForUrl()
+    }
+
+    private fun checkClipboardForUrl() {
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            val text = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()
+            viewModel.onClipboardChecked(text)
+        } catch (_: Exception) {}
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -206,6 +220,7 @@ fun MainScreen(
     val cellularAvailable by viewModel.isCellularAvailable.collectAsState()
     val urlInput by viewModel.urlInput.collectAsState()
     val selectedPreset by viewModel.selectedPreset.collectAsState()
+    val detectedClipboardUrl by viewModel.detectedClipboardUrl.collectAsState()
 
     // Haptic feedback on completion
     LaunchedEffect(downloadState) {
@@ -488,6 +503,85 @@ fun MainScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Smart Context Pill Banner (Clipboard Link Suggestion)
+                    AnimatedVisibility(
+                        visible = !detectedClipboardUrl.isNullOrBlank() && urlInput.isBlank(),
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Link,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "Link detected in clipboard",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                        Text(
+                                            text = detectedClipboardUrl ?: "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Button(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            viewModel.acceptClipboardUrl()
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(32.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.secondary,
+                                            contentColor = MaterialTheme.colorScheme.onSecondary
+                                        )
+                                    ) {
+                                        Text("Paste", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    IconButton(
+                                        onClick = { viewModel.dismissClipboardUrl() },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Close,
+                                            contentDescription = "Dismiss",
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     OutlinedTextField(
                         value = urlInput,
                         onValueChange = { viewModel.onUrlChanged(it) },
@@ -731,8 +825,13 @@ fun MainScreen(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
+                                        val remainingBytes = kotlin.math.max(0L, state.totalBytes - state.downloadedBytes)
+                                        val etaSubText = state.estimatedSecondsRemaining?.let {
+                                            " • ${com.dualboost.downloader.data.formatEta(it)} left (${formatBytes(remainingBytes)} left)"
+                                        } ?: if (remainingBytes > 0 && state.totalBytes > 0) " • ${formatBytes(remainingBytes)} left" else ""
+
                                         Text(
-                                            text = "${formatBytes(state.downloadedBytes)} / ${formatBytes(state.totalBytes)}",
+                                            text = "${formatBytes(state.downloadedBytes)} / ${formatBytes(state.totalBytes)}$etaSubText",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -848,6 +947,16 @@ fun MainScreen(
                                             )
                                         }
                                     }
+                                }
+
+                                // Segmented Dynamic Chunk Strip (Range-enabled Multi-Channel Transfers)
+                                if (state.supportsRanges && state.chunkSnapshots.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                    SegmentedChunkStrip(
+                                        chunkSnapshots = state.chunkSnapshots,
+                                        wifiColor = rowWifiColor,
+                                        cellularColor = rowCellularColor
+                                    )
                                 }
 
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -1007,10 +1116,12 @@ fun MainScreen(
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
+                                        val avgSpeedText = if (state.averageSpeedMBps > 0.0) " at ${com.dualboost.downloader.data.formatSpeed(state.averageSpeedMBps)} avg" else ""
+                                        val dualChannelText = if (state.isDualChannel) " • Aggregated Wi-Fi + 5G Boost ⚡" else ""
                                         Text(
-                                            text = "${formatBytes(state.totalBytes)} downloaded in ${state.durationSeconds}s",
+                                            text = "${formatBytes(state.totalBytes)} downloaded in ${state.durationSeconds}s$avgSpeedText$dualChannelText",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                                         )
                                     }
                                 }
@@ -1361,6 +1472,21 @@ fun NetworkCard(
     isActive: Boolean,
     activeColor: Color
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "NetworkCardPulse")
+    val dotAlpha by if (isActive) {
+        infiniteTransition.animateFloat(
+            initialValue = 0.45f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1200, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "DotPulse"
+        )
+    } else {
+        remember { mutableFloatStateOf(0.4f) }
+    }
+
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
@@ -1396,7 +1522,7 @@ fun NetworkCard(
                     modifier = Modifier
                         .size(10.dp)
                         .clip(CircleShape)
-                        .background(if (isActive) activeColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                        .background(if (isActive) activeColor.copy(alpha = dotAlpha) else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
@@ -1460,6 +1586,22 @@ fun SpeedDetailRow(
     icon: ImageVector,
     isDimmed: Boolean = false
 ) {
+    val isStreaming = speedMBps > 0.05 && !isDimmed
+    val infiniteTransition = rememberInfiniteTransition(label = "SpeedRowPulse")
+    val pulseAlpha by if (isStreaming) {
+        infiniteTransition.animateFloat(
+            initialValue = 0.4f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(700, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "StreamingPulse"
+        )
+    } else {
+        remember { mutableFloatStateOf(1.0f) }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1473,7 +1615,7 @@ fun SpeedDetailRow(
                 modifier = Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(indicatorColor)
+                    .background(indicatorColor.copy(alpha = pulseAlpha))
             )
             Spacer(modifier = Modifier.width(8.dp))
             Icon(
@@ -1496,6 +1638,140 @@ fun SpeedDetailRow(
         )
     }
 }
+
+@Composable
+fun SegmentedChunkStrip(
+    chunkSnapshots: List<com.dualboost.downloader.data.ChunkSnapshot>,
+    wifiColor: Color,
+    cellularColor: Color,
+    modifier: Modifier = Modifier
+) {
+    if (chunkSnapshots.isEmpty()) return
+
+    val infiniteTransition = rememberInfiniteTransition(label = "ChunkShimmer")
+    val shimmerAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ShimmerAlpha"
+    )
+
+    val completedCount = chunkSnapshots.count { it.status == com.dualboost.downloader.data.ChunkStatus.COMPLETED }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Dynamic Chunk Aggregation",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "$completedCount / ${chunkSnapshots.size} chunks complete",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        val rows = chunkSnapshots.chunked(16)
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            rows.forEach { rowChunks ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    rowChunks.forEach { chunk ->
+                        val isCellular = chunk.networkType == com.dualboost.downloader.data.NetworkInterfaceType.CELLULAR
+                        val assignedColor = if (isCellular) cellularColor else wifiColor
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(
+                                    when (chunk.status) {
+                                        com.dualboost.downloader.data.ChunkStatus.COMPLETED -> assignedColor
+                                        com.dualboost.downloader.data.ChunkStatus.DOWNLOADING -> assignedColor.copy(alpha = shimmerAlpha)
+                                        com.dualboost.downloader.data.ChunkStatus.FAILED -> MaterialTheme.colorScheme.error
+                                        com.dualboost.downloader.data.ChunkStatus.PENDING -> MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
+                                    }
+                                )
+                                .border(
+                                    0.5.dp,
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                    RoundedCornerShape(3.dp)
+                                )
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(wifiColor)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Wi-Fi Chunk",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(cellularColor)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "5G Chunk",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Pending",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
 
 fun formatBytes(bytes: Long): String {
     val mb = bytes / (1024.0 * 1024.0)
