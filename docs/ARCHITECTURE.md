@@ -75,9 +75,9 @@ app/src/main/
    - `DualNetworkManager`: Listens to `ConnectivityManager` callbacks for `TRANSPORT_WIFI` and `TRANSPORT_CELLULAR`.
    - Produces dedicated `OkHttpClient` instances whose sockets are locked to specific physical interfaces.
 
-## Database Architecture
-- **MVP State**: In-memory state management. Chunks and real-time telemetry reside in memory.
-- **Planned for Future**: SQLite / Room persistence for download history, paused downloads, and resumed queue state across device reboots.
+## Database Architecture & Persistence
+- **Runtime Engine State**: In-memory state management. Chunks and real-time telemetry reside in memory with atomic `.dualboost_meta` sidecar files in `context.noBackupFilesDir/dualboost_meta` for pause/resume continuity.
+- **Download History & File Library**: App-private atomic JSON ledger (`DownloadHistoryRepository`) storing completed download records in `context.noBackupFilesDir/download_history.json`. Uses pure Kotlin JSON serialization with atomic `.tmp` staging, thread-safe Mutex locking, and reactive `StateFlow` exposure with zero SQLite/Room overhead. Enables persistent storage metering, existence tracking, and safe `FileProvider` triggers (`ACTION_VIEW`, `ACTION_SEND`).
 
 ## API Architecture
 The app communicates with third-party HTTP/HTTPS servers implementing standard RFC 7233 Range Requests:

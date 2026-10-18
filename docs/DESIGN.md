@@ -48,6 +48,7 @@ To ensure physical network transparency across any wallpaper palette:
 - **Download Action Card**: 24dp rounded elevated container with Smart Context Pill Banner (auto-detecting URLs in clipboard), quick clipboard paste, text clear, dynamic quick-test benchmark presets arranged in ascending order (10MB, 25MB, 50MB, 100MB Cloudflare, 150MB, 500MB, 1GB), selected chip visual state with primary border and lightning bolt (`⚡`) range indicators, dynamic server capability captions, and prominent "Boost Download" button.
 - **Dual-Color Progress Bar & Dynamic Chunk Strip**: Stacked proportional bar visualizing the real-time byte contribution between Wi-Fi and 5G, paired with a Segmented Dynamic Chunk Strip displaying multi-block chunk visualizers where individual chunks light up in Cyan (Wi-Fi) or Violet (5G) with live animated shimmer.
 - **File Provider Integration**: Direct "Open File" launcher upon download completion.
+- **Download Library (History Bottom Sheet)**: Sleek Material 3 ModalBottomSheet accessible via the top app bar folder icon (`Icons.Rounded.FolderOpen`). Features a 46dp circular hero badge (`FolderOpen`), real-time storage metrics (`X files • Y MB used`), clean empty-state vector art, dynamic file-type icons (APK, Video, Audio, Generic document), dual-boost speed tags, external existence warnings (`Deleted from storage`), 1-tap FileProvider open/share actions, SHA-256 copy chip, and interactive smart deletion confirmation dialogs.
 
 ## Responsive Breakpoints
 - Standard Phone Portrait (<600dp width): Single-column vertical layout.

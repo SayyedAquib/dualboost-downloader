@@ -43,6 +43,8 @@ Standard Android operating system behavior automatically deactivates or idles th
 9. **Google Material 3 System Harmonization**: Adaptive launcher icon designed to match Google Pixel system apps with clean white background, geometric vector stream convergence, and Monet dynamic themed icon support.
 10. **Curated Quick Test Benchmark Tiers**: Seven pre-configured download presets sorted in ascending order (10 MB, 25 MB, 50 MB, 100 MB Cloudflare, 150 MB, 500 MB, 1 GB) targeting high-capacity Google Edge and Fastly CDNs to easily stress-test dual-channel aggregation across various payload sizes with zero manual typing.
 11. **Desktop Browser Header Spoofing & Adaptive Two-Stage Range Probe**: Automatic Stage 2 probe escalation using Windows 11 Chrome Desktop headers and Client Hints (`Sec-CH-UA-Mobile: ?0`, `Sec-CH-UA-Platform: "Windows"`) when remote CDNs refuse byte ranges to mobile Android clients, unlocking multi-stream acceleration with persistent sidecar state and displaying an active `⚡ Desktop Mode Active` badge.
+12. **Personal Cloud Slicer (Serverless Cloudflare Worker Integration)**: Optional Stage 3 serverless edge proxy that slices non-range streams into HTTP 206 Partial Content on-the-fly, protected by DoH dual-stack anti-SSRF filtering, timing-safe authentication, and port whitelisting.
+13. **Persistent Download History & File Library**: App-private atomic JSON ledger preserving completed download records across sessions with disk usage counters, 1-tap FileProvider opening (`ACTION_VIEW`), system sharing (`ACTION_SEND`), SHA-256 verification copy, and smart deletion choice (history only vs physical device storage).
 
 ## User Flows
 1. **Direct URL Download Flow**:

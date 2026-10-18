@@ -14,15 +14,20 @@ class DownloadRepository(
     private val context: Context,
     val networkProvider: NetworkProvider? = null,
     val engineOverride: DualDownloaderEngine? = null,
-    val speedTestEngineOverride: com.dualboost.downloader.engine.SpeedTestEngine? = null
+    val speedTestEngineOverride: com.dualboost.downloader.engine.SpeedTestEngine? = null,
+    val historyRepositoryOverride: DownloadHistoryRepository? = null
 ) {
+
+    val historyRepository: DownloadHistoryRepository by lazy {
+        historyRepositoryOverride ?: DownloadHistoryRepository(context)
+    }
 
     val networkManager: DualNetworkManager by lazy {
         (networkProvider as? DualNetworkManager) ?: DualNetworkManager(context)
     }
 
     val downloaderEngine: DualDownloaderEngine by lazy {
-        engineOverride ?: DualDownloaderEngine(context, networkProvider ?: networkManager)
+        engineOverride ?: DualDownloaderEngine(context, networkProvider ?: networkManager, historyRepository)
     }
 
     val speedTestEngine: com.dualboost.downloader.engine.SpeedTestEngine by lazy {
@@ -33,6 +38,7 @@ class DownloadRepository(
     val speedTestState: StateFlow<SpeedTestState> get() = speedTestEngine.speedTestState
     val isWifiAvailable: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isWifiAvailable
     val isCellularAvailable: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isCellularAvailable
+    val historyItems: StateFlow<List<DownloadHistoryItem>> get() = historyRepository.historyItems
 
     init {
         try {
@@ -94,6 +100,22 @@ class DownloadRepository(
 
     fun stopSpeedTest() {
         speedTestEngine.stopSpeedTest()
+    }
+
+    suspend fun deleteHistoryItem(itemId: String, deleteFileFromDisk: Boolean): Boolean {
+        return historyRepository.deleteItem(itemId, deleteFileFromDisk)
+    }
+
+    suspend fun clearAllHistory(deleteFilesFromDisk: Boolean) {
+        historyRepository.clearAll(deleteFilesFromDisk)
+    }
+
+    fun calculateHistoryStorageBytes(): Long {
+        return historyRepository.calculateTotalStorageBytes()
+    }
+
+    fun isHistoryFilePresent(item: DownloadHistoryItem): Boolean {
+        return historyRepository.isFilePresent(item)
     }
 }
 

@@ -1,12 +1,18 @@
 package com.dualboost.downloader.ui
 
+import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.dualboost.downloader.DualBoostApp
+import com.dualboost.downloader.data.DownloadHistoryItem
 import com.dualboost.downloader.data.DownloadRepository
 import com.dualboost.downloader.data.DownloadState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.io.File
 
 data class QuickTestPreset(
     val id: String,
@@ -86,6 +92,7 @@ open class MainViewModel(
     val isWifiAvailable: StateFlow<Boolean> = repository?.isWifiAvailable ?: MutableStateFlow(false)
     val isCellularAvailable: StateFlow<Boolean> = repository?.isCellularAvailable ?: MutableStateFlow(false)
     val isDeviceRooted: Boolean = com.dualboost.downloader.security.RootDetector.isDeviceRooted()
+    val historyItems: StateFlow<List<DownloadHistoryItem>> = repository?.historyItems ?: MutableStateFlow(emptyList())
 
     private val _urlInput = MutableStateFlow("")
     val urlInput: StateFlow<String> = _urlInput.asStateFlow()
@@ -189,11 +196,92 @@ open class MainViewModel(
     }
 
     fun startSpeedTest() {
-        repository?.startSpeedTest()
+        speedTestEngine?.startSpeedTest() ?: repository?.startSpeedTest()
     }
 
     fun stopSpeedTest() {
-        repository?.stopSpeedTest()
+        speedTestEngine?.stopSpeedTest() ?: repository?.stopSpeedTest()
+    }
+
+    private val speedTestEngine get() = repository?.speedTestEngine
+
+    fun deleteHistoryItem(item: DownloadHistoryItem, deleteFileFromDisk: Boolean) {
+        viewModelScope.launch {
+            repository?.deleteHistoryItem(item.id, deleteFileFromDisk)
+        }
+    }
+
+    fun clearAllHistory(deleteFilesFromDisk: Boolean) {
+        viewModelScope.launch {
+            repository?.clearAllHistory(deleteFilesFromDisk)
+        }
+    }
+
+    fun calculateTotalStorageBytes(): Long {
+        return repository?.calculateHistoryStorageBytes() ?: 0L
+    }
+
+    fun isFilePresent(item: DownloadHistoryItem): Boolean {
+        return repository?.isHistoryFilePresent(item) ?: false
+    }
+
+    fun openFile(context: Context, item: DownloadHistoryItem): Boolean {
+        return try {
+            val file = File(item.filePath)
+            if (!file.exists()) return false
+
+            val uri = runCatching {
+                androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+            }.getOrNull() ?: item.contentUriString?.let { android.net.Uri.parse(it) } ?: return false
+
+            val ext = file.extension.lowercase(java.util.Locale.ROOT)
+            val mimeType = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun shareFile(context: Context, item: DownloadHistoryItem): Boolean {
+        return try {
+            val file = File(item.filePath)
+            if (!file.exists()) return false
+
+            val uri = runCatching {
+                androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+            }.getOrNull() ?: item.contentUriString?.let { android.net.Uri.parse(it) } ?: return false
+
+            val ext = file.extension.lowercase(java.util.Locale.ROOT)
+            val mimeType = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(shareIntent, "Share ${file.name}").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 }
 

@@ -43,8 +43,13 @@ import kotlin.math.min
 
 class DualDownloaderEngine(
     private val context: Context,
-    private val networkManager: NetworkProvider
+    private val networkManager: NetworkProvider,
+    historyRepositoryOverride: com.dualboost.downloader.data.DownloadHistoryRepository? = null
 ) {
+    val historyRepository: com.dualboost.downloader.data.DownloadHistoryRepository by lazy {
+        historyRepositoryOverride ?: com.dualboost.downloader.data.DownloadHistoryRepository(context)
+    }
+
     private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
 
@@ -1099,7 +1104,7 @@ class DualDownloaderEngine(
         val avgSpeed = if (elapsedSeconds > 0) (contentLength.toDouble() / (1024.0 * 1024.0)) / elapsedSeconds else 0.0
         val isDual = cellularDownloadedBytes.get() > 0 && wifiDownloadedBytes.get() > 0
 
-        _downloadState.value = DownloadState.Completed(
+        val completedState = DownloadState.Completed(
             fileName = fileName,
             filePath = outputFile.absolutePath,
             totalBytes = contentLength,
@@ -1109,6 +1114,24 @@ class DualDownloaderEngine(
             averageSpeedMBps = avgSpeed,
             isDualChannel = isDual
         )
+        _downloadState.value = completedState
+
+        try {
+            historyRepository.recordDownload(
+                com.dualboost.downloader.data.DownloadHistoryItem(
+                    fileName = fileName,
+                    filePath = outputFile.absolutePath,
+                    contentUriString = contentUri?.toString(),
+                    fileSize = contentLength,
+                    sha256Checksum = sha256,
+                    durationSeconds = elapsedSeconds,
+                    averageSpeedMBps = avgSpeed,
+                    isDualChannel = isDual
+                )
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to record download in history: ${e.message}")
+        }
     }
 
     private suspend fun executeSingleStreamDownload(
@@ -1203,7 +1226,7 @@ class DualDownloaderEngine(
                 val elapsedSeconds = max(1L, (System.currentTimeMillis() - startTime) / 1000L)
                 val avgSpeed = if (elapsedSeconds > 0 && totalLength > 0) (totalLength.toDouble() / (1024.0 * 1024.0)) / elapsedSeconds else 0.0
 
-                _downloadState.value = DownloadState.Completed(
+                val completedState = DownloadState.Completed(
                     fileName = outputFile.name,
                     filePath = outputFile.absolutePath,
                     totalBytes = totalLength,
@@ -1213,6 +1236,24 @@ class DualDownloaderEngine(
                     averageSpeedMBps = avgSpeed,
                     isDualChannel = false
                 )
+                _downloadState.value = completedState
+
+                try {
+                    historyRepository.recordDownload(
+                        com.dualboost.downloader.data.DownloadHistoryItem(
+                            fileName = outputFile.name,
+                            filePath = outputFile.absolutePath,
+                            contentUriString = contentUri?.toString(),
+                            fileSize = totalLength,
+                            sha256Checksum = sha256,
+                            durationSeconds = elapsedSeconds,
+                            averageSpeedMBps = avgSpeed,
+                            isDualChannel = false
+                        )
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to record single-stream download in history: ${e.message}")
+                }
             }
         } finally {
             activeCalls.remove(call)

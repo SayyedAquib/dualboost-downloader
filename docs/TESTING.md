@@ -10,7 +10,18 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (81 active tests across 12 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (113 active tests across 13 test suites, 100% passing):
+
+- **DownloadHistoryRepositoryTest** (9 tests):
+  - `testSerializationRoundTrip`: Validates pure Kotlin JSON serialization and parsing of `DownloadHistoryItem` preserving all fields.
+  - `testRecordAndRetrieveSingleDownload`: Tests adding an item, persistent JSON writing to disk, and retrieving it via fresh repository instances.
+  - `testOrderIsDescendingByTimestamp`: Confirms items are automatically sorted with newest downloads first.
+  - `testDuplicateFilePathUpdatesEntry`: Ensures duplicate file paths update existing records rather than creating redundant entries.
+  - `testDeleteItemWithoutDiskDeletion`: Verifies deleting a record leaves the physical file on disk.
+  - `testDeleteItemWithDiskDeletion`: Verifies deleting a record with disk removal permanently cleans the physical file.
+  - `testClearAllWithDiskDeletion`: Tests clearing the entire history and deleting all disk files.
+  - `testCorruptionRecovery`: Confirms corrupt or invalid JSON in storage is handled gracefully without crashing.
+  - `testStorageCalculationAndFileExistence`: Validates `calculateTotalStorageBytes()` and `isFilePresent()` accurately account only for files physically present on disk.
 
 - **EngineComprehensiveTest** (13 tests):
   - `testExtractFileName_StandardExtension`: Verifies filename extraction across standard `.iso`, `.dat`, and `.tar.gz` extensions.

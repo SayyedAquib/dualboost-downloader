@@ -216,6 +216,7 @@ fun MainScreen(
     var showInfoDialog by remember { mutableStateOf(false) }
     var showSpeedTestSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
+    var showHistorySheet by remember { mutableStateOf(false) }
 
     val downloadState by viewModel.downloadState.collectAsState()
     val wifiAvailable by viewModel.isWifiAvailable.collectAsState()
@@ -260,6 +261,13 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showHistorySheet = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.FolderOpen,
+                            contentDescription = "Download Library",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     IconButton(onClick = { showSpeedTestSheet = true }) {
                         Icon(
                             imageVector = Icons.Rounded.Speed,
@@ -1483,6 +1491,15 @@ fun MainScreen(
                     Text("Got it")
                 }
             }
+        )
+    }
+
+    if (showHistorySheet) {
+        val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        HistoryBottomSheet(
+            viewModel = viewModel,
+            sheetState = historySheetState,
+            onDismissRequest = { showHistorySheet = false }
         )
     }
 

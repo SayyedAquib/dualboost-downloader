@@ -1,9 +1,18 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is fully updated with project-tailored context indexing optimization (`.antigravityignore`), the **Comprehensive UI Contrast System & Automated WCAG Verification**, the **Personal Cloud Slicer Sleek Circular Redesign**, **ADR-027**, **ADR-026**, **ADR-025**, and **ADR-024**. Over 530+ MB of binary build outputs and diagnostic caches are shielded from context indexing while preserving all Android Kotlin source, docs, test suites, and Cloud Slicer worker files. 104 unit tests pass with 100% success rate, and the obfuscated release APK (1.37 MB) is live on the connected Google Pixel 9 (`53201VDAQ00067`).
+DualBoost Downloader is fully updated with the **Persistent Download History & File Library** ([ADR-028](file:///a:/Development/dualboost-downloader/docs/DECISIONS.md#adr-028)), project-tailored context indexing optimization (`.antigravityignore`), the **Comprehensive UI Contrast System & Automated WCAG Verification**, the **Personal Cloud Slicer Sleek Circular Redesign**, **ADR-027**, **ADR-026**, **ADR-025**, and **ADR-024**. Completed downloads are persistently tracked in an app-private atomic JSON ledger with safe 1-tap `FileProvider` opening, sharing, and SHA-256 copy. All 113 unit tests pass with 100% success rate, and the obfuscated release APK (1.42 MB) is live and verified on the connected Google Pixel 9 (`53201VDAQ00067`).
 
 ## Recently Completed
+- **Persistent Download History & File Library (`HistoryBottomSheet.kt` / [ADR-028](file:///a:/Development/dualboost-downloader/docs/DECISIONS.md#adr-028))**:
+  - **Atomic Zero-Dependency Storage**: Built `DownloadHistoryItem.kt` and `DownloadHistoryRepository.kt` utilizing pure Kotlin JSON serialization in `context.noBackupFilesDir/download_history.json` with thread-safe Mutex locking and zero added database bloat.
+  - **Material 3 History Bottom Sheet**: Added a Folder action button (`Icons.Rounded.FolderOpen`) in the TopAppBar launching `HistoryBottomSheet.kt` with disk usage metrics (`X files • Y MB used`), clean empty-state vector art, and chronological item cards.
+  - **Native 1-Tap File Actions**: Integrated safe Android `FileProvider` (`${applicationId}.fileprovider`) triggers for "Open File" (`ACTION_VIEW` with dynamic MIME type mapping), "Share File" (`ACTION_SEND`), and "Copy SHA-256" checksum chip.
+  - **Smart Deletion Choice**: Interactive confirmation dialog allowing users to either remove the entry from history only (leaving file in Downloads) or delete the physical file from device storage.
+  - **External Existence Verification**: Checks `File.exists()` on every load and displays a subtle `Deleted from storage` warning badge if files were removed externally.
+  - **Engine Auto-Recording**: Updated `DualDownloaderEngine.kt` to automatically record completions across both dual-channel and single-stream paths without touching socket or chunking logic.
+  - **Unit Test Suite Expansion**: Added 9 new unit tests in `DownloadHistoryRepositoryTest.kt` (100% pass across all 113 unit tests).
+  - **Production Release Deployment**: Compiled release APK (1.42 MB) via `assembleRelease` and deployed onto attached Google Pixel 9 (`53201VDAQ00067`), visually verified on live screen.
 - **Project-Tailored Context Optimization (`.antigravityignore`)**:
   - **Comprehensive Exclusion Rules**: Created `.antigravityignore` blocking heavy Android/Gradle build artifacts (`build/`, `app/build/`, `.gradle/`, `.kotlin/`, `*.apk`, `*.dex`), Cloud Slicer edge worker caches (`node_modules/`, `.wrangler/`), memory dumps/profiler traces (`*.hprof`, `*.dump`), and runtime sidecars (`*.dualboost_meta`).
   - **Source & Asset Protection**: Preserved Gradle CLI wrapper (`!gradle/wrapper/gradle-wrapper.jar`), Cloud Slicer source (`worker.js`, `wrangler.toml`), and UI drawables/mipmaps (`app/src/main/res/**`).
@@ -134,6 +143,7 @@ DualBoost Downloader is fully updated with project-tailored context indexing opt
 - ADR-025: Phase 1 Security Hardening (Interface-Specific DNS Binding, Privacy-Conscious Clipboard Access, and Secret Key UI Masking).
 - ADR-026: Phase 2 Security Hardening & Store Compliance (Scoped Storage Migration, FileProvider Containment, and R8 Binary Protection).
 - ADR-027: Advanced Edge & Runtime Security Hardening (Dual-Stack DoH SSRF Defense, Strict Web Port Enforcement, HTTPS Upgrade Assist, and Advisory Root Awareness).
+- ADR-028: Persistent Download History & File Library with Safe Android FileProvider Actions.
 
 ## Operational Guidelines & Communication Rules
 - **External Code Deployment Rule**: Whenever modifying external components (such as `cloud-slicer/worker.js`), proactively notify the user immediately in the response, stating clearly whether redeployment is optional or required, what changed, and how to update it in 30 seconds.
