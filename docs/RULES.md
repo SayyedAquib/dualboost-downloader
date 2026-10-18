@@ -91,6 +91,7 @@
 ## Communication & Explanation Rules
 - ALWAYS explain concepts, technical decisions, and answers in the simplest words possible.
 - ALWAYS accompany explanations with intuitive real-world analogies and practical examples directly from the DualBoost Downloader app.
+- ALWAYS proactively notify the user immediately whenever any external component (such as Cloudflare Worker scripts, cloud functions, or server deployment code) is modified. Explicitly clarify: (1) whether redeployment is optional or required right away, (2) what changed, and (3) provide simple copy-paste steps so the user doesn't have to guess.
 
 ## Material 3 Contrast & Color Token Pairing Rules
 To prevent inverted contrast regressions (e.g. black-on-dark in light mode, white-on-white in dark mode, or washed-out dynamic colors):

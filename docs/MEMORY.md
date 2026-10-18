@@ -1,9 +1,13 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is fully updated with the **Comprehensive UI Contrast System & Automated WCAG Verification** on top of the **Personal Cloud Slicer Sleek Circular Redesign**, **ADR-027**, **ADR-026**, **ADR-025**, and **ADR-024**. The complete codebase has been audited and remediated against contrast inversions (eliminating all container/content token mismatches). Automated tests (`ThemeContrastTest.kt`) mathematically prove WCAG AA contrast compliance (>= 4.5:1 for standard pairings, >= 3.0:1 for icons) across both Light and Dark palettes. 104 unit tests pass with 100% success rate, and the obfuscated release APK (1.37 MB) is live and verified on the connected Google Pixel 9 (`53201VDAQ00067`).
+DualBoost Downloader is fully updated with project-tailored context indexing optimization (`.antigravityignore`), the **Comprehensive UI Contrast System & Automated WCAG Verification**, the **Personal Cloud Slicer Sleek Circular Redesign**, **ADR-027**, **ADR-026**, **ADR-025**, and **ADR-024**. Over 530+ MB of binary build outputs and diagnostic caches are shielded from context indexing while preserving all Android Kotlin source, docs, test suites, and Cloud Slicer worker files. 104 unit tests pass with 100% success rate, and the obfuscated release APK (1.37 MB) is live on the connected Google Pixel 9 (`53201VDAQ00067`).
 
 ## Recently Completed
+- **Project-Tailored Context Optimization (`.antigravityignore`)**:
+  - **Comprehensive Exclusion Rules**: Created `.antigravityignore` blocking heavy Android/Gradle build artifacts (`build/`, `app/build/`, `.gradle/`, `.kotlin/`, `*.apk`, `*.dex`), Cloud Slicer edge worker caches (`node_modules/`, `.wrangler/`), memory dumps/profiler traces (`*.hprof`, `*.dump`), and runtime sidecars (`*.dualboost_meta`).
+  - **Source & Asset Protection**: Preserved Gradle CLI wrapper (`!gradle/wrapper/gradle-wrapper.jar`), Cloud Slicer source (`worker.js`, `wrangler.toml`), and UI drawables/mipmaps (`app/src/main/res/**`).
+  - **Context Acceleration**: Prevents Antigravity's context indexer from scanning ~534 MB of temporary build caches, optimizing token economy and code search relevance.
 - **Comprehensive UI Contrast System & Automated WCAG Verification (`ThemeContrastTest.kt` / Design Rules)**:
   - **Codebase-Wide Contrast Audit & Remediation**: Audited all Compose UI files (`MainActivity.kt`, `SettingsBottomSheet.kt`, `SpeedTestBottomSheet.kt`). Fixed 4 token mismatches where container tokens were paired with accent tints instead of designated on-tokens (updated root banner, idle download icon, and error cards in both sheets to use `onErrorContainer` and universal 14% translucent brand tint).
   - **Automated WCAG AA Contrast Test Suite (`ThemeContrastTest.kt`)**: Implemented relative luminance and contrast ratio calculations asserting >= 4.5:1 for `primary`/`onPrimary`, `primaryContainer`/`onPrimaryContainer`, `secondaryContainer`/`onSecondaryContainer`, `tertiaryContainer`/`onTertiaryContainer`, `errorContainer`/`onErrorContainer`, `surface`/`onSurface`, and >= 3.0:1 for translucent brand tint patterns across both Light and Dark themes.
@@ -129,9 +133,14 @@ DualBoost Downloader is fully updated with the **Comprehensive UI Contrast Syste
 - ADR-024: Expressive Telemetry & Real-Time UX Architecture (Segmented Dynamic Chunk Strip, Countdown ETA, Smart Clipboard Suggestion & Build Acceleration).
 - ADR-025: Phase 1 Security Hardening (Interface-Specific DNS Binding, Privacy-Conscious Clipboard Access, and Secret Key UI Masking).
 - ADR-026: Phase 2 Security Hardening & Store Compliance (Scoped Storage Migration, FileProvider Containment, and R8 Binary Protection).
+- ADR-027: Advanced Edge & Runtime Security Hardening (Dual-Stack DoH SSRF Defense, Strict Web Port Enforcement, HTTPS Upgrade Assist, and Advisory Root Awareness).
+
+## Operational Guidelines & Communication Rules
+- **External Code Deployment Rule**: Whenever modifying external components (such as `cloud-slicer/worker.js`), proactively notify the user immediately in the response, stating clearly whether redeployment is optional or required, what changed, and how to update it in 30 seconds.
 
 ## Next Steps
-1. User can deploy `cloud-slicer/worker.js` to Cloudflare (or tap "Copy Script" in the app's Settings).
+1. User can deploy updated `cloud-slicer/worker.js` to Cloudflare whenever ready (or tap "Copy Script" in the app's Settings).
 2. Enter the Worker URL in DualBoost Settings and tap "Test Worker".
 3. Download any dynamic stream (like the Cloudflare 100MB test link) and enjoy high-speed dual Wi-Fi + 5G download aggregation!
+
 

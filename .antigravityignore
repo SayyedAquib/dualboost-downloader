@@ -1,0 +1,97 @@
+# ==============================================================================
+# DualBoost Downloader - Antigravity Index & Context Ignore Configuration
+# ==============================================================================
+# This file defines ignore rules for Antigravity AI code search, context indexing,
+# and file exploration tools. Keeping build artifacts, binary caches, and diagnostic
+# dumps out of context maximizes token efficiency and search accuracy.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Android & Gradle Build Artifacts & Intermediate Outputs
+# ------------------------------------------------------------------------------
+build/
+app/build/
+**/build/
+bin/
+gen/
+out/
+buildOutputCleanup/
+
+# Gradle & Kotlin daemon caches
+.gradle/
+.kotlin/
+
+# Compiled bytecodes and package binaries
+*.apk
+*.aar
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Explicitly ensure Gradle CLI wrapper remains accessible
+!gradle/wrapper/gradle-wrapper.jar
+
+# ------------------------------------------------------------------------------
+# 2. Local Machine Configuration & Security Credentials
+# ------------------------------------------------------------------------------
+local.properties
+signing.properties
+*.jks
+*.keystore
+*.key
+*.p12
+*.pem
+
+# ------------------------------------------------------------------------------
+# 3. IDE, Editor & OS-Specific Metadata
+# ------------------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS temporary indexing files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ------------------------------------------------------------------------------
+# 4. Personal Cloud Slicer Edge Worker Development Caches
+# ------------------------------------------------------------------------------
+# Preserves source files: worker.js, wrangler.toml, README.md
+cloud-slicer/node_modules/
+cloud-slicer/.wrangler/
+cloud-slicer/.mf/
+cloud-slicer/dist/
+**/node_modules/
+
+# ------------------------------------------------------------------------------
+# 5. DualBoost Runtime Sidecars, Test Reports & Profiler Dumps
+# ------------------------------------------------------------------------------
+*.dualboost_meta
+*.dualboost_meta.tmp
+*.part
+*.bin
+*.tmp
+*.hprof
+*.dump
+*.log
+reports/
+test-reports/
+
+# ------------------------------------------------------------------------------
+# 6. Temporary Screencaps & Root Diagnostic Scratch
+# ------------------------------------------------------------------------------
+# Ignores temporary screen captures in the workspace root without affecting
+# UI drawables or mipmap assets in app/src/main/res/
+/screen_*.png
+/media_*.png
+/temp_*
+
