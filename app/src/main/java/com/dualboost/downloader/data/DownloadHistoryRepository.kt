@@ -205,12 +205,10 @@ class DownloadHistoryRepository(
                 parentDir.mkdirs()
             }
 
-            // Atomic file write using .tmp rename
+            // SEC-AUDIT M-2: Atomic file write using POSIX rename (no delete-then-rename gap)
+            // On Android's ext4/f2fs, renameTo() atomically replaces the target file
             val tempFile = File(parentDir, "${historyFile.name}.tmp")
             tempFile.writeText(jsonText)
-            if (historyFile.exists()) {
-                historyFile.delete()
-            }
             tempFile.renameTo(historyFile)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to persist download history to disk: ${e.message}", e)

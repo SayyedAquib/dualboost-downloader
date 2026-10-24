@@ -22,7 +22,22 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+
+            // SEC-AUDIT C-2: Use release keystore if environment variables are set,
+            // else fall back to debug for local development builds only
+            val releaseKeystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
+            signingConfig = if (!releaseKeystorePath.isNullOrBlank()) {
+                signingConfigs.create("release") {
+                    storeFile = file(releaseKeystorePath)
+                    storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD") ?: ""
+                    keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
+                    keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: ""
+                }
+            } else {
+                // WARNING: Debug signing for local development only. Set env vars for production builds.
+                signingConfigs.getByName("debug")
+            }
+
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -61,6 +76,9 @@ dependencies {
     // Networking & Concurrency
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
+
+    // SEC-AUDIT C-1: Encrypted credential storage via Android Keystore
+    implementation(libs.androidx.security.crypto)
 
     // Unit & Integration Testing
     testImplementation(libs.junit)

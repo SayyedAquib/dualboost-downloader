@@ -24,6 +24,7 @@ class DownloadForegroundService : Service() {
     private val binder = LocalBinder()
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wakeLockRenewalJob: Job? = null
 
     lateinit var networkManager: DualNetworkManager
         private set
@@ -76,6 +77,7 @@ class DownloadForegroundService : Service() {
         return START_NOT_STICKY
     }
 
+    // SEC-AUDIT L-3: WakeLock with auto-renewal for downloads exceeding 30 minutes
     private fun acquireWakeLock() {
         if (wakeLock == null) {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -87,9 +89,25 @@ class DownloadForegroundService : Service() {
             }
         }
         wakeLock?.acquire(30 * 60 * 1000L /* 30 minutes max */)
+        scheduleWakeLockRenewal()
+    }
+
+    private fun scheduleWakeLockRenewal() {
+        wakeLockRenewalJob?.cancel()
+        wakeLockRenewalJob = serviceScope.launch {
+            while (isActive) {
+                delay(25 * 60 * 1000L) // Renew 5 minutes before expiry
+                val state = downloaderEngine.downloadState.value
+                if (state is DownloadState.Downloading || state is DownloadState.Probing || state is DownloadState.AutoRecovering) {
+                    wakeLock?.acquire(30 * 60 * 1000L)
+                }
+            }
+        }
     }
 
     private fun releaseWakeLock() {
+        wakeLockRenewalJob?.cancel()
+        wakeLockRenewalJob = null
         try {
             if (wakeLock?.isHeld == true) {
                 wakeLock?.release()

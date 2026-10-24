@@ -39,6 +39,11 @@
 
 ## Security Rules
 - Do not log sensitive user URLs, authorization tokens, or carrier IMSI/IMEI identifiers.
+- Strip `Log.v`, `Log.d`, and `Log.i` calls in release builds via ProGuard/R8 `-assumenosideeffects`.
+- Always store authentication keys, secrets, and credentials in Android Keystore-backed `EncryptedSharedPreferences`.
+- Never commit keystores, signing keys, or `keystore.properties` to version control.
+- Enforce TLS 1.2+ (`ConnectionSpec.MODERN_TLS`) and domain-specific certificate pinning for sensitive edge services.
+- Explicitly declare backup exclusion rules in `data_extraction_rules.xml` and `backup_rules.xml`.
 - Always require runtime `POST_NOTIFICATIONS` permission before posting notifications on Android 13+.
 
 ## Dependency Rules

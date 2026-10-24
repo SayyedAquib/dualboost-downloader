@@ -1,9 +1,28 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is fully updated with the **Persistent Download History & File Library** ([ADR-028](file:///a:/Development/dualboost-downloader/docs/DECISIONS.md#adr-028)), project-tailored context indexing optimization (`.antigravityignore`), the **Comprehensive UI Contrast System & Automated WCAG Verification**, the **Personal Cloud Slicer Sleek Circular Redesign**, **ADR-027**, **ADR-026**, **ADR-025**, and **ADR-024**. Completed downloads are persistently tracked in an app-private atomic JSON ledger with safe 1-tap `FileProvider` opening, sharing, and SHA-256 copy. All 113 unit tests pass with 100% success rate, and the obfuscated release APK (1.42 MB) is live and verified on the connected Google Pixel 9 (`53201VDAQ00067`).
+DualBoost Downloader is fully updated with the **Comprehensive Security Hardening & OWASP MASVS Compliance** ([ADR-029](file:///a:/Development/dualboost-downloader/docs/DECISIONS.md#adr-029)), resolving all 16 security findings identified in the senior security audit across Phase 1 (Quick Wins), Phase 2 (Core Hardening), and Phase 3 (Advanced Defenses). Highlights include Keystore-backed AES-256 `EncryptedSharedPreferences` for Cloud Slicer secrets with zero-trace migration, single shared `RandomAccessFile` concurrency safety, R8/ProGuard release log stripping (`Log.v/d/i`), explicit backup exclusion rules, SSRF TOCTOU prevention with DNS resolution override, TLS 1.2+ enforcement with `*.workers.dev` certificate pinning, multi-signal Magisk/KernelSU/Zygisk tamper detection, and environment-based release signing configuration. All unit tests pass with 100% success rate.
 
 ## Recently Completed
+- **Comprehensive Security Hardening & OWASP MASVS Compliance (ADR-029)**:
+  - **Phase 1 (Quick Wins)**:
+    - **H-4 (Malicious URL Input)**: Hardened `extractUrl()` in `MainActivity.kt` using OkHttp `toHttpUrlOrNull()` parser, returning `""` for invalid schemes to prevent `file://` or `javascript:` injection via `ACTION_SEND`.
+    - **H-5 (Filesystem DoS)**: Capped candidate filename loop at 999 iterations with epoch timestamp fallback in `DualDownloaderEngine.kt`.
+    - **M-2 (Atomic History Storage)**: Removed unsafe intermediate file deletion before `renameTo()` in `DownloadHistoryRepository.saveToDiskLocked`.
+    - **M-5 (TLS 1.2+ Enforcement)**: Configured `ConnectionSpec.MODERN_TLS` on `baseOkHttpClient` in `DualNetworkManager.kt` blocking deprecated TLS 1.0/1.1 protocols.
+    - **L-3 (WakeLock Renewal)**: Added periodic 25-minute WakeLock renewal job in `DownloadForegroundService.kt` to ensure long downloads (>30 min) are never throttled by Android Doze.
+  - **Phase 2 (Core Hardening)**:
+    - **C-1 (Keystore Credential Protection)**: Integrated `androidx.security:security-crypto` 1.1.0-alpha06. Migrated `SlicerPreferences.kt` to AES-256-GCM `EncryptedSharedPreferences` with MasterKey and automatic migration + wiping of legacy plaintext credentials.
+    - **C-2 (Release Signing Pipeline)**: Rewrote release signing in `app/build.gradle.kts` to pull credentials from environment variables (`RELEASE_KEYSTORE_PATH`, etc.) with debug dev fallback; added `keystore.properties.template` and `.gitignore` rules.
+    - **H-3 (Single Shared RAF Descriptor)**: Refactored `DualDownloaderEngine.kt` to open a single shared `RandomAccessFile` handle passed to all 4 concurrent workers, eliminating competing file descriptors and serializing writes under `fileWriteMutex`.
+    - **M-1 & L-4 (ProGuard/R8 Log Stripping & Obfuscation)**: Appended `-assumenosideeffects` rules stripping `Log.v`, `Log.d`, and `Log.i` calls in release builds, plus class repackaging (`-repackageclasses 'db'`) and access modification.
+    - **M-4 (Backup Hardening)**: Created `data_extraction_rules.xml` (API 31+) and `backup_rules.xml` (API 23-30) excluding all domains from cloud backup and D2D transfers, wired to `AndroidManifest.xml`.
+  - **Phase 3 (Advanced Defenses)**:
+    - **H-1 (Cloud Slicer SSRF TOCTOU Defense)**: Added `cf: { resolveOverride: resolvedHostname }` across all upstream `fetch()` calls in the embedded worker script to prevent DNS rebinding attacks.
+    - **H-2 (TLS Certificate Pinning)**: Attached `CertificatePinner` for `*.workers.dev` (Cloudflare Inc ECC CA-3 & DigiCert backup) to `DualNetworkManager`.
+    - **M-3 (Multi-Signal Tamper Detection)**: Expanded `RootDetector.kt` to inspect Magisk artifacts (`/data/adb/magisk`), `/proc/self/mounts` (Magisk/KernelSU tmpfs), `/proc/self/maps` (Zygisk/Riru), and system PATH.
+    - **L-1 (FileProvider Directory Scope)**: Tightened `file_paths.xml` directory scopes to explicit paths with trailing slashes.
+    - **L-2 (Clipboard Privacy Consistency)**: Routed trailing-icon paste button in `MainActivity.kt` through the privacy-conscious `onPasteFromClipboard()` handler.
 - **Persistent Download History & File Library (`HistoryBottomSheet.kt` / [ADR-028](file:///a:/Development/dualboost-downloader/docs/DECISIONS.md#adr-028))**:
   - **Atomic Zero-Dependency Storage**: Built `DownloadHistoryItem.kt` and `DownloadHistoryRepository.kt` utilizing pure Kotlin JSON serialization in `context.noBackupFilesDir/download_history.json` with thread-safe Mutex locking and zero added database bloat.
   - **Material 3 History Bottom Sheet**: Added a Folder action button (`Icons.Rounded.FolderOpen`) in the TopAppBar launching `HistoryBottomSheet.kt` with disk usage metrics (`X files • Y MB used`), clean empty-state vector art, and chronological item cards.

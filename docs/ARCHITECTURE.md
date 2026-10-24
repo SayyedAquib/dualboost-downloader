@@ -32,7 +32,8 @@ graph TD
 - **Platform**: Android SDK 35 (Target: Android 15 / Pixel 9, Min: API 26)
 - **UI Framework**: Android Jetpack Compose with Material 3
 - **Concurrency**: Kotlin Coroutines (`kotlinx.coroutines.android` 1.9.0) with StateFlow
-- **Networking**: Square OkHttp 4.12.0
+- **Networking**: Square OkHttp 4.12.0 (TLS 1.2+ `MODERN_TLS` & Certificate Pinning)
+- **Security & Crypto**: AndroidX Security Crypto (`security-crypto` 1.1.0-alpha06) for Keystore-backed AES-256-GCM
 - **Build System**: Gradle 8.10.2 via Kotlin DSL (`build.gradle.kts`)
 - **Tooling**: Android Debug Bridge (ADB), Command-Line Tools (no IDE dependency)
 
@@ -64,16 +65,16 @@ app/src/main/
    - `DownloadRepository`: Coordinates `DualNetworkManager` and `DualDownloaderEngine`, dispatching background tasks to `DownloadForegroundService` without relying on ephemeral service bindings.
 3. **Service Layer (`com.dualboost.downloader.service`)**:
    - `DownloadForegroundService`: Keeps process alive when screen locks or app moves to background.
-   - Holds Android `PowerManager.PARTIAL_WAKE_LOCK` to prevent CPU throttling while downloading.
+   - Holds Android `PowerManager.PARTIAL_WAKE_LOCK` with automated 25-minute periodic renewal job to prevent CPU throttling on multi-hour downloads.
    - Manages Android `NotificationManager` with a 1000ms throttler to avoid system message shedding.
    - Guards against race conditions by checking current engine state before initiating downloads.
 4. **Execution Engine Layer (`com.dualboost.downloader.engine`)**:
-   - `DualDownloaderEngine`: Dynamically computes headers, probes remote servers, validates storage via `StatFs`, partitions files into 10MB byte segments, manages concurrent work queues, produces live `ChunkSnapshot` arrays, calculates ETA countdown seconds (`formatEta`), computes binary Megabytes per second (`MB/s`) speed with adaptive `KB/s` formatting (`formatSpeed`), handles single-stream non-range server fallbacks, and writes to disk via `RandomAccessFile`.
+   - `DualDownloaderEngine`: Dynamically computes headers, probes remote servers, validates storage via `StatFs`, partitions files into 10MB byte segments, manages concurrent work queues, produces live `ChunkSnapshot` arrays, calculates ETA countdown seconds (`formatEta`), computes binary Megabytes per second (`MB/s`) speed with adaptive `KB/s` formatting (`formatSpeed`), handles single-stream non-range server fallbacks, and writes to disk via a single shared `RandomAccessFile` handle serialized under `fileWriteMutex`.
    - `SpeedTestEngine`: Ephemeral 3-phase throughput benchmark engine (Wi-Fi 3s -> 5G 3s -> DualBoost 4s) streaming bytes directly into an in-memory discard buffer (0 bytes stored on disk) and reporting real-time speeds in `MB/s`.
 5. **Transport Layer (`com.dualboost.downloader.network`)**:
    - `NetworkProvider`: Decoupled interface defining interface availability and client factories, allowing seamless MockWebServer integration testing.
    - `DualNetworkManager`: Listens to `ConnectivityManager` callbacks for `TRANSPORT_WIFI` and `TRANSPORT_CELLULAR`.
-   - Produces dedicated `OkHttpClient` instances whose sockets are locked to specific physical interfaces.
+   - Produces dedicated `OkHttpClient` instances whose sockets are locked to specific physical interfaces, enforcing `MODERN_TLS` (TLS 1.2+ with forward secrecy) and `CertificatePinner` for `*.workers.dev` endpoints.
 
 ## Database Architecture & Persistence
 - **Runtime Engine State**: In-memory state management. Chunks and real-time telemetry reside in memory with atomic `.dualboost_meta` sidecar files in `context.noBackupFilesDir/dualboost_meta` for pause/resume continuity.

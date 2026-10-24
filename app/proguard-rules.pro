@@ -12,6 +12,7 @@
 -dontwarn okio.**
 -dontwarn javax.annotation.**
 -dontwarn org.conscrypt.**
+-dontwarn com.google.errorprone.annotations.**
 -keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
 
 # Kotlin Coroutines
@@ -25,3 +26,18 @@
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
+
+# ============================================================
+# SEC-AUDIT: Strip verbose and debug log calls in release builds
+# Addresses: M-1 (URL leakage in logcat) + L-4 (ProGuard hardening)
+# ============================================================
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
+
+# Obfuscate class names for additional tamper resistance
+-repackageclasses 'db'
+-allowaccessmodification
+

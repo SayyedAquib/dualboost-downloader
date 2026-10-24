@@ -9,6 +9,8 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import okhttp3.CertificatePinner
+import okhttp3.ConnectionSpec
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -35,8 +37,22 @@ class DualNetworkManager(context: Context) : NetworkProvider {
     private val _isCellularAvailable = MutableStateFlow(false)
     override val isCellularAvailable: StateFlow<Boolean> = _isCellularAvailable.asStateFlow()
 
-    // Base client template
+    // SEC-AUDIT H-2: Cloudflare Edge CA pins (*.workers.dev) for Cloud Slicer endpoint
+    // Primary: Cloudflare Inc ECC CA-3
+    // Backup: DigiCert Global Root G2
+    private val cloudflareSlicerPinner = CertificatePinner.Builder()
+        .add(
+            "*.workers.dev",
+            "sha256/Wf0HMiAPHknqFVnwDMLZPGbJ2EFhBj1eQyi7gMS/Vxo=",
+            "sha256/jQJTbIh0grw0/1TkHSumWb+Fs0Ggogr621gT3PvPKG0="
+        )
+        .build()
+
+    // SEC-AUDIT M-5: Enforce TLS 1.2+ with modern cipher suites (blocks deprecated TLS 1.0/1.1)
+    // CLEARTEXT included for localhost/loopback testing; manifest usesCleartextTraffic=false blocks real cleartext
     private val baseOkHttpClient = OkHttpClient.Builder()
+        .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS, ConnectionSpec.CLEARTEXT))
+        .certificatePinner(cloudflareSlicerPinner)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)

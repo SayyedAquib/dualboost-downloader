@@ -144,11 +144,16 @@ class DualDownloaderEngine(
                 val baseName = initialFileName.substringBeforeLast('.')
                 val extension = initialFileName.substringAfterLast('.', "")
                 val extSuffix = if (extension.isNotEmpty() && extension != initialFileName) ".$extension" else ""
+                // SEC-AUDIT H-5: Cap filename counter to prevent unbounded filesystem scan DoS
                 var counter = 1
-                while (file.exists()) {
+                while (file.exists() && counter <= 999) {
                     candidateName = "$baseName ($counter)$extSuffix"
                     file = File(dir, candidateName)
                     counter++
+                }
+                if (file.exists()) {
+                    candidateName = "${baseName}_${System.currentTimeMillis()}$extSuffix"
+                    file = File(dir, candidateName)
                 }
             }
             return file
@@ -901,182 +906,186 @@ class DualDownloaderEngine(
             }
 
             // Resilient Worker coroutine function
-            suspend fun runWorker(interfaceType: NetworkInterfaceType, clientProvider: () -> OkHttpClient?) {
-                val randomAccessFile = RandomAccessFile(outputFile, "rw")
-                try {
-                    while (isActive) {
-                        // 1. Check if the entire file is already completed
-                        val allCompleted = queueMutex.withLock {
-                            pendingChunks.all { it.status == ChunkStatus.COMPLETED }
-                        }
-                        if (allCompleted) break
+            suspend fun runWorker(
+                interfaceType: NetworkInterfaceType,
+                clientProvider: () -> OkHttpClient?,
+                sharedRandomAccessFile: RandomAccessFile
+            ) {
+                while (isActive) {
+                    // 1. Check if the entire file is already completed
+                    val allCompleted = queueMutex.withLock {
+                        pendingChunks.all { it.status == ChunkStatus.COMPLETED }
+                    }
+                    if (allCompleted) break
 
-                        // 2. Check interface circuit-breaker
-                        val isCircuitBroken = if (interfaceType == NetworkInterfaceType.WIFI) {
-                            wifiFailures.get() >= 2
+                    // 2. Check interface circuit-breaker
+                    val isCircuitBroken = if (interfaceType == NetworkInterfaceType.WIFI) {
+                        wifiFailures.get() >= 2
+                    } else {
+                        cellularFailures.get() >= 2
+                    }
+
+                    if (isCircuitBroken) {
+                        val otherHealthy = if (interfaceType == NetworkInterfaceType.WIFI) {
+                            cellularFailures.get() < 2 && networkManager.isCellularAvailable.value
                         } else {
-                            cellularFailures.get() >= 2
+                            wifiFailures.get() < 2 && networkManager.isWifiAvailable.value
                         }
 
-                        if (isCircuitBroken) {
-                            val otherHealthy = if (interfaceType == NetworkInterfaceType.WIFI) {
-                                cellularFailures.get() < 2 && networkManager.isCellularAvailable.value
-                            } else {
-                                wifiFailures.get() < 2 && networkManager.isWifiAvailable.value
-                            }
-
-                            if (otherHealthy) {
-                                // Other interface is healthy; back off this interface to avoid holding up chunks
-                                delay(1500)
-                                continue
-                            }
-                        }
-
-                        // 3. Acquire next available chunk
-                        val chunk: DownloadChunk? = queueMutex.withLock {
-                            val available = pendingChunks.firstOrNull { it.status == ChunkStatus.PENDING }
-                            available?.apply {
-                                status = ChunkStatus.DOWNLOADING
-                                assignedNetwork = interfaceType
-                            }
-                        }
-
-                        if (chunk == null) {
-                            // In-flight chunks still downloading on other workers; wait and retry
-                            delay(200)
+                        if (otherHealthy) {
+                            // Other interface is healthy; back off this interface to avoid holding up chunks
+                            delay(1500)
                             continue
-                        }
-
-                        // 4. Resolve client for this interface
-                        val client = clientProvider() ?: (if (interfaceType == NetworkInterfaceType.CELLULAR) networkManager.getDefaultClient() else null)
-                        if (client == null) {
-                            queueMutex.withLock {
-                                chunk.status = ChunkStatus.PENDING
-                                chunk.assignedNetwork = NetworkInterfaceType.DEFAULT
-                            }
-                            delay(1000)
-                            continue
-                        }
-
-                        var success = false
-
-                        try {
-                            val request = if (isCloudSlicerActive) {
-                                val slicerSecret = SlicerPreferences.getSlicerSecret(context)
-                                Request.Builder()
-                                    .url(effectiveUrl)
-                                    .header("Range", "bytes=${chunk.startByte}-${chunk.endByte}")
-                                    .apply {
-                                        if (slicerSecret.isNotBlank()) {
-                                            header("X-Slicer-Key", slicerSecret)
-                                        }
-                                    }
-                                    .build()
-                            } else {
-                                buildRequest(url, isDesktop = isDesktopSpoofed)
-                                    .addHeader("Range", "bytes=${chunk.startByte}-${chunk.endByte}")
-                                    .build()
-                            }
-
-                            val call = client.newCall(request)
-                            if (!registerActiveCall(call)) throw CancellationException("Worker paused")
-
-                            try {
-                                call.execute().use { response ->
-                                    if (response.code == 206 || response.code == 200) {
-                                        val body = response.body ?: throw IOException("Empty body for chunk ${chunk.index}")
-                                        val inputStream = body.byteStream()
-                                        val buffer = ByteArray(32 * 1024)
-                                        var bytesRead: Int
-                                        var chunkOffset = chunk.startByte
-                                        val expectedChunkBytes = (chunk.endByte - chunk.startByte) + 1
-                                        var chunkBytesReceived = 0L
-
-                                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                                            if (!isActive) throw CancellationException("Worker cancelled")
-
-                                            fileWriteMutex.withLock {
-                                                randomAccessFile.seek(chunkOffset)
-                                                randomAccessFile.write(buffer, 0, bytesRead)
-                                            }
-                                            chunkOffset += bytesRead
-                                            chunkBytesReceived += bytesRead
-                                            totalDownloadedBytes.addAndGet(bytesRead.toLong())
-
-                                            if (interfaceType == NetworkInterfaceType.WIFI) {
-                                                wifiDownloadedBytes.addAndGet(bytesRead.toLong())
-                                            } else {
-                                                cellularDownloadedBytes.addAndGet(bytesRead.toLong())
-                                            }
-                                        }
-
-                                        if (chunkBytesReceived == expectedChunkBytes) {
-                                            success = true
-                                            // Reset circuit breaker on success
-                                            if (interfaceType == NetworkInterfaceType.WIFI) {
-                                                wifiFailures.set(0)
-                                            } else {
-                                                cellularFailures.set(0)
-                                            }
-                                        } else {
-                                            // Truncated chunk! Roll back byte counters
-                                            totalDownloadedBytes.addAndGet(-chunkBytesReceived)
-                                            if (interfaceType == NetworkInterfaceType.WIFI) {
-                                                wifiDownloadedBytes.addAndGet(-chunkBytesReceived)
-                                            } else {
-                                                cellularDownloadedBytes.addAndGet(-chunkBytesReceived)
-                                            }
-                                            throw IOException("Chunk ${chunk.index} truncated: expected $expectedChunkBytes bytes, got $chunkBytesReceived")
-                                        }
-                                    } else {
-                                        throw IOException("HTTP ${response.code} on chunk ${chunk.index}")
-                                    }
-                                }
-                            } finally {
-                                activeCalls.remove(call)
-                            }
-                        } catch (e: Exception) {
-                            if (e is CancellationException) throw e
-                            Log.w(TAG, "Chunk ${chunk.index} failed on $interfaceType: ${e.message}")
-                            if (interfaceType == NetworkInterfaceType.WIFI) {
-                                wifiFailures.incrementAndGet()
-                            } else {
-                                cellularFailures.incrementAndGet()
-                            }
-                        }
-
-                        queueMutex.withLock {
-                            if (success) {
-                                chunk.status = ChunkStatus.COMPLETED
-                                completedIndices.add(chunk.index)
-                                saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive)
-                            } else {
-                                // Return chunk to pending queue for immediate re-dispatch
-                                chunk.status = ChunkStatus.PENDING
-                                chunk.assignedNetwork = NetworkInterfaceType.DEFAULT
-                            }
-                        }
-
-                        if (!success) {
-                            delay(300)
                         }
                     }
-                } finally {
+
+                    // 3. Acquire next available chunk
+                    val chunk: DownloadChunk? = queueMutex.withLock {
+                        val available = pendingChunks.firstOrNull { it.status == ChunkStatus.PENDING }
+                        available?.apply {
+                            status = ChunkStatus.DOWNLOADING
+                            assignedNetwork = interfaceType
+                        }
+                    }
+
+                    if (chunk == null) {
+                        // In-flight chunks still downloading on other workers; wait and retry
+                        delay(200)
+                        continue
+                    }
+
+                    // 4. Resolve client for this interface
+                    val client = clientProvider() ?: (if (interfaceType == NetworkInterfaceType.CELLULAR) networkManager.getDefaultClient() else null)
+                    if (client == null) {
+                        queueMutex.withLock {
+                            chunk.status = ChunkStatus.PENDING
+                            chunk.assignedNetwork = NetworkInterfaceType.DEFAULT
+                        }
+                        delay(1000)
+                        continue
+                    }
+
+                    var success = false
+
                     try {
-                        randomAccessFile.close()
-                    } catch (_: Exception) {}
+                        val request = if (isCloudSlicerActive) {
+                            val slicerSecret = SlicerPreferences.getSlicerSecret(context)
+                            Request.Builder()
+                                .url(effectiveUrl)
+                                .header("Range", "bytes=${chunk.startByte}-${chunk.endByte}")
+                                .apply {
+                                    if (slicerSecret.isNotBlank()) {
+                                        header("X-Slicer-Key", slicerSecret)
+                                    }
+                                }
+                                .build()
+                        } else {
+                            buildRequest(url, isDesktop = isDesktopSpoofed)
+                                .addHeader("Range", "bytes=${chunk.startByte}-${chunk.endByte}")
+                                .build()
+                        }
+
+                        val call = client.newCall(request)
+                        if (!registerActiveCall(call)) throw CancellationException("Worker paused")
+
+                        try {
+                            call.execute().use { response ->
+                                if (response.code == 206 || response.code == 200) {
+                                    val body = response.body ?: throw IOException("Empty body for chunk ${chunk.index}")
+                                    val inputStream = body.byteStream()
+                                    val buffer = ByteArray(32 * 1024)
+                                    var bytesRead: Int
+                                    var chunkOffset = chunk.startByte
+                                    val expectedChunkBytes = (chunk.endByte - chunk.startByte) + 1
+                                    var chunkBytesReceived = 0L
+
+                                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                        if (!isActive) throw CancellationException("Worker cancelled")
+
+                                        fileWriteMutex.withLock {
+                                            sharedRandomAccessFile.seek(chunkOffset)
+                                            sharedRandomAccessFile.write(buffer, 0, bytesRead)
+                                        }
+                                        chunkOffset += bytesRead
+                                        chunkBytesReceived += bytesRead
+                                        totalDownloadedBytes.addAndGet(bytesRead.toLong())
+
+                                        if (interfaceType == NetworkInterfaceType.WIFI) {
+                                            wifiDownloadedBytes.addAndGet(bytesRead.toLong())
+                                        } else {
+                                            cellularDownloadedBytes.addAndGet(bytesRead.toLong())
+                                        }
+                                    }
+
+                                    if (chunkBytesReceived == expectedChunkBytes) {
+                                        success = true
+                                        // Reset circuit breaker on success
+                                        if (interfaceType == NetworkInterfaceType.WIFI) {
+                                            wifiFailures.set(0)
+                                        } else {
+                                            cellularFailures.set(0)
+                                        }
+                                    } else {
+                                        // Truncated chunk! Roll back byte counters
+                                        totalDownloadedBytes.addAndGet(-chunkBytesReceived)
+                                        if (interfaceType == NetworkInterfaceType.WIFI) {
+                                            wifiDownloadedBytes.addAndGet(-chunkBytesReceived)
+                                        } else {
+                                            cellularDownloadedBytes.addAndGet(-chunkBytesReceived)
+                                        }
+                                        throw IOException("Chunk ${chunk.index} truncated: expected $expectedChunkBytes bytes, got $chunkBytesReceived")
+                                    }
+                                } else {
+                                    throw IOException("HTTP ${response.code} on chunk ${chunk.index}")
+                                }
+                            }
+                        } finally {
+                            activeCalls.remove(call)
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        Log.w(TAG, "Chunk ${chunk.index} failed on $interfaceType: ${e.message}")
+                        if (interfaceType == NetworkInterfaceType.WIFI) {
+                            wifiFailures.incrementAndGet()
+                        } else {
+                            cellularFailures.incrementAndGet()
+                        }
+                    }
+
+                    queueMutex.withLock {
+                        if (success) {
+                            chunk.status = ChunkStatus.COMPLETED
+                            completedIndices.add(chunk.index)
+                            saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive)
+                        } else {
+                            // Return chunk to pending queue for immediate re-dispatch
+                            chunk.status = ChunkStatus.PENDING
+                            chunk.assignedNetwork = NetworkInterfaceType.DEFAULT
+                        }
+                    }
+
+                    if (!success) {
+                        delay(300)
+                    }
                 }
             }
 
-            // Launch parallel coroutine workers as children of this coroutineScope
-            val workers = listOf(
-                launch { runWorker(NetworkInterfaceType.WIFI) { networkManager.getWifiClient() } },
-                launch { runWorker(NetworkInterfaceType.WIFI) { networkManager.getWifiClient() } },
-                launch { runWorker(NetworkInterfaceType.CELLULAR) { networkManager.getCellularClient() } },
-                launch { runWorker(NetworkInterfaceType.CELLULAR) { networkManager.getCellularClient() } }
-            )
+            // Launch parallel coroutine workers as children of this coroutineScope using a single shared RAF
+            val sharedRaf = RandomAccessFile(outputFile, "rw")
+            try {
+                val workers = listOf(
+                    launch { runWorker(NetworkInterfaceType.WIFI, { networkManager.getWifiClient() }, sharedRaf) },
+                    launch { runWorker(NetworkInterfaceType.WIFI, { networkManager.getWifiClient() }, sharedRaf) },
+                    launch { runWorker(NetworkInterfaceType.CELLULAR, { networkManager.getCellularClient() }, sharedRaf) },
+                    launch { runWorker(NetworkInterfaceType.CELLULAR, { networkManager.getCellularClient() }, sharedRaf) }
+                )
 
-            workers.joinAll()
+                workers.joinAll()
+            } finally {
+                try {
+                    sharedRaf.close()
+                } catch (_: Exception) {}
+            }
             monitorJob.cancel()
 
             // Verify file integrity

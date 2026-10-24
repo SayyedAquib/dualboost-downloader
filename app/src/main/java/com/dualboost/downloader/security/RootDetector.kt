@@ -23,30 +23,79 @@ object RootDetector {
         "/su/bin/su"
     )
 
+    private val MAGISK_ARTIFACTS = arrayOf(
+        "/sbin/.magisk",
+        "/data/adb/magisk",
+        "/data/adb/magisk.db",
+        "/cache/.disable_magisk",
+        "/dev/.magisk.unblock"
+    )
+
     fun isDeviceRooted(): Boolean {
-        // 1. Check for test-keys build tags indicating custom or unofficial firmware
-        val buildTags = Build.TAGS
-        if (buildTags != null && buildTags.contains("test-keys")) {
-            return true
-        }
+        return checkTestKeys() ||
+                checkSuBinaries() ||
+                checkSuInPath() ||
+                checkMagiskArtifacts() ||
+                checkMountPoints() ||
+                checkMaps()
+    }
 
-        // 2. Check for standard su binary installations
-        for (path in KNOWN_ROOT_PATHS) {
+    private fun checkTestKeys(): Boolean {
+        return Build.TAGS?.contains("test-keys") == true
+    }
+
+    private fun checkSuBinaries(): Boolean {
+        return KNOWN_ROOT_PATHS.any { path ->
             try {
-                if (File(path).exists()) return true
-            } catch (_: Exception) {}
-        }
-
-        // 3. Check for su binary present anywhere in system execution PATH
-        try {
-            val pathEnv = System.getenv("PATH") ?: ""
-            for (dir in pathEnv.split(":")) {
-                val candidate = File(dir.trim(), "su")
-                if (candidate.exists()) return true
+                File(path).exists()
+            } catch (_: Exception) {
+                false
             }
-        } catch (_: Exception) {}
+        }
+    }
 
-        return false
+    private fun checkSuInPath(): Boolean {
+        return try {
+            val pathEnv = System.getenv("PATH") ?: ""
+            pathEnv.split(":").any { dir ->
+                try {
+                    File(dir.trim(), "su").exists()
+                } catch (_: Exception) {
+                    false
+                }
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun checkMagiskArtifacts(): Boolean {
+        return MAGISK_ARTIFACTS.any { path ->
+            try {
+                File(path).exists()
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
+    private fun checkMountPoints(): Boolean {
+        return try {
+            val mounts = File("/proc/self/mounts").readText()
+            mounts.contains("magisk") || mounts.contains("kernelsu")
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun checkMaps(): Boolean {
+        return try {
+            val maps = File("/proc/self/maps").readText()
+            maps.contains("zygisk") || maps.contains("riru") || maps.contains("libsu")
+        } catch (_: Exception) {
+            false
+        }
     }
 }
+
 

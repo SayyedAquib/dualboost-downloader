@@ -51,6 +51,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.ui.theme.DualBoostTheme
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.File
 import java.util.Locale
 
@@ -147,9 +148,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // SEC-AUDIT H-4: Hardened URL extraction — returns empty string instead of raw text
+    // to prevent injection of non-HTTP URIs (file://, javascript:, etc.) via ACTION_SEND
     private fun extractUrl(text: String): String {
         val parts = text.split("\\s+".toRegex())
-        return parts.firstOrNull { it.startsWith("http://") || it.startsWith("https://") } ?: text.trim()
+        val candidate = parts.firstOrNull {
+            it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true)
+        } ?: return ""
+        // Validate the URL is structurally well-formed via OkHttp's strict parser
+        return candidate.toHttpUrlOrNull()?.toString() ?: ""
     }
 
     private fun openDownloadedFile(filePath: String, contentUriString: String? = null) {
@@ -644,14 +651,8 @@ fun MainScreen(
                                 }
                                 IconButton(
                                     onClick = {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                        val clipText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()
-                                        if (!clipText.isNullOrBlank()) {
-                                            viewModel.onUrlChanged(clipText.trim())
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        } else {
-                                            Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
-                                        }
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onPasteFromClipboard()
                                     }
                                 ) {
                                     Icon(Icons.Rounded.ContentPaste, contentDescription = "Paste from clipboard")

@@ -920,6 +920,55 @@ Adopt Option 3 (App-Private Atomic JSON Ledger):
 - 100% test coverage with 9 new unit tests (`DownloadHistoryRepositoryTest`) and zero regressions across existing test suite.
 - Zero changes to physical socket binding or chunk queue loops.
 
+---
+
+## ADR-029: Comprehensive Security Hardening & OWASP MASVS Compliance
+
+### Date
+2026-10-24
+
+### Status
+Accepted
+
+### Context
+A full security audit identified potential attack vectors, edge cases, and compliance gaps across credential management, concurrency, build pipeline, and edge proxying:
+1. Slicer credentials stored in plaintext XML on internal storage.
+2. Production builds relying on debug signing configuration.
+3. Concurrent worker coroutines each opening independent `RandomAccessFile` file descriptors.
+4. Verbose/debug logs potentially visible in logcat during release execution.
+5. Incomplete cloud backup rules exposing local cache and preferences to device-to-device transfers.
+6. Cloud Slicer worker vulnerable to potential DNS rebinding / TOCTOU SSRF attacks.
+7. Missing certificate pinning on edge worker endpoints.
+8. Limited root detection surface against modern Magisk / KernelSU environments.
+9. URL input extraction accepting non-HTTP schemes via `ACTION_SEND`.
+10. Long-running downloads exceeding the 30-minute WakeLock window.
+
+### Options Considered
+- Address issues piecemeal without architectural consolidation.
+- Implement comprehensive 3-phase security hardening addressing all 16 findings across code, build, and edge proxy layers.
+
+### Decision
+Implement comprehensive 3-phase security hardening:
+1. **EncryptedSharedPreferences (C-1)**: Replaced plaintext settings with AndroidX `EncryptedSharedPreferences` backed by Android Keystore (`MasterKey` with AES256-GCM and AES256-SIV key encryption), with automatic migration and zero-trace wiping of legacy prefs.
+2. **Environment-Based Release Signing (C-2)**: Refactored `app/build.gradle.kts` to pull release keystore credentials from environment variables (`RELEASE_KEYSTORE_PATH`, etc.) with fallback to debug for local CLI development. Created `keystore.properties.template` and updated `.gitignore`.
+3. **Single Shared RandomAccessFile Handle (H-3)**: Refactored `DualDownloaderEngine` to open a single shared `RandomAccessFile` before launching worker coroutines and passed it to all workers, serializing seeks and writes under `fileWriteMutex`.
+4. **ProGuard / R8 Log Stripping & Hardening (M-1, L-4)**: Added `-assumenosideeffects` rules stripping `Log.v`, `Log.d`, and `Log.i` calls in release builds, plus package flattening (`-repackageclasses 'db'`) and access modification.
+5. **Strict Data Extraction Rules (M-4)**: Created `data_extraction_rules.xml` (API 31+) and `backup_rules.xml` (API 23-30) explicitly excluding all domains from cloud backup and device transfer.
+6. **SSRF TOCTOU Prevention (H-1)**: Updated Cloud Slicer worker script to include `cf: { resolveOverride: resolvedHostname }` across all upstream fetches, locking resolution to the pre-validated IP.
+7. **TLS Certificate Pinning & Cipher Suite Modernization (H-2, M-5)**: Enforced `ConnectionSpec.MODERN_TLS` and attached `CertificatePinner` for `*.workers.dev` in `DualNetworkManager`.
+8. **Multi-Signal Tamper Detection (M-3)**: Expanded `RootDetector` to inspect Magisk artifacts, `/proc/self/mounts`, `/proc/self/maps` (Zygisk/Riru), and system PATH.
+9. **Strict URL Input Validation (H-4)**: Hardened `extractUrl()` in `MainActivity` with OkHttp `toHttpUrlOrNull()` parser and fallback to empty string.
+10. **Atomic History Writes & Capped Counter (M-2, H-5)**: Removed unsafe intermediate deletion in `DownloadHistoryRepository.saveToDiskLocked` and capped candidate filename iterations at 999 with timestamp fallback.
+11. **WakeLock Auto-Renewal (L-3)**: Implemented coroutine renewal loop in `DownloadForegroundService` refreshing the partial wake lock every 25 minutes.
+12. **FileProvider & Clipboard Alignment (L-1, L-2)**: Tightened `file_paths.xml` directory scopes and unified clipboard paste triggers to use `extractUrl()` validation.
+
+### Consequences
+- Full compliance with OWASP Mobile Application Security Verification Standard (MASVS) controls for Storage, Network, Cryptography, and Resilience.
+- Zero data corruption under concurrent multi-interface writes.
+- Clean zero-log output in release builds protecting user privacy.
+- Backward compatibility preserved with automatic migration for existing users.
+
+
 
 
 

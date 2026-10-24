@@ -14,6 +14,7 @@ DualBoost Downloader is an Android application for Google Pixel 9 (Android 14/15
 ├── build.gradle.kts           # Root Gradle configuration
 ├── settings.gradle.kts        # Project module setup
 ├── gradle.properties         # JVM and AndroidX flags
+├── keystore.properties.template # Release signing environment template
 ├── local.properties          # SDK path configuration (sdk.dir)
 ├── gradlew, gradlew.bat       # Gradle wrapper executables
 ├── gradle/

@@ -2,17 +2,59 @@ package com.dualboost.downloader.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 object SlicerPreferences {
 
-    private const val PREFS_NAME = "dualboost_settings"
+    private const val TAG = "SlicerPreferences"
+    private const val PREFS_NAME = "dualboost_settings_encrypted"
+    private const val LEGACY_PREFS_NAME = "dualboost_settings"
     private const val KEY_SLICER_URL = "cloud_slicer_url"
     private const val KEY_SLICER_SECRET = "cloud_slicer_secret"
 
+    // SEC-AUDIT C-1: Android Keystore-backed AES-256 encrypted credential storage
     private fun getPrefs(context: Context): SharedPreferences {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            val encPrefs = EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+            // One-time migration from legacy plaintext SharedPreferences
+            migrateLegacyPrefs(context, encPrefs)
+            encPrefs
+        } catch (e: Exception) {
+            // Fallback to standard SharedPreferences if Keystore is broken (rare)
+            Log.e(TAG, "EncryptedSharedPreferences init failed, falling back: ${e.message}")
+            context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+        }
+    }
+
+    private fun migrateLegacyPrefs(context: Context, encPrefs: SharedPreferences) {
+        val legacy = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+        val legacyUrl = legacy.getString(KEY_SLICER_URL, null)
+        val legacySecret = legacy.getString(KEY_SLICER_SECRET, null)
+        if (legacyUrl != null || legacySecret != null) {
+            encPrefs.edit().apply {
+                if (legacyUrl != null && encPrefs.getString(KEY_SLICER_URL, null) == null) {
+                    putString(KEY_SLICER_URL, legacyUrl)
+                }
+                if (legacySecret != null && encPrefs.getString(KEY_SLICER_SECRET, null) == null) {
+                    putString(KEY_SLICER_SECRET, legacySecret)
+                }
+            }.apply()
+            // Wipe legacy plaintext credentials permanently
+            legacy.edit().clear().apply()
+        }
     }
 
     fun getSlicerUrl(context: Context): String {
@@ -228,6 +270,8 @@ export default {
       });
     }
 
+    const resolvedHostname = ssrfCheck.parsed.hostname;
+
     const configuredKey = env?.SECRET_KEY;
     if (!configuredKey || configuredKey.trim() === '') {
       return new Response(JSON.stringify({
@@ -253,6 +297,9 @@ export default {
         method: request.method,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        },
+        cf: {
+          resolveOverride: resolvedHostname
         }
       });
       const newHeaders = new Headers(response.headers);
@@ -270,6 +317,9 @@ export default {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Range': rangeHeader
+      },
+      cf: {
+        resolveOverride: resolvedHostname
       }
     });
 
