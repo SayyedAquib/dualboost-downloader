@@ -72,9 +72,13 @@ app/src/main/
    - `DualDownloaderEngine`: Dynamically computes headers, probes remote servers, validates storage via `StatFs`, partitions files into 10MB byte segments, manages concurrent work queues, produces live `ChunkSnapshot` arrays, calculates ETA countdown seconds (`formatEta`), computes binary Megabytes per second (`MB/s`) speed with adaptive `KB/s` formatting (`formatSpeed`), handles single-stream non-range server fallbacks, and writes to disk via a single shared `RandomAccessFile` handle serialized under `fileWriteMutex`.
    - `SpeedTestEngine`: Ephemeral 3-phase throughput benchmark engine (Wi-Fi 3s -> 5G 3s -> DualBoost 4s) streaming bytes directly into an in-memory discard buffer (0 bytes stored on disk) and reporting real-time speeds in `MB/s`.
 5. **Transport Layer (`com.dualboost.downloader.network`)**:
-   - `NetworkProvider`: Decoupled interface defining interface availability and client factories, allowing seamless MockWebServer integration testing.
+   - `NetworkProvider`: Decoupled interface defining interface availability, signal level telemetry, cellular generation state, and client factories, allowing seamless MockWebServer integration testing.
    - `DualNetworkManager`: Listens to `ConnectivityManager` callbacks for `TRANSPORT_WIFI` and `TRANSPORT_CELLULAR`.
    - Produces dedicated `OkHttpClient` instances whose sockets are locked to specific physical interfaces, enforcing `MODERN_TLS` (TLS 1.2+ with forward secrecy) and `CertificatePinner` for `*.workers.dev` endpoints.
+   - **Signal Telemetry & Generation Detection**:
+     - Wi-Fi signal level is continuously computed via `NetworkCapabilities.signalStrength` (API 29+) or legacy `WifiManager.calculateSignalLevel(rssi, 5)`.
+     - Cellular signal level is computed via `NetworkCapabilities.signalStrength` mapped across 5 discrete buckets (0..4).
+     - Cellular generation (`CellularGeneration.FOUR_G` vs `CellularGeneration.FIVE_G`) is dynamically resolved via `TelephonyCallback.DisplayInfoListener` (`TelephonyDisplayInfo.overrideNetworkType` including `OVERRIDE_NETWORK_TYPE_NR_NSA` and `OVERRIDE_NETWORK_TYPE_NR_ADVANCED` on API 31+) with fallback to telephony network type (`NETWORK_TYPE_NR` vs `NETWORK_TYPE_LTE`), gracefully informing the UI to warn users when only 4G LTE is active.
 
 ## Database Architecture & Persistence
 - **Runtime Engine State**: In-memory state management. Chunks and real-time telemetry reside in memory with atomic `.dualboost_meta` sidecar files in `context.noBackupFilesDir/dualboost_meta` for pause/resume continuity.

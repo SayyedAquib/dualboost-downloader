@@ -43,8 +43,9 @@ To ensure physical network transparency across any wallpaper palette:
 - Haptic tactile feedback (`HapticFeedbackType.LongPress` and `TextHandleMove`) on actions and completion.
 
 ## Layout & Components
-- **Top Bar**: `CenterAlignedTopAppBar` with branded lightning bolt badge, dynamic title, and technical information dialog.
-- **Hero Network Cards**: Dual `Card` containers with live status indicators, connection state badges, dynamic active/inactive iconography (`Wifi`/`WifiOff`, `SignalCellularAlt`/`SignalCellularOff`), and Developer Options guidance.
+- **Top Bar**: `CenterAlignedTopAppBar` balanced with a navigation menu icon on the left opening `ModalNavigationDrawer`, the centered brand title (`[⚡] DualBoost`), and exactly 2 high-frequency quick actions (`FolderOpen` for History, `Settings` for Cloud Slicer) on the right, providing clean visual symmetry.
+- **Modal Navigation Drawer**: Sleek Material 3 slide-out drawer providing unified access to the Download Library, Speed Benchmark, Cloud Slicer Settings, and About DualBoost info.
+- **Hero Network Cards**: Dual `Card` containers with live status indicators, connection state badges, dynamic active/inactive iconography (`Wifi`/`WifiOff`, `SignalCellularAlt`/`SignalCellularOff`), dynamic 4-bar signal level meters with qualitative status (`Excellent • 4/4 bars`, `Good • 3/4 bars`, etc.), real-time generation detection (`5G Cellular` vs `4G LTE Cellular`), and an in-card amber advisory badge when on 4G LTE (`⚠️ 4G Active • Lower boost than 5G`).
 - **Download Action Card**: 24dp rounded elevated container with Smart Context Pill Banner (auto-detecting URLs in clipboard), quick clipboard paste, text clear, dynamic quick-test benchmark presets arranged in ascending order (10MB, 25MB, 50MB, 100MB Cloudflare, 150MB, 500MB, 1GB), selected chip visual state with primary border and lightning bolt (`⚡`) range indicators, dynamic server capability captions, and prominent "Boost Download" button.
 - **Dual-Color Progress Bar & Dynamic Chunk Strip**: Stacked proportional bar visualizing the real-time byte contribution between Wi-Fi and 5G, paired with a Segmented Dynamic Chunk Strip displaying multi-block chunk visualizers where individual chunks light up in Cyan (Wi-Fi) or Violet (5G) with live animated shimmer.
 - **File Provider Integration**: Direct "Open File" launcher upon download completion.
@@ -73,7 +74,13 @@ To ensure physical network transparency across any wallpaper palette:
 
 
 ### Navigation
-- Single-screen utility view; no complex bottom bar or navigation drawer required in MVP.
+- Clean `CenterAlignedTopAppBar` with menu drawer trigger on the left (`48dp`) and zero right-side clutter, centering the "DualBoost" brand mark with generous breathing room.
+- Slide-out `ModalNavigationDrawer` (`ModalDrawerSheet`) for rapid access to all app destinations (Download Library, Speed Benchmark, Cloud Slicer Settings, and About dialog).
+
+### Hero Network Cards
+- **Symmetrical Equal-Height Grid**: Side-by-side cards in `Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min))` ensuring 100% equal height across both cards.
+- **Single Icon + Pulsing Status Dot**: Clean visual hierarchy with exactly 1 interface icon in a tinted circle on the left, an animated pulsing connection dot on the top right, and qualitative signal metrics in the subtitle (`Excellent • 4/4 bars`).
+- **Full-Width Context Banner with 4G Alerting**: Context-aware aggregation banner placed directly below the cards. When 4G LTE is active, it displays a high-contrast amber/error warning (`Dual-Channel Active: Aggregating Wi-Fi + 4G LTE` with subtext `4G LTE active • Aggregation speeds will be lower than 5G`), preserving card grid symmetry.
 
 ### Modals & Bottom Sheets
 - **Speed Test Bottom Sheet (`ModalBottomSheet`)**: Rounded 28dp surface container modal delivering an interactive 3-phase automated benchmark (Wi-Fi 3s -> 5G 3s -> DualBoost 4s) with real-time animated speedometer digits, dynamic progress indicator, comparative cards, and celebratory Boost Gain summary banner.

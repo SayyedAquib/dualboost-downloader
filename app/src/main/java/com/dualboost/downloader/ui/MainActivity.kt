@@ -51,6 +51,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.ui.theme.DualBoostTheme
+import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.File
 import java.util.Locale
@@ -220,6 +221,9 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+
     var showInfoDialog by remember { mutableStateOf(false) }
     var showSpeedTestSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
@@ -228,6 +232,10 @@ fun MainScreen(
     val downloadState by viewModel.downloadState.collectAsState()
     val wifiAvailable by viewModel.isWifiAvailable.collectAsState()
     val cellularAvailable by viewModel.isCellularAvailable.collectAsState()
+    val wifiSignalLevel by viewModel.wifiSignalLevel.collectAsState()
+    val cellularSignalLevel by viewModel.cellularSignalLevel.collectAsState()
+    val cellularGeneration by viewModel.cellularGeneration.collectAsState()
+
     val urlInput by viewModel.urlInput.collectAsState()
     val selectedPreset by viewModel.selectedPreset.collectAsState()
     val hasClipboardContent by viewModel.hasClipboardContent.collectAsState()
@@ -240,69 +248,152 @@ fun MainScreen(
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Bolt,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
+                modifier = Modifier.width(310.dp)
+            ) {
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.Bolt,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(26.dp)
+                            )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
                         Text(
                             text = "DualBoost",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Bandwidth Aggregator",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                },
-                actions = {
-                    IconButton(onClick = { showHistorySheet = true }) {
-                        Icon(
-                            imageVector = Icons.Rounded.FolderOpen,
-                            contentDescription = "Download Library",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = { showSpeedTestSheet = true }) {
-                        Icon(
-                            imageVector = Icons.Rounded.Speed,
-                            contentDescription = "Speed Benchmark",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    IconButton(onClick = { showSettingsSheet = true }) {
-                        Icon(
-                            imageVector = Icons.Rounded.Settings,
-                            contentDescription = "Settings",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = { showInfoDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Rounded.Info,
-                            contentDescription = "About DualBoost",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Rounded.FolderOpen, contentDescription = null) },
+                    label = { Text("Download Library", fontWeight = FontWeight.Medium) },
+                    selected = false,
+                    onClick = {
+                        drawerScope.launch { drawerState.close() }
+                        showHistorySheet = true
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
-            )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Rounded.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    label = { Text("Speed Benchmark", fontWeight = FontWeight.Medium) },
+                    selected = false,
+                    onClick = {
+                        drawerScope.launch { drawerState.close() }
+                        showSpeedTestSheet = true
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
+                    label = { Text("Cloud Slicer Settings", fontWeight = FontWeight.Medium) },
+                    selected = false,
+                    onClick = {
+                        drawerScope.launch { drawerState.close() }
+                        showSettingsSheet = true
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Rounded.Info, contentDescription = null) },
+                    label = { Text("About DualBoost", fontWeight = FontWeight.Medium) },
+                    selected = false,
+                    onClick = {
+                        drawerScope.launch { drawerState.close() }
+                        showInfoDialog = true
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
+                    Text(
+                        text = "DualBoost Downloader v1.0",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Android 15 (SDK 35) • Open Source CLI",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
         }
-    ) { innerPadding ->
+    ) {
+        Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { drawerScope.launch { drawerState.open() } }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Menu,
+                                contentDescription = "Open Navigation Menu",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Bolt,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "DualBoost",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
+                )
+            }
+        ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -346,22 +437,32 @@ fun MainScreen(
             }
 
             // Network Aggregation Hero Cards
+            val is4G = cellularGeneration == com.dualboost.downloader.network.CellularGeneration.FOUR_G
+            val cellularName = if (is4G) "4G LTE" else "5G"
+            val cellularTitle = if (is4G) "4G LTE Cellular" else "5G Cellular"
+
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 NetworkCard(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
                     title = "Wi-Fi",
-                    subtitle = if (wifiAvailable) "Bound & Ready" else "Disconnected",
+                    subtitle = if (wifiAvailable) viewModel.getSignalLabel(wifiSignalLevel) else "Disconnected",
                     icon = if (wifiAvailable) Icons.Rounded.Wifi else Icons.Rounded.WifiOff,
                     isActive = wifiAvailable,
                     activeColor = wifiColor
                 )
                 NetworkCard(
-                    modifier = Modifier.weight(1f),
-                    title = "5G Cellular",
-                    subtitle = if (cellularAvailable) "Bound & Ready" else "Standby",
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    title = cellularTitle,
+                    subtitle = if (cellularAvailable) viewModel.getSignalLabel(cellularSignalLevel) else "Standby",
                     icon = if (cellularAvailable) Icons.Rounded.SignalCellularAlt else Icons.Rounded.SignalCellularOff,
                     isActive = cellularAvailable,
                     activeColor = cellularColor
@@ -374,8 +475,11 @@ fun MainScreen(
             if (wifiAvailable && cellularAvailable) {
                 Surface(
                     shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                    color = if (is4G) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.primaryContainer,
+                    border = BorderStroke(
+                        1.dp,
+                        if (is4G) MaterialTheme.colorScheme.error.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -383,17 +487,26 @@ fun MainScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.Speed,
+                            imageVector = if (is4G) Icons.Rounded.WarningAmber else Icons.Rounded.Speed,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            tint = if (is4G) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Dual-Channel Active: Aggregating Wi-Fi + 5G",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        Column {
+                            Text(
+                                text = "Dual-Channel Active: Aggregating Wi-Fi + $cellularName",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = if (is4G) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            if (is4G) {
+                                Text(
+                                    text = "4G LTE active • Aggregation speeds will be lower than 5G",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
+                                )
+                            }
+                        }
                     }
                 }
             } else if (!wifiAvailable && !cellularAvailable) {
@@ -465,7 +578,7 @@ fun MainScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Using 5G Cellular only: Connect Wi-Fi to activate DualBoost aggregation.",
+                            text = "Using $cellularName Cellular only: Connect Wi-Fi to activate DualBoost aggregation.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -514,7 +627,7 @@ fun MainScreen(
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                             )
                             Text(
-                                text = "Test combined Wi-Fi + 5G speed",
+                                text = "Test combined Wi-Fi + $cellularName speed",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1474,6 +1587,7 @@ fun MainScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
     }
 
     if (showInfoDialog) {

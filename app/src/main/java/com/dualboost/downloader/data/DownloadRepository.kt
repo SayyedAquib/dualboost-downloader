@@ -38,6 +38,9 @@ class DownloadRepository(
     val speedTestState: StateFlow<SpeedTestState> get() = speedTestEngine.speedTestState
     val isWifiAvailable: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isWifiAvailable
     val isCellularAvailable: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isCellularAvailable
+    val wifiSignalLevel: StateFlow<Int> get() = (networkProvider ?: networkManager).wifiSignalLevel
+    val cellularSignalLevel: StateFlow<Int> get() = (networkProvider ?: networkManager).cellularSignalLevel
+    val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> get() = (networkProvider ?: networkManager).cellularGeneration
     val historyItems: StateFlow<List<DownloadHistoryItem>> get() = historyRepository.historyItems
 
     init {

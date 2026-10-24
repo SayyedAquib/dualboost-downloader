@@ -968,6 +968,41 @@ Implement comprehensive 3-phase security hardening:
 - Clean zero-log output in release builds protecting user privacy.
 - Backward compatibility preserved with automatic migration for existing users.
 
+---
+
+## ADR-011: Header Layout Balancing & Dynamic Cellular Generation Telemetry
+
+### Date
+2026-10-24
+
+### Status
+Accepted
+
+### Context
+1. The app header was visually asymmetrical: `CenterAlignedTopAppBar` centered the title across the whole display width, but with 4 action buttons (192dp) on the right and 0 on the left, the title was forced into collision with the right action icons.
+2. The UI hardcoded `5G Cellular` and `Aggregating Wi-Fi + 5G`, even when the device was connected to an LTE/4G cellular network. Users on 4G had no real-time indication of why aggregation speeds were lower than expected or whether their cellular signal was degraded.
+
+### Options Considered
+- Retain 4 action buttons and switch to a standard start-aligned `TopAppBar`.
+- Use `CenterAlignedTopAppBar`, introduce a `ModalNavigationDrawer` on the left (48dp), reduce right-hand quick actions to 2 (96dp) for balanced spacing, and integrate real-time `TelephonyDisplayInfo` and `WifiInfo` signal telemetry into `DualNetworkManager`.
+
+### Decision
+Implement balanced navigation drawer and dynamic network telemetry:
+1. Rebalanced the header by introducing a `ModalNavigationDrawer` containing secondary destinations (Download Library, Speed Benchmark, Cloud Slicer Settings, About DualBoost). Reduced the top bar actions to Download Library and Settings, establishing balanced padding and visual symmetry.
+2. Extended `DualNetworkManager` with `wifiSignalLevel: StateFlow<Int?>`, `cellularSignalLevel: StateFlow<Int?>`, and `cellularGeneration: StateFlow<CellularGeneration>`.
+3. Used Android's `TelephonyCallback.DisplayInfoListener` (API 31+) with `READ_BASIC_PHONE_STATE` to detect 5G (`OVERRIDE_NETWORK_TYPE_NR_NSA` / `OVERRIDE_NETWORK_TYPE_NR_ADVANCED` / `NETWORK_TYPE_NR`) vs 4G LTE.
+4. Rendered dynamic signal bars (0..4) and qualitative badges (`Excellent • 4/4 bars`) for both interfaces.
+5. Injected an amber warning badge (`⚠️ 4G Active • Lower boost than 5G`) whenever 4G LTE is active, and updated all aggregation banners and benchmark labels dynamically to reflect `4G LTE` or `5G`.
+
+### Trade-offs
+Added normal install-time permissions `ACCESS_WIFI_STATE` and `READ_BASIC_PHONE_STATE`.
+
+### Consequences
+- Clean, symmetrical Material 3 top app bar with accessible navigation drawer.
+- Transparent real-time network telemetry alerting the user to degraded cellular conditions (4G LTE) and current signal quality.
+- Backward compatibility maintained for unit tests via default interface implementation in `NetworkProvider`.
+
+
 
 
 

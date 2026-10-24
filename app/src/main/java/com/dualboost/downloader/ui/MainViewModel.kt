@@ -91,8 +91,21 @@ open class MainViewModel(
     val speedTestState: StateFlow<com.dualboost.downloader.data.SpeedTestState> = repository?.speedTestState ?: MutableStateFlow(com.dualboost.downloader.data.SpeedTestState.Idle)
     val isWifiAvailable: StateFlow<Boolean> = repository?.isWifiAvailable ?: MutableStateFlow(false)
     val isCellularAvailable: StateFlow<Boolean> = repository?.isCellularAvailable ?: MutableStateFlow(false)
+    val wifiSignalLevel: StateFlow<Int> = repository?.wifiSignalLevel ?: MutableStateFlow(4)
+    val cellularSignalLevel: StateFlow<Int> = repository?.cellularSignalLevel ?: MutableStateFlow(4)
+    val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> = repository?.cellularGeneration ?: MutableStateFlow(com.dualboost.downloader.network.CellularGeneration.FIVE_G)
     val isDeviceRooted: Boolean = com.dualboost.downloader.security.RootDetector.isDeviceRooted()
     val historyItems: StateFlow<List<DownloadHistoryItem>> = repository?.historyItems ?: MutableStateFlow(emptyList())
+
+    fun getSignalLabel(level: Int): String {
+        return when (level) {
+            4 -> "Excellent • 4/4 bars"
+            3 -> "Good • 3/4 bars"
+            2 -> "Fair • 2/4 bars"
+            1 -> "Weak • 1/4 bar"
+            else -> "Connecting..."
+        }
+    }
 
     private val _urlInput = MutableStateFlow("")
     val urlInput: StateFlow<String> = _urlInput.asStateFlow()
