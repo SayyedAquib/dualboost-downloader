@@ -435,8 +435,8 @@ class EngineComprehensiveTest {
     @Test
     fun testSlicerPreferences_SaveAndRetrieveUrlAndSecret() {
         val testContext = DummyTestContext(tempDir)
-        assertEquals("", SlicerPreferences.getSlicerUrl(testContext))
-        assertEquals("", SlicerPreferences.getSlicerSecret(testContext))
+        assertEquals(SlicerPreferences.DEFAULT_SLICER_URL, SlicerPreferences.getSlicerUrl(testContext))
+        assertEquals(SlicerPreferences.DEFAULT_SLICER_SECRET, SlicerPreferences.getSlicerSecret(testContext))
 
         SlicerPreferences.setSlicerUrl(testContext, "https://my-worker.workers.dev")
         SlicerPreferences.setSlicerSecret(testContext, "secret123")

@@ -4,6 +4,11 @@
 DualBoost Downloader is fully updated with the **Comprehensive Security Hardening & OWASP MASVS Compliance** ([ADR-029](file:///a:/Development/dualboost-downloader/docs/DECISIONS.md#adr-029)), resolving all 16 security findings identified in the senior security audit across Phase 1 (Quick Wins), Phase 2 (Core Hardening), and Phase 3 (Advanced Defenses). Highlights include Keystore-backed AES-256 `EncryptedSharedPreferences` for Cloud Slicer secrets with zero-trace migration, single shared `RandomAccessFile` concurrency safety, R8/ProGuard release log stripping (`Log.v/d/i`), explicit backup exclusion rules, SSRF TOCTOU prevention with DNS resolution override, TLS 1.2+ enforcement with `*.workers.dev` certificate pinning, multi-signal Magisk/KernelSU/Zygisk tamper detection, and environment-based release signing configuration. All unit tests pass with 100% success rate.
 
 ## Recently Completed
+- **Build-Time Cloud Slicer Defaults via `local.properties` & `BuildConfig`**:
+  - **Zero-Typing Automatic Initialization**: Configured `app/build.gradle.kts` to parse `slicer.url` and `slicer.secret` from git-ignored `local.properties` and inject them as `BuildConfig.DEFAULT_SLICER_URL` and `BuildConfig.DEFAULT_SLICER_SECRET`.
+  - **Graceful Fallback Precedence**: Updated `SlicerPreferences.kt` so fresh app launches automatically adopt the build-time defaults into runtime memory without requiring manual typing or pasting in the UI.
+  - **Full UI Override Flexibility**: Maintained complete in-app editing and clearing capability in `SettingsBottomSheet.kt` with instant connectivity checks.
+  - **100% Secret Isolation**: Keeps personal Cloudflare Worker endpoints and secret keys private on the developer's local machine, ensuring the public GitHub repository contains zero credentials.
 - **Comprehensive Security Hardening & OWASP MASVS Compliance (ADR-029)**:
   - **Phase 1 (Quick Wins)**:
     - **H-4 (Malicious URL Input)**: Hardened `extractUrl()` in `MainActivity.kt` using OkHttp `toHttpUrlOrNull()` parser, returning `""` for invalid schemes to prevent `file://` or `javascript:` injection via `ACTION_SEND`.

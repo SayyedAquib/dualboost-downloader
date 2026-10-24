@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,6 +10,16 @@ android {
     namespace = "com.dualboost.downloader"
     compileSdk = 35
 
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { stream ->
+            localProperties.load(stream)
+        }
+    }
+    val defaultSlicerUrl = localProperties.getProperty("slicer.url", "")
+    val defaultSlicerSecret = localProperties.getProperty("slicer.secret", "")
+
     defaultConfig {
         applicationId = "com.dualboost.downloader"
         minSdk = 26
@@ -16,6 +28,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "DEFAULT_SLICER_URL", "\"$defaultSlicerUrl\"")
+        buildConfigField("String", "DEFAULT_SLICER_SECRET", "\"$defaultSlicerSecret\"")
     }
 
     buildTypes {
@@ -53,6 +68,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         unitTests.isReturnDefaultValues = true

@@ -57,8 +57,24 @@ object SlicerPreferences {
         }
     }
 
+    val DEFAULT_SLICER_URL: String
+        get() = try {
+            com.dualboost.downloader.BuildConfig.DEFAULT_SLICER_URL.trim()
+        } catch (_: Throwable) {
+            ""
+        }
+
+    val DEFAULT_SLICER_SECRET: String
+        get() = try {
+            com.dualboost.downloader.BuildConfig.DEFAULT_SLICER_SECRET.trim()
+        } catch (_: Throwable) {
+            ""
+        }
+
     fun getSlicerUrl(context: Context): String {
-        return getPrefs(context).getString(KEY_SLICER_URL, "")?.trim() ?: ""
+        val stored = getPrefs(context).getString(KEY_SLICER_URL, null)
+        if (stored != null) return stored.trim()
+        return DEFAULT_SLICER_URL
     }
 
     fun setSlicerUrl(context: Context, url: String) {
@@ -66,7 +82,9 @@ object SlicerPreferences {
     }
 
     fun getSlicerSecret(context: Context): String {
-        return getPrefs(context).getString(KEY_SLICER_SECRET, "")?.trim() ?: ""
+        val stored = getPrefs(context).getString(KEY_SLICER_SECRET, null)
+        if (stored != null) return stored.trim()
+        return DEFAULT_SLICER_SECRET
     }
 
     fun setSlicerSecret(context: Context, secret: String) {
