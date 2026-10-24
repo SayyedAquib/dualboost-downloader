@@ -80,7 +80,7 @@ To ensure physical network transparency across any wallpaper palette:
 ### Hero Network Cards
 - **Symmetrical Equal-Height Grid**: Side-by-side cards in `Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min))` ensuring 100% equal height across both cards.
 - **Single Icon + Pulsing Status Dot**: Clean visual hierarchy with exactly 1 interface icon in a tinted circle on the left, an animated pulsing connection dot on the top right, and qualitative signal metrics in the subtitle (`Excellent • 4/4 bars`).
-- **Full-Width Context Banner with 4G Alerting**: Context-aware aggregation banner placed directly below the cards. When 4G LTE is active, it displays a high-contrast amber/error warning (`Dual-Channel Active: Aggregating Wi-Fi + 4G LTE` with subtext `4G LTE active • Aggregation speeds will be lower than 5G`), preserving card grid symmetry.
+- **Full-Width Positive Context Banner**: Context-aware aggregation banner placed directly below the cards in unified brand styling (`primaryContainer` with Speed icon). Dynamically displays `Dual-Channel Active: Aggregating Wi-Fi + 4G LTE` or `Aggregating Wi-Fi + 5G`, maintaining a clean, reassuring, and balanced visual flow.
 
 ### Modals & Bottom Sheets
 - **Speed Test Bottom Sheet (`ModalBottomSheet`)**: Rounded 28dp surface container modal delivering an interactive 3-phase automated benchmark (Wi-Fi 3s -> 5G 3s -> DualBoost 4s) with real-time animated speedometer digits, dynamic progress indicator, comparative cards, and celebratory Boost Gain summary banner.

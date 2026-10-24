@@ -475,11 +475,8 @@ fun MainScreen(
             if (wifiAvailable && cellularAvailable) {
                 Surface(
                     shape = RoundedCornerShape(18.dp),
-                    color = if (is4G) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(
-                        1.dp,
-                        if (is4G) MaterialTheme.colorScheme.error.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                    ),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -487,26 +484,17 @@ fun MainScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = if (is4G) Icons.Rounded.WarningAmber else Icons.Rounded.Speed,
+                            imageVector = Icons.Rounded.Speed,
                             contentDescription = null,
-                            tint = if (is4G) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Dual-Channel Active: Aggregating Wi-Fi + $cellularName",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = if (is4G) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            if (is4G) {
-                                Text(
-                                    text = "4G LTE active • Aggregation speeds will be lower than 5G",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
-                                )
-                            }
-                        }
+                        Text(
+                            text = "Dual-Channel Active: Aggregating Wi-Fi + $cellularName",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     }
                 }
             } else if (!wifiAvailable && !cellularAvailable) {
