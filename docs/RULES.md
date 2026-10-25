@@ -1,5 +1,20 @@
 # Project Rules
 
+## Adversarial & Test-First Engineering Workflow (Mandatory Standard)
+For all new features, bug fixes, and architectural modifications, strictly follow this 3-step battle-testing approach:
+1. **Step 1: Edge-Case Checklist & Tests First (TDD)**:
+   - Before writing or modifying code, map out all potential edge cases and failure modes (e.g., zero-byte files, server timeouts, malformed headers, socket drops, out-of-disk space, rapid cancellation).
+   - Write or update unit/integration tests covering these boundaries before finalizing implementation.
+2. **Step 2: Adversarial Self-Audit ("Break Your Own Code" / Pen-Tester Mode)**:
+   - Once a feature or fix is implemented, never accept the initial "happy path".
+   - Switch into adversarial mode: critically inspect the code as a hostile attacker/QA pen-tester trying to break the app, find logic flaws, race conditions, memory leaks, or unhandled exceptions.
+   - Enumerate all identified vulnerabilities and patch them methodically.
+3. **Step 3: Concurrency, Chaos & Load Simulation**:
+   - Explicitly simulate multi-threaded stress and real-world chaos (e.g., simultaneous worker writes, rapid button taps like Pause/Resume/Cancel, radio handovers between Wi-Fi and 5G, and background service interruptions).
+   - Ensure thread safety with atomic primitives or Mutex locking to prevent race conditions.
+4. **Verification**:
+   - Run the complete unit test suite (`.\gradlew.bat test`), compile the hardened release APK (`.\gradlew.bat assembleRelease`), and ensure 100% verification before concluding.
+
 ## General Rules
 - Always build, verify, and install the Production / Release build (`.\gradlew.bat assembleRelease` producing `app-release.apk`) by permanent user rule.
 - Never add dependencies or files that require the Android Studio GUI to function.

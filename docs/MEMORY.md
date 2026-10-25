@@ -4,6 +4,9 @@
 DualBoost Downloader is fully aligned with **Strict Modem State Adherence & Elimination of False 5G Telemetry on LTE Carrier Aggregation** ([ADR-030](file:///a:/Development/dualboost-downloader/docs/DECISIONS.md#adr-030)), resolving the cellular telemetry mismatch where Indian carrier LTE Carrier Aggregation (`LTE_CA`) was falsely marked as 5G. The app now strictly matches the Android system status bar and Quick Settings Internet panel ("Airtel LTE" -> "4G LTE Cellular"). Large file performance hardening, 0-delay 100% completion, low thermal footprint, humanized text, separate cancel/pause buttons, and Google Files integration are completely active and verified via 100% passing release unit tests and production APK installation on Google Pixel 9.
 
 ## Recently Completed
+- **Codification of Mandatory Adversarial & Test-First Engineering Workflow (RULES.md / MEMORY.md)**:
+  - Formally codified the 3-step battle-testing development workflow into project rules: (1) Edge-Case Checklist & Tests First (TDD), (2) Adversarial Self-Audit ("Pen-Tester / Break Your Own Code" mode), and (3) Concurrency & Chaos Stress Simulation.
+  - Enforced across all future feature developments, bug fixes, and architectural modifications.
 - **Strict Modem State Adherence & Elimination of False 5G Telemetry (ADR-030)**:
   - **Eliminated False 5G on LTE Carrier Aggregation**: Removed `OVERRIDE_NETWORK_TYPE_LTE_CA` from `is5GDetected` in `DualNetworkManager.kt`. 5G is strictly restricted to genuine 5G New Radio states (`OVERRIDE_NETWORK_TYPE_NR_NSA`, `OVERRIDE_NETWORK_TYPE_NR_ADVANCED`, or `TelephonyManager.NETWORK_TYPE_NR`).
   - **Stripped Bitrate Heuristic**: Removed the crude downstream bitrate estimate (`>= 100 Mbps -> 5G`) in `detectInitialCellularGeneration`, preventing fast 4G+ connections from masquerading as 5G.
@@ -190,6 +193,11 @@ DualBoost Downloader is fully aligned with **Strict Modem State Adherence & Elim
 - ADR-028: Persistent Download History & File Library with Safe Android FileProvider Actions.
 
 ## Operational Guidelines & Communication Rules
+- **Mandatory Adversarial & Test-First Workflow (ADR-031 / Workflow Rule)**:
+  - **Checklist & Tests First (TDD)**: Map edge cases and failure modes upfront before writing code.
+  - **Adversarial Self-Audit ("Pen-Tester Mode")**: Critically audit and break own code after completion to expose security flaws and edge-case bugs before declaring done.
+  - **Concurrency & Chaos Simulation**: Test multi-threaded stress, rapid state changes (e.g., rapid pause/resume/cancel), and network switching.
+  - **Verified Release Build**: Always verify with tests (`.\gradlew.bat test`) and release APK assembly (`.\gradlew.bat assembleRelease`).
 - **External Code Deployment Rule**: Whenever modifying external components (such as `cloud-slicer/worker.js`), proactively notify the user immediately in the response, stating clearly whether redeployment is optional or required, what changed, and how to update it in 30 seconds.
 
 ## Next Steps
