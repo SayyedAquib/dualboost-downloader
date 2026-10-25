@@ -1107,7 +1107,7 @@ class DualDownloaderEngine(
             if (legacyMeta.exists()) legacyMeta.delete()
         } catch (_: Exception) {}
 
-        val sha256 = computeSha256(outputFile)
+        val sha256: String? = null
         val contentUri = exportToMediaStore(outputFile, fileName)
         val elapsedSeconds = max(1L, (System.currentTimeMillis() - startTime) / 1000L)
         val avgSpeed = if (elapsedSeconds > 0) (contentLength.toDouble() / (1024.0 * 1024.0)) / elapsedSeconds else 0.0
@@ -1230,7 +1230,7 @@ class DualDownloaderEngine(
                     }
                 }
 
-                val sha256 = computeSha256(outputFile)
+                val sha256: String? = null
                 val contentUri = exportToMediaStore(outputFile, outputFile.name)
                 val elapsedSeconds = max(1L, (System.currentTimeMillis() - startTime) / 1000L)
                 val avgSpeed = if (elapsedSeconds > 0 && totalLength > 0) (totalLength.toDouble() / (1024.0 * 1024.0)) / elapsedSeconds else 0.0
@@ -1328,8 +1328,14 @@ class DualDownloaderEngine(
         return try {
             val path = java.net.URL(url).path
             val rawName = path.substringAfterLast('/')
-            val baseName = File(rawName).name.substringAfterLast('/').substringAfterLast('\\')
-            val clean = baseName.replace(Regex("[^a-zA-Z0-9._\\-\\s()]"), "_").trim()
+            val decodedName = try {
+                java.net.URLDecoder.decode(rawName, "UTF-8")
+            } catch (_: Exception) {
+                rawName
+            }
+            val baseName = File(decodedName).name.substringAfterLast('/').substringAfterLast('\\')
+            val humanized = baseName.replace("_20", " ")
+            val clean = humanized.replace(Regex("[^a-zA-Z0-9._\\-\\s()]"), "_").trim()
             if (clean.isBlank() || clean == "." || clean == ".." || clean == "__down") {
                 "speedtest_${System.currentTimeMillis()}.bin"
             } else if (!clean.contains('.')) {
@@ -1356,10 +1362,16 @@ class DualDownloaderEngine(
                     raw = raw.substring(0, semi).trim()
                 }
             }
+            val decoded = try {
+                java.net.URLDecoder.decode(raw, "UTF-8")
+            } catch (_: Exception) {
+                raw
+            }
             // Strip any directory traversal components (both / and \)
-            val baseName = File(raw).name.substringAfterLast('/').substringAfterLast('\\')
+            val baseName = File(decoded).name.substringAfterLast('/').substringAfterLast('\\')
+            val humanized = baseName.replace("_20", " ")
             // Sanitize illegal filename characters
-            val clean = baseName.replace(Regex("[^a-zA-Z0-9._\\-\\s()]"), "_").trim()
+            val clean = humanized.replace(Regex("[^a-zA-Z0-9._\\-\\s()]"), "_").trim()
             return if (clean.isNotBlank() && clean != "." && clean != "..") clean else null
         }
         return null

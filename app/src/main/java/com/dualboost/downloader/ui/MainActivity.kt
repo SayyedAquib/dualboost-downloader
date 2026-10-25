@@ -1,6 +1,7 @@
 package com.dualboost.downloader.ui
 
 import android.Manifest
+import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -87,6 +88,7 @@ class MainActivity : ComponentActivity() {
                     viewModel = viewModel,
                     onOpenFile = { path, uri -> openDownloadedFile(path, uri) },
                     onShareFile = { path, uri -> shareDownloadedFile(path, uri) },
+                    onOpenFileLocation = { path, uri -> openFileInFilesApp(path, uri) },
                     onPasteFromClipboard = { pasteFromClipboard() }
                 )
             }
@@ -209,6 +211,31 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Cannot share file: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
+
+    private fun openFileInFilesApp(filePath: String, contentUriString: String? = null) {
+        try {
+            val intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                val launchIntent = packageManager.getLaunchIntentForPackage("com.google.android.apps.nbu.files")
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(launchIntent)
+                } else {
+                    val sysIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(Uri.parse(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS).toURI().toString()), "*/*")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(sysIntent)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this, "Could not open Files app: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -217,6 +244,7 @@ fun MainScreen(
     viewModel: MainViewModel,
     onOpenFile: (String, String?) -> Unit,
     onShareFile: (String, String?) -> Unit,
+    onOpenFileLocation: (String, String?) -> Unit = { _, _ -> },
     onPasteFromClipboard: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -228,6 +256,8 @@ fun MainScreen(
     var showSpeedTestSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showHistorySheet by remember { mutableStateOf(false) }
+    var showCancelConfirmDialog by remember { mutableStateOf(false) }
+    var pendingCancelFileName by remember { mutableStateOf<String?>(null) }
 
     val downloadState by viewModel.downloadState.collectAsState()
     val wifiAvailable by viewModel.isWifiAvailable.collectAsState()
@@ -967,7 +997,7 @@ fun MainScreen(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = state.fileName,
+                                            text = cleanDisplayName(state.fileName),
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
@@ -978,7 +1008,7 @@ fun MainScreen(
                                         } ?: if (remainingBytes > 0 && state.totalBytes > 0) " • ${formatBytes(remainingBytes)} left" else ""
 
                                         Text(
-                                            text = "${formatBytes(state.downloadedBytes)} / ${formatBytes(state.totalBytes)}$etaSubText",
+                                            text = "${formatBytes(state.downloadedBytes)} of ${formatBytes(state.totalBytes)}$etaSubText",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1096,16 +1126,6 @@ fun MainScreen(
                                     }
                                 }
 
-                                // Segmented Dynamic Chunk Strip (Range-enabled Multi-Channel Transfers)
-                                if (state.supportsRanges && state.chunkSnapshots.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(14.dp))
-                                    SegmentedChunkStrip(
-                                        chunkSnapshots = state.chunkSnapshots,
-                                        wifiColor = rowWifiColor,
-                                        cellularColor = rowCellularColor
-                                    )
-                                }
-
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 // Hero Speed Display
@@ -1130,7 +1150,7 @@ fun MainScreen(
                                             Spacer(modifier = Modifier.width(10.dp))
                                             Column {
                                                 Text(
-                                                    text = if (state.supportsRanges) "Aggregated Bandwidth" else "Single-Channel Bandwidth",
+                                                    text = "Download Speed",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -1149,9 +1169,10 @@ fun MainScreen(
                                 // Detailed Interface Speeds
                                 val isWifiInactiveInSingleStream = !state.supportsRanges && state.wifiDownloadedBytes == 0L && state.cellularDownloadedBytes > 0L
                                 val isCellularInactiveInSingleStream = !state.supportsRanges && state.cellularDownloadedBytes == 0L
+                                val cellTypeLabel = if (cellularGeneration == com.dualboost.downloader.network.CellularGeneration.FIVE_G) "5G" else "4G LTE"
 
                                 SpeedDetailRow(
-                                    label = if (isWifiInactiveInSingleStream) "Wi-Fi (Inactive in Single-Stream)" else "Wi-Fi Interface",
+                                    label = if (isWifiInactiveInSingleStream) "Wi-Fi (Inactive)" else "Wi-Fi",
                                     speedMBps = state.wifiSpeedMBps,
                                     downloadedBytes = state.wifiDownloadedBytes,
                                     indicatorColor = rowWifiColor,
@@ -1160,7 +1181,7 @@ fun MainScreen(
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 SpeedDetailRow(
-                                    label = if (isCellularInactiveInSingleStream) "5G Cellular (Inactive in Single-Stream)" else "5G Cellular Interface",
+                                    label = if (isCellularInactiveInSingleStream) "$cellTypeLabel Mobile Data (Inactive)" else "$cellTypeLabel Mobile Data",
                                     speedMBps = state.cellularSpeedMBps,
                                     downloadedBytes = state.cellularDownloadedBytes,
                                     indicatorColor = rowCellularColor,
@@ -1170,24 +1191,46 @@ fun MainScreen(
 
                                 Spacer(modifier = Modifier.height(18.dp))
 
-                                // Controls
-                                OutlinedButton(
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        viewModel.pauseDownload()
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(48.dp),
-                                    shape = RoundedCornerShape(14.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = MaterialTheme.colorScheme.error
-                                    )
+                                // Controls (Separate Pause and Cancel Buttons)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Icon(Icons.Rounded.Pause, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Pause / Cancel Download", fontWeight = FontWeight.SemiBold)
+                                    OutlinedButton(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            viewModel.pauseDownload()
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                    ) {
+                                        Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Pause", fontWeight = FontWeight.SemiBold)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            pendingCancelFileName = state.fileName
+                                            showCancelConfirmDialog = true
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error
+                                        )
+                                    ) {
+                                        Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Cancel", fontWeight = FontWeight.SemiBold)
+                                    }
                                 }
                             }
                         }
@@ -1266,7 +1309,7 @@ fun MainScreen(
                                         val avgSpeedText = if (state.averageSpeedMBps > 0.0) " at ${com.dualboost.downloader.data.formatSpeed(state.averageSpeedMBps)} avg" else ""
                                         val dualChannelText = if (state.isDualChannel) " • Aggregated Wi-Fi + 5G Boost ⚡" else ""
                                         Text(
-                                            text = "${formatBytes(state.totalBytes)} downloaded in ${state.durationSeconds}s$avgSpeedText$dualChannelText",
+                                            text = "${formatBytes(state.totalBytes)} completed in ${formatDuration(state.durationSeconds)}$avgSpeedText$dualChannelText",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                                         )
@@ -1275,105 +1318,74 @@ fun MainScreen(
 
                                 Spacer(modifier = Modifier.height(14.dp))
                                 Text(
-                                    text = "File: ${state.fileName}",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                Text(
-                                    text = "Location: ${state.filePath}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                                    text = cleanDisplayName(state.fileName),
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
-
-                                if (!state.sha256Checksum.isNullOrBlank()) {
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                                clipboard.setPrimaryClip(ClipData.newPlainText("SHA-256 Checksum", state.sha256Checksum))
-                                                Toast.makeText(context, "SHA-256 copied to clipboard!", Toast.LENGTH_SHORT).show()
-                                            }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.VerifiedUser,
-                                                contentDescription = "SHA-256 Checksum",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = "SHA-256 Integrity (Tap to copy)",
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Text(
-                                                    text = state.sha256Checksum,
-                                                    style = MaterialTheme.typography.bodySmall.copy(
-                                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                                        fontSize = 11.sp
-                                                    ),
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Icon(
-                                                imageVector = Icons.Rounded.ContentCopy,
-                                                contentDescription = "Copy Hash",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Folder,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Saved to Downloads folder",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                    )
                                 }
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Button(
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             onOpenFile(state.filePath, state.contentUriString)
                                         },
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier.weight(1.2f),
                                         shape = RoundedCornerShape(14.dp),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = MaterialTheme.colorScheme.primary,
                                             contentColor = MaterialTheme.colorScheme.onPrimary
                                         )
                                     ) {
-                                        Icon(Icons.Rounded.FolderOpen, contentDescription = null)
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
                                         Text("Open File")
                                     }
 
                                     FilledTonalButton(
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onShareFile(state.filePath, state.contentUriString)
+                                            onOpenFileLocation(state.filePath, state.contentUriString)
                                         },
+                                        modifier = Modifier.weight(1.2f),
                                         shape = RoundedCornerShape(14.dp)
                                     ) {
-                                        Icon(Icons.Rounded.Share, contentDescription = "Share")
+                                        Icon(Icons.Rounded.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Share")
+                                        Text("Show in Files")
+                                    }
+
+                                    FilledTonalIconButton(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onShareFile(state.filePath, state.contentUriString)
+                                        },
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier.size(46.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.Share, contentDescription = "Share", modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -1457,7 +1469,7 @@ fun MainScreen(
                                             )
                                             if (state.fileName.isNotBlank()) {
                                                 Text(
-                                                    text = state.fileName,
+                                                    text = cleanDisplayName(state.fileName),
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     maxLines = 1,
@@ -1520,7 +1532,7 @@ fun MainScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        text = if (state.totalBytes > 0) "${formatBytes(state.downloadedBytes)} / ${formatBytes(state.totalBytes)}" else "Chunks saved on disk",
+                                        text = if (state.totalBytes > 0) "${formatBytes(state.downloadedBytes)} of ${formatBytes(state.totalBytes)}" else "Chunks saved on disk",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1553,7 +1565,8 @@ fun MainScreen(
                                     OutlinedButton(
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            viewModel.discardDownload(state.fileName)
+                                            pendingCancelFileName = state.fileName
+                                            showCancelConfirmDialog = true
                                         },
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(14.dp),
@@ -1594,6 +1607,66 @@ fun MainScreen(
                     Text("Got it")
                 }
             }
+        )
+    }
+
+    if (showCancelConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showCancelConfirmDialog = false
+                pendingCancelFileName = null
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Rounded.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Cancel Download?",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to cancel and delete this download? All downloaded data will be removed.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.discardDownload(pendingCancelFileName)
+                        showCancelConfirmDialog = false
+                        pendingCancelFileName = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Yes, Cancel", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showCancelConfirmDialog = false
+                        pendingCancelFileName = null
+                    }
+                ) {
+                    Text("Keep Downloading")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(24.dp)
         )
     }
 
@@ -1937,4 +2010,30 @@ fun formatBytes(bytes: Long): String {
     } else {
         String.format(Locale.US, "%.1f MB", mb)
     }
+}
+
+fun formatDuration(seconds: Long): String {
+    if (seconds <= 0) return "0s"
+    val hours = seconds / 3600
+    val minutes = (seconds % 3600) / 60
+    val secs = seconds % 60
+    return when {
+        hours > 0 -> "${hours}h ${minutes}m"
+        minutes > 0 -> "${minutes}m ${secs}s"
+        else -> "${secs}s"
+    }
+}
+
+fun cleanDisplayName(name: String): String {
+    val decoded = try {
+        java.net.URLDecoder.decode(name, "UTF-8")
+    } catch (_: Exception) {
+        name
+    }
+    return decoded
+        .replace("_20", " ")
+        .replace("%20", " ")
+        .replace("__", " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }

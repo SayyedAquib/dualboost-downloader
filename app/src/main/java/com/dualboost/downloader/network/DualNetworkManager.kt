@@ -61,7 +61,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
     private val _cellularSignalLevel = MutableStateFlow(4)
     override val cellularSignalLevel: StateFlow<Int> = _cellularSignalLevel.asStateFlow()
 
-    private val _cellularGeneration = MutableStateFlow(CellularGeneration.FIVE_G)
+    private val _cellularGeneration = MutableStateFlow(CellularGeneration.FOUR_G)
     override val cellularGeneration: StateFlow<CellularGeneration> = _cellularGeneration.asStateFlow()
 
     // SEC-AUDIT H-2: Cloudflare Edge CA pins (*.workers.dev) for Cloud Slicer endpoint
@@ -211,20 +211,13 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 if (networkType == TelephonyManager.NETWORK_TYPE_NR) {
                     _cellularGeneration.value = CellularGeneration.FIVE_G
                     return
-                } else if (networkType == TelephonyManager.NETWORK_TYPE_LTE) {
+                } else if (networkType != TelephonyManager.NETWORK_TYPE_UNKNOWN) {
                     _cellularGeneration.value = CellularGeneration.FOUR_G
                     return
                 }
             }
         } catch (_: SecurityException) {
         } catch (_: Exception) {}
-
-        val downstreamKbps = capabilities.linkDownstreamBandwidthKbps
-        if (downstreamKbps in 1..99_999) {
-            _cellularGeneration.value = CellularGeneration.FOUR_G
-        } else if (downstreamKbps >= 100_000) {
-            _cellularGeneration.value = CellularGeneration.FIVE_G
-        }
     }
 
     fun startListening() {
@@ -248,11 +241,11 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 val callback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
                     override fun onDisplayInfoChanged(telephonyDisplayInfo: TelephonyDisplayInfo) {
                         val override = telephonyDisplayInfo.overrideNetworkType
-                        val is5G = override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ||
+                        val is5GDetected = override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ||
                                 override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_ADVANCED ||
                                 telephonyDisplayInfo.networkType == TelephonyManager.NETWORK_TYPE_NR
 
-                        _cellularGeneration.value = if (is5G) CellularGeneration.FIVE_G else CellularGeneration.FOUR_G
+                        _cellularGeneration.value = if (is5GDetected) CellularGeneration.FIVE_G else CellularGeneration.FOUR_G
                     }
                 }
                 telephonyManager?.registerTelephonyCallback(context.mainExecutor, callback)

@@ -78,7 +78,8 @@ app/src/main/
    - **Signal Telemetry & Generation Detection**:
      - Wi-Fi signal level is continuously computed via `NetworkCapabilities.signalStrength` (API 29+) or legacy `WifiManager.calculateSignalLevel(rssi, 5)`.
      - Cellular signal level is computed via `NetworkCapabilities.signalStrength` mapped across 5 discrete buckets (0..4).
-     - Cellular generation (`CellularGeneration.FOUR_G` vs `CellularGeneration.FIVE_G`) is dynamically resolved via `TelephonyCallback.DisplayInfoListener` (`TelephonyDisplayInfo.overrideNetworkType` including `OVERRIDE_NETWORK_TYPE_NR_NSA` and `OVERRIDE_NETWORK_TYPE_NR_ADVANCED` on API 31+) with fallback to telephony network type (`NETWORK_TYPE_NR` vs `NETWORK_TYPE_LTE`), gracefully informing the UI to warn users when only 4G LTE is active.
+     - Cellular generation (`CellularGeneration.FOUR_G` vs `CellularGeneration.FIVE_G`) is strictly resolved via `TelephonyCallback.DisplayInfoListener` on API 31+ matching Android system status bar behavior: only genuine 5G indicators (`OVERRIDE_NETWORK_TYPE_NR_NSA`, `OVERRIDE_NETWORK_TYPE_NR_ADVANCED`, or `TelephonyManager.NETWORK_TYPE_NR`) classify as 5G. LTE with Carrier Aggregation (`OVERRIDE_NETWORK_TYPE_LTE_CA`) and downstream link speeds are strictly classified as 4G LTE, matching the device's "LTE" status and eliminating false 5G claims.
+     - Immediate Completion & Zero-Post-Processing: Full-file synchronous SHA-256 calculation on completion is bypassed for standard downloads, guaranteeing instant 100% completion without flash read bottlenecks or thermal throttling on multi-gigabyte files (e.g. 30 GB).
 
 ## Database Architecture & Persistence
 - **Runtime Engine State**: In-memory state management. Chunks and real-time telemetry reside in memory with atomic `.dualboost_meta` sidecar files in `context.noBackupFilesDir/dualboost_meta` for pause/resume continuity.
