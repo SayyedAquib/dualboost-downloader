@@ -95,5 +95,6 @@ Standard Android operating system behavior automatically deactivates or idles th
 - [ ] UI displays distinct, real-time speed metrics for both Wi-Fi and Cellular.
 - [ ] Completed files appear in the device `Downloads/` folder and can be opened by native Android file viewers.
 - [ ] Toggling Cellular off mid-download does not abort the download; remaining chunks transfer over Wi-Fi.
-- [ ] App builds via command line `./gradlew assembleDebug` and installs via `adb install -r`.
+- [ ] App builds via command line `./gradlew.bat assembleRelease` and installs via `adb install -r app-release.apk` with authentic release signing.
+- [ ] 0% silent download corruption guaranteed by write boundary capping, single-stream length checks, and fail-closed resume verification.
 

@@ -47,19 +47,30 @@ For all new features, bug fixes, and architectural modifications, strictly follo
 
 ## API Rules
 - Use RFC 7233 range syntax: `Range: bytes=start-end`.
-- Always verify HTTP status code 206 for partial content; status code 200 indicates the server sent the full file instead of the requested chunk.
+- Always verify HTTP status code 206 for partial content; status code 200 on any chunk where `startByte > 0` must be immediately rejected with an exception and never written to disk.
 
 ## Database Rules
 - Keep download chunks and state in-memory during transfer. Do not introduce an SQLite/Room layer until scheduled in future iterations.
 
 ## Security Rules
-- Do not log sensitive user URLs, authorization tokens, or carrier IMSI/IMEI identifiers.
+- Do not log sensitive user URLs, authorization tokens, or carrier IMSI/IMEI identifiers; sanitize exception strings with `sanitizeLogMessage()` before logging.
 - Strip `Log.v`, `Log.d`, and `Log.i` calls in release builds via ProGuard/R8 `-assumenosideeffects`.
 - Always store authentication keys, secrets, and credentials in Android Keystore-backed `EncryptedSharedPreferences`.
 - Never commit keystores, signing keys, or `keystore.properties` to version control.
+- Never sign release APKs with the Android debug keystore. Release signing must load from environment variables, `keystore.properties`, or auto-generate a dedicated `release-local.jks`.
 - Enforce TLS 1.2+ (`ConnectionSpec.MODERN_TLS`) and domain-specific certificate pinning for sensitive edge services.
 - Explicitly declare backup exclusion rules in `data_extraction_rules.xml` and `backup_rules.xml`.
-- Always require runtime `POST_NOTIFICATIONS` permission before posting notifications on Android 13+.
+- Always require runtime `POST_NOTIFICATIONS` permission before posting notifications on Android 13+, and enforce `NotificationCompat.VISIBILITY_PRIVATE` for lock-screen confidentiality.
+- All file deletion operations (`discardDownload`, `deletePhysicalFile`) MUST strictly validate canonical directory containment (`canonicalPath.startsWith(safeRoot.canonicalPath + File.separator)`) before invoking `delete()`.
+- Chunk write loops MUST strictly cap read buffer sizes to `min(buffer.size, remaining)` to prevent clobbering neighboring chunks.
+- Never mark downloads `Completed` without asserting `outputFile.length() == contentLength` (and `totalRead == totalLength` for single-stream transfers).
+- Always verify physical file presence and byte size before allocating files or trusting sidecar chunk bitmaps on resume.
+
+## Network & Service Lifecycle Rules
+- Strict Physical Socket Isolation: Cellular workers must route exclusively through `cellularClient`; NEVER fall back to the default unbound client.
+- App-Wide Network Singleton Protection: `DownloadForegroundService.onDestroy()` must NEVER call `networkManager.stopListening()`. Network listener lifecycle belongs strictly to `DualBoostApp`.
+- Always call `stopSelf()` immediately after calling `stopForeground(STOP_FOREGROUND_DETACH)` to prevent orphaned service processes.
+- Implement Android 15 (API 35) `onTimeout(startId, fgsType)` to pause downloads and release wake locks before system termination.
 
 ## Dependency Rules
 - All third-party libraries must be registered in `gradle/libs.versions.toml`.

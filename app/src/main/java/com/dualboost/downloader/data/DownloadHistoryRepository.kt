@@ -3,6 +3,7 @@ package com.dualboost.downloader.data
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Environment
 import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -162,34 +163,70 @@ class DownloadHistoryRepository(
     }
 
     /**
-     * Checks if the physical file for a given history item exists on disk.
+     * Checks if the physical file for a given history item exists on disk,
+     * or is accessible via its published MediaStore Content URI.
      */
     fun isFilePresent(item: DownloadHistoryItem): Boolean {
         val file = File(item.filePath)
-        return file.exists() && file.length() > 0
+        if (file.exists() && file.length() > 0) return true
+        if (!item.contentUriString.isNullOrBlank()) {
+            return try {
+                val uri = Uri.parse(item.contentUriString)
+                val resolver = context.contentResolver ?: return false
+                resolver.openFileDescriptor(uri, "r")?.use { true } ?: false
+            } catch (_: Exception) {
+                false
+            }
+        }
+        return false
+    }
+
+    private fun isSafeHistoryDeletePath(file: File): Boolean {
+        return try {
+            val fileCanonical = file.canonicalPath
+            val allowedRoots = listOfNotNull(
+                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                context.getExternalFilesDir(null),
+                context.filesDir,
+                context.noBackupFilesDir,
+                context.cacheDir,
+                try { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) } catch (_: Throwable) { null }
+            )
+            allowedRoots.any { root ->
+                val rootCanonical = root.canonicalPath
+                fileCanonical == rootCanonical || fileCanonical.startsWith(rootCanonical + File.separator)
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun deletePhysicalFile(item: DownloadHistoryItem) {
         try {
             val file = File(item.filePath)
-            if (file.exists()) {
-                val deleted = file.delete()
-                Log.d(TAG, "Deleted physical file ${file.name}: $deleted")
-                try {
-                    MediaScannerConnection.scanFile(
-                        context,
-                        arrayOf(file.absolutePath),
-                        null,
-                        null
-                    )
-                } catch (_: Exception) {}
+            // SEC-AUDIT M-5: Strict canonical containment check before deleting physical file
+            if (isSafeHistoryDeletePath(file)) {
+                if (file.exists()) {
+                    val deleted = file.delete()
+                    Log.d(TAG, "Deleted physical file ${file.name}: $deleted")
+                    try {
+                        MediaScannerConnection.scanFile(
+                            context,
+                            arrayOf(file.absolutePath),
+                            null,
+                            null
+                        )
+                    } catch (_: Exception) {}
+                }
+            } else {
+                Log.w(TAG, "Refusing to delete physical file outside download directories: ${item.filePath}")
             }
 
             // Attempt to remove via MediaStore ContentResolver if URI is present
             item.contentUriString?.let { uriStr ->
                 try {
                     val uri = Uri.parse(uriStr)
-                    context.contentResolver.delete(uri, null, null)
+                    context.contentResolver?.delete(uri, null, null)
                 } catch (_: Exception) {}
             }
         } catch (e: Exception) {

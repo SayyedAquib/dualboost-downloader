@@ -595,12 +595,10 @@ private suspend fun testWorkerConnectivity(rawUrl: String, secretKey: String): W
                 .readTimeout(5, TimeUnit.SECONDS)
                 .build()
 
-            val requestBuilder = Request.Builder().url(healthUrl).get()
-            if (secretKey.isNotBlank()) {
-                requestBuilder.header("X-Slicer-Key", secretKey)
-            }
+            // SEC-AUDIT M-1: Health check is an unauthenticated ping; do not expose secret in request headers
+            val request = Request.Builder().url(healthUrl).get().build()
 
-            client.newCall(requestBuilder.build()).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     val body = response.body?.string() ?: ""
                     if (body.contains("DualBoost Cloud Slicer")) {

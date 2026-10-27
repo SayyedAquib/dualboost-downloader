@@ -20,6 +20,67 @@ android {
     val defaultSlicerUrl = localProperties.getProperty("slicer.url", "")
     val defaultSlicerSecret = localProperties.getProperty("slicer.secret", "")
 
+    val keystoreProps = Properties()
+    val keystorePropsFile = rootProject.file("keystore.properties")
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { stream ->
+            keystoreProps.load(stream)
+        }
+    }
+
+    val envKeystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
+    val propKeystorePath = keystoreProps.getProperty("RELEASE_KEYSTORE_PATH") ?: keystoreProps.getProperty("storeFile")
+
+    val resolvedStoreFile: File
+    val resolvedStorePassword: String
+    val resolvedKeyAlias: String
+    val resolvedKeyPassword: String
+
+    if (!envKeystorePath.isNullOrBlank()) {
+        resolvedStoreFile = file(envKeystorePath)
+        resolvedStorePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD") ?: ""
+        resolvedKeyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "dualboost"
+        resolvedKeyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: ""
+    } else if (!propKeystorePath.isNullOrBlank()) {
+        resolvedStoreFile = rootProject.file(propKeystorePath)
+        resolvedStorePassword = keystoreProps.getProperty("RELEASE_KEYSTORE_PASSWORD") ?: keystoreProps.getProperty("storePassword") ?: ""
+        resolvedKeyAlias = keystoreProps.getProperty("RELEASE_KEY_ALIAS") ?: keystoreProps.getProperty("keyAlias") ?: "dualboost"
+        resolvedKeyPassword = keystoreProps.getProperty("RELEASE_KEY_PASSWORD") ?: keystoreProps.getProperty("keyPassword") ?: ""
+    } else {
+        // SEC-AUDIT H-1: Never sign release builds with public debug keystore.
+        // Auto-generate a dedicated local release keystore for CLI builds if neither env vars nor keystore.properties are supplied.
+        val autoKeystore = rootProject.file("release-local.jks")
+        val defaultPass = "DualBoostReleaseKey2026!"
+        val defaultAlias = "dualboost-release"
+        if (!autoKeystore.exists()) {
+            val keytoolCmd = arrayOf(
+                "keytool", "-genkeypair", "-v",
+                "-keystore", autoKeystore.absolutePath,
+                "-storepass", defaultPass,
+                "-alias", defaultAlias,
+                "-keypass", defaultPass,
+                "-keyalg", "RSA",
+                "-keysize", "2048",
+                "-validity", "10000",
+                "-dname", "CN=DualBoost Release, OU=Release, O=DualBoost, L=Android, S=Release, C=US"
+            )
+            ProcessBuilder(*keytoolCmd).redirectErrorStream(true).start().waitFor()
+        }
+        resolvedStoreFile = autoKeystore
+        resolvedStorePassword = defaultPass
+        resolvedKeyAlias = defaultAlias
+        resolvedKeyPassword = defaultPass
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = resolvedStoreFile
+            storePassword = resolvedStorePassword
+            keyAlias = resolvedKeyAlias
+            keyPassword = resolvedKeyPassword
+        }
+    }
+
     defaultConfig {
         applicationId = "com.dualboost.downloader"
         minSdk = 26
@@ -38,20 +99,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
 
-            // SEC-AUDIT C-2: Use release keystore if environment variables are set,
-            // else fall back to debug for local development builds only
-            val releaseKeystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
-            signingConfig = if (!releaseKeystorePath.isNullOrBlank()) {
-                signingConfigs.create("release") {
-                    storeFile = file(releaseKeystorePath)
-                    storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD") ?: ""
-                    keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
-                    keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: ""
-                }
-            } else {
-                // WARNING: Debug signing for local development only. Set env vars for production builds.
-                signingConfigs.getByName("debug")
-            }
+            // SEC-AUDIT H-1: Release builds are always signed with a dedicated release keystore
+            signingConfig = signingConfigs.getByName("release")
 
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -74,7 +123,7 @@ android {
         unitTests.isReturnDefaultValues = true
     }
     lint {
-        checkReleaseBuilds = false
+        checkReleaseBuilds = true
     }
 }
 

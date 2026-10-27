@@ -103,7 +103,7 @@ object SlicerPreferences {
  * Slices non-range web streams into HTTP 206 Partial Content byte ranges
  * for high-speed dual-network (Wi-Fi + 5G) download aggregation.
  *
- * Security: Anti-SSRF, DNS Rebinding Defense, Fail-Closed Header Auth, 16MB DoS Bounds.
+ * Security: Anti-SSRF, DNS Rebinding Defense, Fail-Closed Header Auth, DoS Bounds.
  */
 
 function timingSafeEqual(a, b) {
@@ -119,14 +119,75 @@ function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
-function isPrivateIpv4(o1, o2) {
-  if (o1 === 127) return { isPrivate: true, reason: 'Loopback IP addresses prohibited' };
-  if (o1 === 10) return { isPrivate: true, reason: 'Private RFC 1918 IP addresses prohibited' };
-  if (o1 === 172 && o2 >= 16 && o2 <= 31) return { isPrivate: true, reason: 'Private RFC 1918 IP addresses prohibited' };
-  if (o1 === 192 && o2 === 168) return { isPrivate: true, reason: 'Private RFC 1918 IP addresses prohibited' };
+function isProhibitedIpv4(o1, o2, o3, o4) {
+  if (o1 === 127) return { isPrivate: true, reason: 'Loopback IPv4 addresses prohibited' };
+  if (o1 === 10) return { isPrivate: true, reason: 'Private RFC 1918 IPv4 addresses prohibited' };
+  if (o1 === 172 && o2 >= 16 && o2 <= 31) return { isPrivate: true, reason: 'Private RFC 1918 IPv4 addresses prohibited' };
+  if (o1 === 192 && o2 === 168) return { isPrivate: true, reason: 'Private RFC 1918 IPv4 addresses prohibited' };
   if (o1 === 169 && o2 === 254) return { isPrivate: true, reason: 'Link-local and cloud metadata IPs prohibited' };
   if (o1 === 100 && o2 >= 64 && o2 <= 127) return { isPrivate: true, reason: 'Carrier-Grade NAT IPs prohibited' };
-  if (o1 === 0) return { isPrivate: true, reason: 'Invalid target IP address' };
+  if (o1 === 198 && (o2 === 18 || o2 === 19)) return { isPrivate: true, reason: 'Benchmark network IPs prohibited' };
+  if (o1 >= 240) return { isPrivate: true, reason: 'Reserved Class E IPs prohibited' };
+  if (o1 === 0) return { isPrivate: true, reason: 'Invalid or zero target IP address' };
+  return { isPrivate: false };
+}
+
+function parseIpv4String(ipStr) {
+  const parts = ipStr.split('.');
+  if (parts.length !== 4) return null;
+  const nums = parts.map(p => Number(p));
+  if (nums.some(n => isNaN(n) || n < 0 || n > 255)) return null;
+  return nums;
+}
+
+function isProhibitedIpv6(rawIp6) {
+  let clean = rawIp6.toLowerCase().replace(/^\[|\]${'$'}/g, '').trim();
+  if (clean === '::' || clean === '::1' || clean === '0:0:0:0:0:0:0:1' || clean === '0:0:0:0:0:0:0:0') {
+    return { isPrivate: true, reason: 'Loopback or unspecified IPv6 address prohibited' };
+  }
+  // Check for IPv4-mapped IPv6 (::ffff:192.168.1.1, ::ffff:c0a8:0101, etc.)
+  if (clean.includes('::ffff:') || clean.includes(':ffff:')) {
+    const lastPart = clean.substring(clean.lastIndexOf(':') + 1);
+    if (lastPart.includes('.')) {
+      const parts = parseIpv4String(lastPart);
+      if (parts) {
+        return isProhibitedIpv4(parts[0], parts[1], parts[2], parts[3]);
+      }
+    }
+    const segments = clean.split(':').filter(Boolean);
+    if (segments.length >= 2) {
+      const h1 = parseInt(segments[segments.length - 2], 16);
+      const h2 = parseInt(segments[segments.length - 1], 16);
+      if (!isNaN(h1) && !isNaN(h2)) {
+        const o1 = (h1 >> 8) & 0xff;
+        const o2 = h1 & 0xff;
+        const o3 = (h2 >> 8) & 0xff;
+        const o4 = h2 & 0xff;
+        return isProhibitedIpv4(o1, o2, o3, o4);
+      }
+    }
+    return { isPrivate: true, reason: 'IPv4-mapped IPv6 address prohibited' };
+  }
+  // Link local fe80::/10 (fe80 - febf)
+  if (clean.startsWith('fe8') || clean.startsWith('fe9') || clean.startsWith('fea') || clean.startsWith('feb')) {
+    return { isPrivate: true, reason: 'Link-local IPv6 address prohibited' };
+  }
+  // Unique local fc00::/7 (fc00 - fdff)
+  if (clean.startsWith('fc') || clean.startsWith('fd')) {
+    return { isPrivate: true, reason: 'Unique local IPv6 address prohibited' };
+  }
+  // NAT64 64:ff9b::/96
+  if (clean.startsWith('64:ff9b:')) {
+    return { isPrivate: true, reason: 'NAT64 prefix prohibited' };
+  }
+  // 6to4 2002::/16
+  if (clean.startsWith('2002:')) {
+    return { isPrivate: true, reason: '6to4 prefix prohibited' };
+  }
+  // Documentation 2001:db8::/32
+  if (clean.startsWith('2001:db8:') || clean.startsWith('2001:0db8:')) {
+    return { isPrivate: true, reason: 'Documentation IPv6 prefix prohibited' };
+  }
   return { isPrivate: false };
 }
 
@@ -171,22 +232,30 @@ function validateTargetUrl(rawUrl) {
   if (ipv4Match) {
     const o1 = parseInt(ipv4Match[1], 10);
     const o2 = parseInt(ipv4Match[2], 10);
-    const check = isPrivateIpv4(o1, o2);
+    const o3 = parseInt(ipv4Match[3], 10);
+    const o4 = parseInt(ipv4Match[4], 10);
+    const check = isProhibitedIpv4(o1, o2, o3, o4);
     if (check.isPrivate) {
       return { valid: false, error: check.reason };
     }
   }
 
-  if (hostname === '[::1]' || hostname.startsWith('[fe80:') || hostname.startsWith('[fc00:') || hostname.startsWith('[fd00:')) {
-    return { valid: false, error: 'Internal IPv6 addresses prohibited' };
+  if (hostname.startsWith('[')) {
+    const check = isProhibitedIpv6(hostname);
+    if (check.isPrivate) {
+      return { valid: false, error: check.reason };
+    }
   }
 
   return { valid: true, parsed };
 }
 
 async function verifyDnsResolution(hostname) {
-  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.startsWith('[')) {
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
     return { valid: true };
+  }
+  if (hostname.startsWith('[')) {
+    return { valid: !isProhibitedIpv6(hostname).isPrivate };
   }
   try {
     const [resA, resAAAA] = await Promise.all([
@@ -194,14 +263,18 @@ async function verifyDnsResolution(hostname) {
       fetch('https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(hostname) + '&type=AAAA', { headers: { 'Accept': 'application/dns-json' } })
     ]);
 
+    if (!resA.ok && !resAAAA.ok) {
+      return { valid: false, error: 'Fail-closed: DNS resolution failed upstream' };
+    }
+
     if (resA.ok) {
       const data = await resA.json();
       if (data.Answer && Array.isArray(data.Answer)) {
         for (const ans of data.Answer) {
           if (ans.type === 1 && ans.data) {
-            const parts = ans.data.split('.').map(Number);
-            if (parts.length === 4) {
-              const check = isPrivateIpv4(parts[0], parts[1]);
+            const parts = parseIpv4String(ans.data);
+            if (parts) {
+              const check = isProhibitedIpv4(parts[0], parts[1], parts[2], parts[3]);
               if (check.isPrivate) {
                 return { valid: false, error: 'DNS Rebinding: Hostname resolves to prohibited private IPv4 (' + ans.data + ')' };
               }
@@ -216,38 +289,30 @@ async function verifyDnsResolution(hostname) {
       if (data.Answer && Array.isArray(data.Answer)) {
         for (const ans of data.Answer) {
           if (ans.type === 28 && ans.data) {
-            const ip6 = ans.data.toLowerCase().trim();
-            if (
-              ip6 === '::1' ||
-              ip6 === '0:0:0:0:0:0:0:1' ||
-              ip6.startsWith('fe80:') ||
-              ip6.startsWith('fc00:') ||
-              ip6.startsWith('fd00:') ||
-              ip6.startsWith('::ffff:127.') ||
-              ip6.startsWith('::ffff:10.') ||
-              ip6.startsWith('::ffff:192.168.')
-            ) {
-              return { valid: false, error: 'DNS Rebinding: Hostname resolves to prohibited private IPv6 (' + ans.data + ')' };
+            const check = isProhibitedIpv6(ans.data);
+            if (check.isPrivate) {
+              return { valid: false, error: 'DNS Rebinding: Hostname resolves to prohibited IPv6 (' + ans.data + ')' };
             }
           }
         }
       }
     }
-  } catch (_) {}
-  return { valid: true };
+    return { valid: true };
+  } catch (err) {
+    return { valid: false, error: 'Fail-closed: DNS resolution error' };
+  }
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // SEC-AUDIT M-1: Public health check ping (does not disclose secret presence)
     if (url.pathname === '/health') {
-      const isSecured = Boolean(env?.SECRET_KEY && env.SECRET_KEY.trim() !== '');
       return new Response(JSON.stringify({
         status: 'ok',
         service: 'DualBoost Cloud Slicer',
-        version: '1.2.0-hardened',
-        secured: isSecured,
+        version: '1.2.1-hardened',
         timestamp: Date.now()
       }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
@@ -311,8 +376,10 @@ export default {
 
     const rangeHeader = request.headers.get('Range');
     if (!rangeHeader || !rangeHeader.startsWith('bytes=')) {
+      // SEC-AUDIT M-2: Enforce redirect: 'manual' to prevent SSRF redirect bypass
       const response = await fetch(targetUrl, {
         method: request.method,
+        redirect: 'manual',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
         },
@@ -320,18 +387,24 @@ export default {
           resolveOverride: resolvedHostname
         }
       });
+
+      if (response.status >= 300 && response.status < 400) {
+        return new Response('DualBoost Cloud Slicer Security Alert: Upstream redirects prohibited', {
+          status: 403,
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        });
+      }
+
       const newHeaders = new Headers(response.headers);
       newHeaders.set('Access-Control-Allow-Origin', '*');
       newHeaders.set('Accept-Ranges', 'bytes');
       return new Response(response.body, { status: response.status, headers: newHeaders });
     }
 
-    const rangeParts = rangeHeader.replace('bytes=', '').split('-');
-    const rangeStart = parseInt(rangeParts[0], 10) || 0;
-    const rangeEndRequested = rangeParts[1] ? parseInt(rangeParts[1], 10) : null;
-
+    // SEC-AUDIT M-2: Forward Range with redirect: 'manual'
     const forwardResponse = await fetch(targetUrl, {
       method: 'GET',
+      redirect: 'manual',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Range': rangeHeader
@@ -341,6 +414,13 @@ export default {
       }
     });
 
+    if (forwardResponse.status >= 300 && forwardResponse.status < 400) {
+      return new Response('DualBoost Cloud Slicer Security Alert: Upstream redirects prohibited', {
+        status: 403,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
     if (forwardResponse.status === 206) {
       const newHeaders = new Headers(forwardResponse.headers);
       newHeaders.set('Access-Control-Allow-Origin', '*');
@@ -348,79 +428,17 @@ export default {
       return new Response(forwardResponse.body, { status: 206, headers: newHeaders });
     }
 
-    const totalLengthHeader = forwardResponse.headers.get('Content-Length');
-    const totalLength = totalLengthHeader ? parseInt(totalLengthHeader, 10) : -1;
-
-    const MAX_SLICE_SIZE = 16 * 1024 * 1024;
-    const requestedSlice = (rangeEndRequested !== null && rangeEndRequested >= rangeStart)
-      ? (rangeEndRequested - rangeStart + 1)
-      : (totalLength > 0 ? (totalLength - rangeStart) : 4 * 1024 * 1024);
-    const boundedSlice = Math.min(Math.max(1, requestedSlice), MAX_SLICE_SIZE);
-    const rangeEnd = rangeStart + boundedSlice - 1;
-    const sliceLength = boundedSlice;
-
-    const bodyReader = forwardResponse.body.getReader();
-    let bytesSkipped = 0;
-    let bytesYielded = 0;
-
-    const stream = new ReadableStream({
-      async pull(controller) {
-        while (bytesYielded < sliceLength) {
-          const { done, value } = await bodyReader.read();
-          if (done) {
-            controller.close();
-            return;
-          }
-          const chunk = value;
-          const chunkSize = chunk.length;
-          if (bytesSkipped < rangeStart) {
-            const needToSkip = rangeStart - bytesSkipped;
-            if (chunkSize <= needToSkip) {
-              bytesSkipped += chunkSize;
-              continue;
-            } else {
-              const sliceStart = needToSkip;
-              bytesSkipped = rangeStart;
-              const remainingToTake = sliceLength - bytesYielded;
-              const availableInChunk = chunkSize - sliceStart;
-              const take = Math.min(availableInChunk, remainingToTake);
-              const subChunk = chunk.subarray(sliceStart, sliceStart + take);
-              controller.enqueue(subChunk);
-              bytesYielded += take;
-              if (bytesYielded >= sliceLength) {
-                controller.close();
-                try { await bodyReader.cancel(); } catch (_) {}
-                return;
-              }
-            }
-          } else {
-            const remainingToTake = sliceLength - bytesYielded;
-            const take = Math.min(chunkSize, remainingToTake);
-            const subChunk = chunk.subarray(0, take);
-            controller.enqueue(subChunk);
-            bytesYielded += take;
-            if (bytesYielded >= sliceLength) {
-              controller.close();
-              try { await bodyReader.cancel(); } catch (_) {}
-              return;
-            }
-          }
-        }
-        controller.close();
-      },
-      async cancel() {
-        try { await bodyReader.cancel(); } catch (_) {}
+    // SEC-AUDIT M-6: If origin does NOT honor Range (e.g. returns 200 instead of 206),
+    // cancel upstream body immediately to prevent O(n^2) bandwidth amplification!
+    try { await forwardResponse.body?.cancel(); } catch (_) {}
+    return new Response('DualBoost Cloud Slicer: Upstream origin does not support HTTP Range requests', {
+      status: 501,
+      statusText: 'Not Implemented',
+      headers: {
+        'X-Slicer-Error': 'Upstream does not support Range requests',
+        'Access-Control-Allow-Origin': '*'
       }
     });
-
-    const responseHeaders = new Headers();
-    responseHeaders.set('Content-Type', forwardResponse.headers.get('Content-Type') || 'application/octet-stream');
-    responseHeaders.set('Accept-Ranges', 'bytes');
-    responseHeaders.set('Content-Range', `bytes ${'$'}{rangeStart}-${'$'}{rangeEnd}/${'$'}{totalLength > 0 ? totalLength : '*'}`);
-    responseHeaders.set('Content-Length', sliceLength.toString());
-    responseHeaders.set('Access-Control-Allow-Origin', '*');
-
-    return new Response(stream, { status: 206, statusText: 'Partial Content', headers: responseHeaders });
   }
 };"""
 }

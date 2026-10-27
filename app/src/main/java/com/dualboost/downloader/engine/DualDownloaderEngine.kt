@@ -60,6 +60,7 @@ class DualDownloaderEngine(
     private val activeCalls = ConcurrentHashMap.newKeySet<Call>()
     private val isPaused = AtomicBoolean(false)
     private val isDiscarding = AtomicBoolean(false)
+    private val isExecuting = AtomicBoolean(false)
     internal val activeCallsCount: Int get() = activeCalls.size
 
     // Active download tracking for seamless resume and discard
@@ -67,12 +68,14 @@ class DualDownloaderEngine(
     private var currentUrl: String? = null
 
     private fun registerActiveCall(call: Call): Boolean {
-        if (isPaused.get() || downloadJob?.isActive != true) {
+        val isJobAlive = downloadJob?.isActive ?: isExecuting.get()
+        if (isPaused.get() || !isJobAlive) {
             try { call.cancel() } catch (_: Exception) {}
             return false
         }
         activeCalls.add(call)
-        if (isPaused.get() || downloadJob?.isActive != true) {
+        val secondJobAlive = downloadJob?.isActive ?: isExecuting.get()
+        if (isPaused.get() || !secondJobAlive) {
             try { call.cancel() } catch (_: Exception) {}
             activeCalls.remove(call)
             return false
@@ -163,7 +166,7 @@ class DualDownloaderEngine(
 
         // Strict canonical path boundary check: prevent path traversal out of safeDir
         try {
-            if (!candidate.canonicalPath.startsWith(safeBaseCanonical)) {
+            if (!candidate.canonicalPath.startsWith(safeBaseCanonical + File.separator)) {
                 val safeFallbackName = "download_${System.currentTimeMillis()}.bin"
                 candidate = File(safeDir, safeFallbackName)
             }
@@ -194,7 +197,7 @@ class DualDownloaderEngine(
             if (!fallbackDir.exists()) fallbackDir.mkdirs()
             candidate = findAvailableFile(fallbackDir)
             try {
-                if (!candidate.canonicalPath.startsWith(fallbackDir.canonicalPath)) {
+                if (!candidate.canonicalPath.startsWith(fallbackDir.canonicalPath + File.separator)) {
                     val safeFallbackName = "download_${System.currentTimeMillis()}.bin"
                     candidate = File(fallbackDir, safeFallbackName)
                 }
@@ -218,11 +221,14 @@ class DualDownloaderEngine(
         val internalDir = getInternalMetaDir()
         val privateMeta = File(internalDir, "$fileName.dualboost_meta")
         val legacyMeta = File(targetDir, "$fileName.dualboost_meta")
-        return if (!privateMeta.exists() && legacyMeta.exists()) {
-            legacyMeta
-        } else {
-            privateMeta
+        // SEC-AUDIT M-3: Migrate legacy shared meta once, then delete from shared storage
+        if (!privateMeta.exists() && legacyMeta.exists()) {
+            try {
+                legacyMeta.copyTo(privateMeta, overwrite = true)
+                legacyMeta.delete()
+            } catch (_: Exception) {}
         }
+        return privateMeta
     }
 
     data class MetaInfo(
@@ -368,7 +374,7 @@ class DualDownloaderEngine(
         val usableBytes = targetDir.usableSpace
         val safetyBuffer = 20 * 1024 * 1024L // 20 MB safety margin
         val isInsufficient = if (usableBytes <= 0) {
-            false
+            neededAdditionalBytes > 2L * 1024 * 1024 * 1024 * 1024L // 2 TB sanity limit
         } else if (neededAdditionalBytes > Long.MAX_VALUE - safetyBuffer) {
             true // Overflow prevention: required exceeds maximum possible Long
         } else {
@@ -403,6 +409,7 @@ class DualDownloaderEngine(
         activeCalls.clear()
 
         isPaused.set(false)
+        isExecuting.set(true)
         downloadJob = scope.launch {
             try {
                 executeDownload(sanitizedUrl, targetDir)
@@ -429,13 +436,20 @@ class DualDownloaderEngine(
                     Log.d(TAG, "Download discarded")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Download failed", e)
+                if (isPaused.get() || isDiscarding.get() || e.message?.contains("Canceled", ignoreCase = true) == true) {
+                    Log.d(TAG, "Download paused/cancelled via socket abort")
+                    return@launch
+                }
+                val sanitizedError = sanitizeLogMessage(e.message)
+                Log.e(TAG, "Download failed: $sanitizedError")
                 val errorMessage = if (e.message?.contains("CLEARTEXT", ignoreCase = true) == true) {
                     "Unencrypted HTTP communication is blocked by security policy. Target server must support HTTPS."
                 } else {
                     e.localizedMessage ?: "Unknown error"
                 }
                 _downloadState.value = DownloadState.Failed(errorMessage)
+            } finally {
+                isExecuting.set(false)
             }
         }
     }
@@ -443,6 +457,7 @@ class DualDownloaderEngine(
     fun pauseDownload() {
         val lastState = _downloadState.value
         isPaused.set(true)
+        isExecuting.set(false)
         downloadJob?.cancel()
         activeCalls.forEach { call ->
             try {
@@ -467,9 +482,20 @@ class DualDownloaderEngine(
         }
     }
 
+    internal fun isSafeDownloadFile(file: File, safeDir: File): Boolean {
+        return try {
+            val fileCanonical = file.canonicalPath
+            val safeCanonical = safeDir.canonicalPath
+            fileCanonical.startsWith(safeCanonical + File.separator)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun discardDownload(targetDir: File = getDefaultDownloadDir(), fileName: String? = null) {
         isDiscarding.set(true)
         isPaused.set(true)
+        isExecuting.set(false)
         downloadJob?.cancel()
         activeCalls.forEach { call ->
             try { call.cancel() } catch (_: Exception) {}
@@ -479,27 +505,31 @@ class DualDownloaderEngine(
         val target = currentOutputFile ?: if (fileName != null) File(targetDir, fileName) else null
         try {
             target?.let { file ->
-                if (file.exists()) file.delete()
-                val meta = getMetaFile(file.parentFile ?: targetDir, file.name)
-                if (meta.exists()) meta.delete()
-                val tmp = File(meta.parentFile ?: (file.parentFile ?: targetDir), "${meta.name}.tmp")
-                if (tmp.exists()) tmp.delete()
-                val internalMeta = File(getInternalMetaDir(), "${file.name}.dualboost_meta")
-                if (internalMeta.exists()) internalMeta.delete()
-                val internalTmp = File(getInternalMetaDir(), "${file.name}.dualboost_meta.tmp")
-                if (internalTmp.exists()) internalTmp.delete()
+                if (isSafeDownloadFile(file, targetDir)) {
+                    if (file.exists()) file.delete()
+                    val meta = getMetaFile(file.parentFile ?: targetDir, file.name)
+                    if (meta.exists()) meta.delete()
+                    val tmp = File(meta.parentFile ?: (file.parentFile ?: targetDir), "${meta.name}.tmp")
+                    if (tmp.exists()) tmp.delete()
+                    val internalMeta = File(getInternalMetaDir(), "${file.name}.dualboost_meta")
+                    if (internalMeta.exists()) internalMeta.delete()
+                    val internalTmp = File(getInternalMetaDir(), "${file.name}.dualboost_meta.tmp")
+                    if (internalTmp.exists()) internalTmp.delete()
+                }
             }
             if (fileName != null) {
                 val orphan = File(targetDir, fileName)
-                if (orphan.exists()) orphan.delete()
-                val meta = getMetaFile(targetDir, fileName)
-                if (meta.exists()) meta.delete()
-                val tmp = File(meta.parentFile ?: targetDir, "${meta.name}.tmp")
-                if (tmp.exists()) tmp.delete()
-                val internalMeta = File(getInternalMetaDir(), "$fileName.dualboost_meta")
-                if (internalMeta.exists()) internalMeta.delete()
-                val internalTmp = File(getInternalMetaDir(), "$fileName.dualboost_meta.tmp")
-                if (internalTmp.exists()) internalTmp.delete()
+                if (isSafeDownloadFile(orphan, targetDir)) {
+                    if (orphan.exists()) orphan.delete()
+                    val meta = getMetaFile(targetDir, fileName)
+                    if (meta.exists()) meta.delete()
+                    val tmp = File(meta.parentFile ?: targetDir, "${meta.name}.tmp")
+                    if (tmp.exists()) tmp.delete()
+                    val internalMeta = File(getInternalMetaDir(), "$fileName.dualboost_meta")
+                    if (internalMeta.exists()) internalMeta.delete()
+                    val internalTmp = File(getInternalMetaDir(), "$fileName.dualboost_meta.tmp")
+                    if (internalTmp.exists()) internalTmp.delete()
+                }
             }
         } catch (_: Exception) {}
         currentOutputFile = null
@@ -521,7 +551,7 @@ class DualDownloaderEngine(
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            Log.w(TAG, "Default probe failed (${e.message}), attempting Cellular fallback...")
+            Log.w(TAG, "Default probe failed (${sanitizeLogMessage(e.message)}), attempting Cellular fallback...")
             val cellularClient = networkManager.getCellularClient()
             if (cellularClient != null) {
                 val call = cellularClient.newCall(request)
@@ -596,7 +626,7 @@ class DualDownloaderEngine(
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "HEAD probe failed (${e.message}), falling back to GET range probe")
+            Log.w(TAG, "HEAD probe failed (${sanitizeLogMessage(e.message)}), falling back to GET range probe")
         }
 
         // If HEAD didn't yield range or length, test with GET range 0-0
@@ -635,7 +665,7 @@ class DualDownloaderEngine(
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Initial range probe failed: ${e.message}")
+                Log.w(TAG, "Initial range probe failed: ${sanitizeLogMessage(e.message)}")
             }
         }
 
@@ -671,7 +701,7 @@ class DualDownloaderEngine(
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Stage 2 desktop range probe failed: ${e.message}")
+                Log.w(TAG, "Stage 2 desktop range probe failed: ${sanitizeLogMessage(e.message)}")
             }
 
             // 2. Try HEAD with Desktop headers if range didn't succeed
@@ -694,7 +724,7 @@ class DualDownloaderEngine(
                         }
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Stage 2 desktop HEAD probe failed: ${e.message}")
+                    Log.w(TAG, "Stage 2 desktop HEAD probe failed: ${sanitizeLogMessage(e.message)}")
                 }
             }
 
@@ -750,7 +780,7 @@ class DualDownloaderEngine(
                         }
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Stage 3 Cloud Slicer probe failed: ${e.message}")
+                    Log.w(TAG, "Stage 3 Cloud Slicer probe failed: ${sanitizeLogMessage(e.message)}")
                 }
 
                 if (slicerRanges && slicerLength > 0) {
@@ -782,6 +812,36 @@ class DualDownloaderEngine(
         // Pre-flight disk space validation
         checkAvailableStorage(actualTargetDir, contentLength, outputFile)
 
+        // SEC-AUDIT H-2c: Inspect physical file on disk before RandomAccessFile creates/pads it
+        val physicalFileExisted = outputFile.exists()
+        val physicalFileLength = if (physicalFileExisted) outputFile.length() else 0L
+
+        // Load previously completed chunks from sidecar metadata with strict fail-closed ETag/length validation
+        val completedIndices = ConcurrentHashMap.newKeySet<Int>()
+        val existingMeta = readMetaInfo(metaFile)
+        var canResume = physicalFileExisted && physicalFileLength == contentLength && existingMeta != null && existingMeta.url == url && existingMeta.totalLength == contentLength
+
+        if (existingMeta != null) {
+            if (!physicalFileExisted || physicalFileLength != contentLength) {
+                Log.w(TAG, "Physical file missing or truncated ($physicalFileLength != $contentLength). Invalidating stale sidecar.")
+                canResume = false
+            } else {
+                val etagMismatch = existingMeta.etag != null && (etag == null || existingMeta.etag != etag)
+                val lastModifiedMismatch = existingMeta.lastModified != null && (lastModified == null || existingMeta.lastModified != lastModified)
+                if (etagMismatch || lastModifiedMismatch) {
+                    Log.w(TAG, "Server file changed or validators dropped (ETag: $etag vs ${existingMeta.etag}, Last-Modified: $lastModified vs ${existingMeta.lastModified}). Restarting clean.")
+                    canResume = false
+                }
+            }
+
+            if (!canResume) {
+                try {
+                    if (outputFile.exists()) outputFile.delete()
+                    if (metaFile.exists()) metaFile.delete()
+                } catch (_: Exception) {}
+            }
+        }
+
         // Pre-allocate or verify file size with RandomAccessFile
         RandomAccessFile(outputFile, "rw").use { raf ->
             if (raf.length() != contentLength) {
@@ -789,7 +849,17 @@ class DualDownloaderEngine(
             }
         }
 
+        if (canResume && existingMeta != null) {
+            completedIndices.addAll(existingMeta.completedChunks)
+        }
+
         // Divide file into chunks
+        val maxSupportedChunks = 500_000 // 2 TB at 4MB chunks - prevents OOM from corrupted Content-Length
+        val estimatedChunks = (contentLength + CHUNK_SIZE - 1) / CHUNK_SIZE
+        if (estimatedChunks > maxSupportedChunks) {
+            throw IOException("Content-Length exceeds maximum supported download limit (2 TB).")
+        }
+
         val chunks = mutableListOf<DownloadChunk>()
         var offset = 0L
         var index = 0
@@ -797,25 +867,6 @@ class DualDownloaderEngine(
             val end = min(offset + CHUNK_SIZE - 1, contentLength - 1)
             chunks.add(DownloadChunk(index++, offset, end))
             offset = end + 1
-        }
-
-        // Load previously completed chunks from sidecar metadata with ETag validation
-        val completedIndices = ConcurrentHashMap.newKeySet<Int>()
-        val existingMeta = readMetaInfo(metaFile)
-
-        if (existingMeta != null && existingMeta.url == url && existingMeta.totalLength == contentLength) {
-            val etagMismatch = existingMeta.etag != null && etag != null && existingMeta.etag != etag
-            val lastModifiedMismatch = existingMeta.lastModified != null && lastModified != null && existingMeta.lastModified != lastModified
-
-            if (etagMismatch || lastModifiedMismatch) {
-                Log.w(TAG, "Server file changed since last pause (ETag: $etag vs ${existingMeta.etag}). Restarting clean.")
-                try {
-                    if (outputFile.exists()) outputFile.delete()
-                    if (metaFile.exists()) metaFile.delete()
-                } catch (_: Exception) {}
-            } else {
-                completedIndices.addAll(existingMeta.completedChunks)
-            }
         }
 
         var initialCompletedBytes = 0L
@@ -839,6 +890,9 @@ class DualDownloaderEngine(
         // Interface Circuit-Breaker consecutive failure counters
         val wifiFailures = AtomicInteger(0)
         val cellularFailures = AtomicInteger(0)
+        val chunkFailures = ConcurrentHashMap<Int, AtomicInteger>()
+        val autoRecoveryCycles = AtomicInteger(0)
+        val isPausedDueToExhaustion = AtomicBoolean(false)
 
         // Speed calculation meters
         var lastWifiBytes = 0L
@@ -912,7 +966,8 @@ class DualDownloaderEngine(
                 sharedRandomAccessFile: RandomAccessFile
             ) {
                 while (isActive) {
-                    // 1. Check if the entire file is already completed
+                    // 1. Check if the entire file is already completed or paused due to failure exhaustion
+                    if (isPausedDueToExhaustion.get()) break
                     val allCompleted = queueMutex.withLock {
                         pendingChunks.all { it.status == ChunkStatus.COMPLETED }
                     }
@@ -936,6 +991,31 @@ class DualDownloaderEngine(
                             // Other interface is healthy; back off this interface to avoid holding up chunks
                             delay(1500)
                             continue
+                        } else {
+                            // SEC-AUDIT M-4: Both interfaces broken/unhealthy! Coordinate AutoRecovering with backoff
+                            var shouldBreak = false
+                            queueMutex.withLock {
+                                if (!isPausedDueToExhaustion.get()) {
+                                    val cycle = autoRecoveryCycles.incrementAndGet()
+                                    if (cycle <= 3) {
+                                        _downloadState.value = DownloadState.AutoRecovering(
+                                            message = "Reconnecting networks...",
+                                            retryAttempt = cycle
+                                        )
+                                        wifiFailures.set(0)
+                                        cellularFailures.set(0)
+                                    } else {
+                                        isPausedDueToExhaustion.set(true)
+                                        shouldBreak = true
+                                    }
+                                } else {
+                                    shouldBreak = true
+                                }
+                            }
+                            if (shouldBreak) break
+                            val backoff = min(1000L * (1L shl (autoRecoveryCycles.get().coerceAtLeast(1) - 1)), 4000L)
+                            delay(backoff)
+                            continue
                         }
                     }
 
@@ -954,8 +1034,8 @@ class DualDownloaderEngine(
                         continue
                     }
 
-                    // 4. Resolve client for this interface
-                    val client = clientProvider() ?: (if (interfaceType == NetworkInterfaceType.CELLULAR) networkManager.getDefaultClient() else null)
+                    // 4. Resolve client for this interface (strict interface isolation: no fallback to defaultClient for cellular)
+                    val client = clientProvider()
                     if (client == null) {
                         queueMutex.withLock {
                             chunk.status = ChunkStatus.PENDING
@@ -990,7 +1070,10 @@ class DualDownloaderEngine(
 
                         try {
                             call.execute().use { response ->
-                                if (response.code == 206 || response.code == 200) {
+                                if (response.code == 200 && chunk.startByte > 0L) {
+                                    throw IOException("HTTP 200 OK received for non-zero chunk ${chunk.index} (offset ${chunk.startByte}). Origin does not respect Range requests.")
+                                }
+                                if (response.code == 206 || (response.code == 200 && chunk.startByte == 0L)) {
                                     val body = response.body ?: throw IOException("Empty body for chunk ${chunk.index}")
                                     val inputStream = body.byteStream()
                                     val buffer = ByteArray(32 * 1024)
@@ -999,8 +1082,12 @@ class DualDownloaderEngine(
                                     val expectedChunkBytes = (chunk.endByte - chunk.startByte) + 1
                                     var chunkBytesReceived = 0L
 
-                                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                    while (chunkBytesReceived < expectedChunkBytes) {
                                         if (!isActive) throw CancellationException("Worker cancelled")
+                                        val remaining = expectedChunkBytes - chunkBytesReceived
+                                        val toRead = min(buffer.size.toLong(), remaining).toInt()
+                                        bytesRead = inputStream.read(buffer, 0, toRead)
+                                        if (bytesRead == -1) break
 
                                         fileWriteMutex.withLock {
                                             sharedRandomAccessFile.seek(chunkOffset)
@@ -1044,11 +1131,16 @@ class DualDownloaderEngine(
                         }
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
-                        Log.w(TAG, "Chunk ${chunk.index} failed on $interfaceType: ${e.message}")
+                        Log.w(TAG, "Chunk ${chunk.index} failed on $interfaceType: ${sanitizeLogMessage(e.message)}")
                         if (interfaceType == NetworkInterfaceType.WIFI) {
                             wifiFailures.incrementAndGet()
                         } else {
                             cellularFailures.incrementAndGet()
+                        }
+                        val attempts = chunkFailures.computeIfAbsent(chunk.index) { AtomicInteger(0) }.incrementAndGet()
+                        if (attempts >= 5) {
+                            Log.w(TAG, "Chunk ${chunk.index} exceeded retry limit (5). Escalating to auto-pause.")
+                            isPausedDueToExhaustion.set(true)
                         }
                     }
 
@@ -1088,12 +1180,38 @@ class DualDownloaderEngine(
             }
             monitorJob.cancel()
 
+            if (isPausedDueToExhaustion.get()) {
+                saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive)
+                val completedBytes = completedIndices.sumOf { chunkIndex ->
+                    val start = chunkIndex * CHUNK_SIZE
+                    val end = min(start + CHUNK_SIZE - 1, contentLength - 1)
+                    max(0L, (end - start) + 1)
+                }
+                val progress = if (contentLength > 0) completedBytes.toFloat() / contentLength.toFloat() else 0f
+                _downloadState.value = DownloadState.Paused(
+                    fileName = fileName,
+                    filePath = outputFile.absolutePath,
+                    totalBytes = contentLength,
+                    downloadedBytes = completedBytes,
+                    progressPercentage = progress,
+                    url = url,
+                    isDesktopSpoofed = isDesktopSpoofed,
+                    isCloudSlicerActive = isCloudSlicerActive
+                )
+                return@coroutineScope
+            }
+
             // Verify file integrity
             val allFinished = queueMutex.withLock { pendingChunks.all { it.status == ChunkStatus.COMPLETED } }
             if (!allFinished) {
                 throw IOException("Download incomplete: some segments could not be transferred.")
             }
+            if (outputFile.length() != contentLength) {
+                throw IOException("File length mismatch: expected $contentLength bytes, found ${outputFile.length()} bytes on disk.")
+            }
         }
+
+        if (isPausedDueToExhaustion.get()) return
 
         try {
             if (metaFile.exists()) metaFile.delete()
@@ -1181,10 +1299,11 @@ class DualDownloaderEngine(
                 var lastBytes = 0L
                 var currentSpeedMBps = 0.0
 
+                var totalRead = 0L
+
                 outputFile.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
                     var bytesRead: Int
-                    var totalRead = 0L
 
                     val inputStream = body.byteStream()
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
@@ -1228,6 +1347,14 @@ class DualDownloaderEngine(
                             )
                         }
                     }
+                }
+
+                // SEC-AUDIT H-2b: Enforce total stream length verification before completion
+                if (totalLength > 0 && totalRead != totalLength) {
+                    throw IOException("Single-stream download truncated: expected $totalLength bytes, received $totalRead bytes.")
+                }
+                if (totalLength > 0 && outputFile.length() != totalLength) {
+                    throw IOException("File length mismatch on disk: expected $totalLength bytes, found ${outputFile.length()} bytes.")
                 }
 
                 val sha256: String? = null
@@ -1386,6 +1513,11 @@ class DualDownloaderEngine(
         }
     }
 
+    internal fun sanitizeLogMessage(message: String?): String {
+        if (message == null) return ""
+        return message.replace(Regex("(https?://[^\\s?]+)\\?[^\\s]*"), "$1?[query-redacted]")
+    }
+
     internal fun formatBytes(bytes: Long): String {
         val mb = bytes / (1024.0 * 1024.0)
         return if (mb >= 1000) {
@@ -1404,7 +1536,11 @@ class DualDownloaderEngine(
                 } catch (_: Throwable) { null }
 
                 val isInPublicDownloads = publicDownloads != null &&
-                    try { sourceFile.canonicalPath.startsWith(publicDownloads.canonicalPath) } catch (_: Exception) { false }
+                    try {
+                        val pubCanon = publicDownloads.canonicalPath
+                        val srcCanon = sourceFile.canonicalPath
+                        srcCanon == pubCanon || srcCanon.startsWith(pubCanon + File.separator)
+                    } catch (_: Exception) { false }
 
                 if (isInPublicDownloads) {
                     val completableFuture = CompletableFuture<Uri?>()
@@ -1453,7 +1589,7 @@ class DualDownloaderEngine(
 
                 uri
             } catch (e: Exception) {
-                Log.w(TAG, "MediaStore export skipped or failed: ${e.message}")
+                Log.w(TAG, "MediaStore export skipped or failed: ${sanitizeLogMessage(e.message)}")
                 null
             }
         }

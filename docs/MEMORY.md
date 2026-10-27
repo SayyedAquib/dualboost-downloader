@@ -1,9 +1,56 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is fully aligned with **Strict Modem State Adherence & Elimination of False 5G Telemetry on LTE Carrier Aggregation** ([ADR-030](file:///a:/Development/dualboost-downloader/docs/DECISIONS.md#adr-030)), resolving the cellular telemetry mismatch where Indian carrier LTE Carrier Aggregation (`LTE_CA`) was falsely marked as 5G. The app now strictly matches the Android system status bar and Quick Settings Internet panel ("Airtel LTE" -> "4G LTE Cellular"). Large file performance hardening, 0-delay 100% completion, low thermal footprint, humanized text, separate cancel/pause buttons, and Google Files integration are completely active and verified via 100% passing release unit tests and production APK installation on Google Pixel 9.
+DualBoost Downloader is comprehensively fortified following an exhaustive OWASP MASVS / Mobile Top 10 (2024) security remediation (ADR-031). The app is backed by **160 unit and integration tests across 19 test suites (100% passing)** with zero regressions. Silent download corruption vectors are completely eliminated through write boundary capping, single-stream truncation validation, and physical file pre-flight resume verification. Cloud Slicer is hardened against advanced SSRF vectors (IPv4-mapped IPv6, NAT64, 6to4, DoH fail-closed DNS rebinding) and upstream bandwidth amplification ($O(n^2)$ read loops). Release APK generation is secured via a dedicated signing pipeline verified via `apksigner`, Android 15 foreground service lifecycle is hardened with `onTimeout`, and MediaStore-exported files remain fully accessible in the History sheet via `contentUriString`.
 
 ## Recently Completed
+- **Comprehensive OWASP MASVS Security Audit Remediation & Integrity Lockdown (ADR-031 / 160 Tests across 19 Suites)**:
+  - **Phase 1: Critical Download Integrity & Core Engine Defenses (H-2, M-3, M-4, M-5)**:
+    - **H-2a (Ranged Chunk 200 Uncapped Writes Fixed)**: Immediately reject HTTP 200 responses on ranged chunks (`chunk.startByte > 0`) with a `ProtocolException`. Capped all worker buffer reads to `min(buffer.size, expectedChunkBytes - bytesReceived)` to prevent oversized bodies from spilling past chunk boundaries and corrupting neighboring completed chunks. Added post-transfer verification asserting `outputFile.length() == contentLength`.
+    - **H-2b (Single-Stream Truncation Fixed)**: In `executeSingleStreamDownload`, enforced strict validation asserting `totalLength <= 0 || totalRead == totalLength` and `outputFile.length() == totalLength` before marking state as `DownloadState.Completed`. Premature EOF or socket closure transitions directly to `DownloadState.Failed`.
+    - **H-2c & M-3 (Resume Sidecar Trust & Shared Storage Purge Fixed)**: Pre-flight checks physical file existence and byte length prior to opening `RandomAccessFile`. Missing or altered physical files invalidate sidecar metadata and force a clean restart from byte 0, eliminating sparse zero-byte holes. Enforced fail-closed ETag and Last-Modified validation on resume (mismatch or omission resets the download). Completely purged legacy public `.dualboost_meta` fallback from shared Downloads; sidecars are strictly isolated in `context.noBackupFilesDir/dualboost_meta/`.
+    - **M-4 (Active AutoRecovering & Exponential Backoff)**: Eliminated dead `AutoRecovering` state. Engine emits `DownloadState.AutoRecovering` with exponential backoff (1s -> 2s -> 4s) when both network interfaces trip circuit breakers, caps chunk retries at 5 attempts, and cleanly escalates to `DownloadState.Paused` after 3 failed recovery cycles.
+    - **M-5 (Canonical Delete Path Containment)**: Added canonical directory containment validation (`canonicalPath.startsWith(safeRoot.canonicalPath + File.separator)`) to `discardDownload()` and `DownloadHistoryRepository.deletePhysicalFile()`. Fixed canonical boundary prefix check in `findAvailableFile()` and `exportToMediaStore()`.
+    - **Phase 1 Test Suite**: Created `SecurityHardeningPhase1Test.kt` (6 tests, 100% passing).
+  - **Phase 2: Cloud Slicer & Edge Worker Fortification (M-1, M-2, M-6)**:
+    - **M-1 (Slicer Secret Disclosure Elimination)**: Omitted `X-Slicer-Key` from `/health` ping in `SettingsBottomSheet.kt`. Removed `secured: Boolean` disclosure from `cloud-slicer/worker.js` `/health` endpoint response.
+    - **M-2 (Worker Anti-SSRF & Redirect Defense)**: Upgraded IP address parsing in `worker.js` and `SlicerPreferences.kt` to decode IPv4-mapped IPv6 literals (`[::ffff:192.168.1.1]`), NAT64 (`64:ff9b::/96`), 6to4 (`2002::/16`), unique local (`fc00::/7`), link-local, carrier-grade NAT, benchmark, Class E, and documentation ranges. Configured `redirect: 'manual'` in worker `fetch()`, rejecting 3xx redirects with HTTP 403 Forbidden. Enforced fail-closed Cloudflare DoH resolution.
+    - **M-6 (Upstream Range Enforcement & Bandwidth Protection)**: Replaced $O(n^2)$ read-and-discard loop with strict upstream range support validation. If upstream responds with non-206 (ignores Range), worker immediately aborts and returns HTTP 501 Not Implemented with `X-Slicer-Error`, preventing upstream bandwidth amplification attacks.
+    - **Phase 2 Test Suite**: Created `SecurityHardeningPhase2Test.kt` (3 tests, 100% passing).
+  - **Phase 3: Release Signing, Android 15 Lifecycle & MediaStore (H-1, Service onTimeout/onDestroy, contentUriString)**:
+    - **H-1 (Dedicated Release Signing Pipeline)**: Rewrote release signing in `app/build.gradle.kts` to check environment variables, `keystore.properties` (git-ignored), or auto-generate `release-local.jks`. Generated dedicated 2048-bit RSA release key. Verified release APK with `apksigner verify --print-certs` (Signer DN: `CN=DualBoost Release, OU=Release, O=DualBoost, L=Android, ST=Release, C=US`).
+    - **Service Lifecycle & Network Singleton Protection**: Removed `networkManager.stopListening()` from `DownloadForegroundService.onDestroy()`, keeping app-wide network monitoring intact. Added `stopSelf()` after `stopForeground(STOP_FOREGROUND_DETACH)`. Added Android 15 (API 35) `onTimeout(startId, fgsType)` override. Added `NotificationCompat.VISIBILITY_PRIVATE`.
+    - **MediaStore & History Action Continuity**: Updated `isFilePresent()`, `openFile()`, and `shareFile()` in `DownloadHistoryRepository.kt` and `MainViewModel.kt` to support `contentUriString` directly when physical file was published and app-dir file was deleted.
+    - **Strict Physical Interface Isolation**: Removed fallback to `networkManager.getDefaultClient()` in cellular chunk worker in `DualDownloaderEngine.kt` to strictly maintain socket isolation.
+    - **Network Security Config & Permissions**: Created `network_security_config.xml` (cleartext traffic blocked, modern TLS enforced). Added to `AndroidManifest.xml`. Removed unused `CHANGE_NETWORK_STATE`.
+    - **Log Sanitization**: Added `sanitizeLogMessage()` redacting query parameters from URLs in exception logs in `DualDownloaderEngine.kt` and `SpeedTestEngine.kt`.
+    - **Phase 3 Test Suite**: Created `SecurityHardeningPhase3Test.kt` (2 tests, 100% passing).
+  - **Full Suite & Release Verification**: All 160 unit tests passing in both Debug and Release test tasks (`BUILD SUCCESSFUL in 3m 28s`), and production release APK assembled (`app-release.apk`, `BUILD SUCCESSFUL in 5m 13s`).
+- **Comprehensive Test-First Safety Net & Edge-Case Lockdown (149 Tests across 16 Suites)**:
+  - **Zero Production Code Touched**: Preserved 100% of existing production code while systematically building a bulletproof verification suite before any modifications.
+  - **Storage & Boundary Safety Suite (`EngineBoundaryAndStorageSafetyTest.kt` - 16 tests)**:
+    - Verified non-conflicting filename increment sequence (`file.bin` -> `file (1).bin` -> `file (2).bin` -> `file (3).bin`).
+    - Verified existing file reuse when `.dualboost_meta` sidecar matches URL.
+    - Verified strict path traversal containment against Unix and Windows directory escape attempts (`../../secret.sh`, `..\\..\\system.bat`, `/var/tmp/bad.exe`).
+    - Verified storage pre-flight boundary behavior (zero/negative byte allocations, existing file subtraction).
+    - Verified 64-bit Long arithmetic overflow guard (`Long.MAX_VALUE - 1024L`) throwing informative `IOException`.
+    - Verified URL percent-decoding, `_20` replacement, and query strings containing dots/slashes.
+    - Verified Content-Disposition header parsing with semicolons inside quotes, regex sanitization of illegal characters to underscores, and rejection of empty/dot-only filenames.
+    - Verified `computeSha256` behavior (null on non-existent, null on zero-byte, bit-for-bit digest on populated files).
+    - Verified `getMimeType` case insensitivity and fallbacks.
+    - Verified `sanitizeUrlForLog` query parameter stripping.
+    - Verified `startDownload` idempotency when already downloading the same target URL.
+  - **Format & Telemetry Edge-Case Suite (`FormatAndTelemetryEdgeCasesTest.kt` - 12 tests)**:
+    - Exhaustively tested `formatEta` countdown boundaries (`< 1s`, `1s`, `45s`, `1m`, `1m 20s`, `1h 0m`, `1h 1m`, `24h 0m`, `25h 1m`).
+    - Exhaustively tested `formatSpeed` and `formatSpeedComponents` (zero/negative, sub-megabyte KB/s adaptation, megabyte decimal precision).
+    - Verified `DownloadChunk` total bytes math across 1-byte, 100-byte, and 4MB ranges.
+    - Verified `SpeedTestState.Completed` and `SpeedTestState.Running` immutability, progress bounds, and Mbps compatibility getters.
+  - **Security & Resilience Edge-Case Suite (`SecurityAndResilienceEdgeCasesTest.kt` - 8 tests)**:
+    - Verified `RootDetector.isDeviceRooted()` exception safety and idempotency on JVM test harnesses.
+    - Verified `SlicerPreferences.buildSlicedUrl` endpoint idempotency across URLs with/without trailing slashes and pre-existing `/slice` paths, plus complex target URL parameter encoding.
+    - Verified Slicer URL and secret in-memory storage and whitespace trimming.
+    - Built MockWebServer truncated chunk simulation: server truncates chunk stream prematurely, engine detects byte count mismatch, rolls back byte counters, sets chunk back to `PENDING`, retries, and delivers 100% bit-for-bit payload integrity.
+  - **Compilation & Verification**: All 149 unit and integration tests passing in both Debug and Release test tasks (`BUILD SUCCESSFUL in 1m 18s`), plus release APK compilation verified (`.\gradlew.bat assembleRelease`).
 - **Codification of Mandatory Adversarial & Test-First Engineering Workflow (RULES.md / MEMORY.md)**:
   - Formally codified the 3-step battle-testing development workflow into project rules: (1) Edge-Case Checklist & Tests First (TDD), (2) Adversarial Self-Audit ("Pen-Tester / Break Your Own Code" mode), and (3) Concurrency & Chaos Stress Simulation.
   - Enforced across all future feature developments, bug fixes, and architectural modifications.
@@ -191,6 +238,8 @@ DualBoost Downloader is fully aligned with **Strict Modem State Adherence & Elim
 - ADR-026: Phase 2 Security Hardening & Store Compliance (Scoped Storage Migration, FileProvider Containment, and R8 Binary Protection).
 - ADR-027: Advanced Edge & Runtime Security Hardening (Dual-Stack DoH SSRF Defense, Strict Web Port Enforcement, HTTPS Upgrade Assist, and Advisory Root Awareness).
 - ADR-028: Persistent Download History & File Library with Safe Android FileProvider Actions.
+- ADR-030: Strict Modem State Adherence & Elimination of False 5G Telemetry on LTE Carrier Aggregation.
+- ADR-031: Comprehensive Security Audit Remediation, Download Integrity Lockdown & Lifecycle Hardening.
 
 ## Operational Guidelines & Communication Rules
 - **Mandatory Adversarial & Test-First Workflow (ADR-031 / Workflow Rule)**:

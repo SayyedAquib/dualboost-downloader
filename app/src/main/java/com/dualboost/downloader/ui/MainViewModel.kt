@@ -205,7 +205,9 @@ open class MainViewModel(
     }
 
     fun isStartButtonEnabled(state: DownloadState, input: String): Boolean {
-        return input.isNotBlank() && state !is DownloadState.Downloading && state !is DownloadState.Probing
+        val trimmed = input.trim()
+        val isValidHttpScheme = trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)
+        return isValidHttpScheme && state !is DownloadState.Downloading && state !is DownloadState.Probing
     }
 
     fun startSpeedTest() {
@@ -241,18 +243,24 @@ open class MainViewModel(
     fun openFile(context: Context, item: DownloadHistoryItem): Boolean {
         return try {
             val file = File(item.filePath)
-            if (!file.exists()) return false
+            val uri = if (file.exists()) {
+                runCatching {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                }.getOrNull()
+            } else {
+                null
+            } ?: item.contentUriString?.let { android.net.Uri.parse(it) } ?: return false
 
-            val uri = runCatching {
-                androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file
-                )
-            }.getOrNull() ?: item.contentUriString?.let { android.net.Uri.parse(it) } ?: return false
-
-            val ext = file.extension.lowercase(java.util.Locale.ROOT)
-            val mimeType = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+            val ext = item.fileName.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
+            val mimeType = if (ext.isNotEmpty()) {
+                android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+            } else {
+                "*/*"
+            }
 
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, mimeType)
@@ -269,25 +277,31 @@ open class MainViewModel(
     fun shareFile(context: Context, item: DownloadHistoryItem): Boolean {
         return try {
             val file = File(item.filePath)
-            if (!file.exists()) return false
+            val uri = if (file.exists()) {
+                runCatching {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                }.getOrNull()
+            } else {
+                null
+            } ?: item.contentUriString?.let { android.net.Uri.parse(it) } ?: return false
 
-            val uri = runCatching {
-                androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file
-                )
-            }.getOrNull() ?: item.contentUriString?.let { android.net.Uri.parse(it) } ?: return false
-
-            val ext = file.extension.lowercase(java.util.Locale.ROOT)
-            val mimeType = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+            val ext = item.fileName.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
+            val mimeType = if (ext.isNotEmpty()) {
+                android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+            } else {
+                "*/*"
+            }
 
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = mimeType
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            val chooser = Intent.createChooser(shareIntent, "Share ${file.name}").apply {
+            val chooser = Intent.createChooser(shareIntent, "Share ${item.fileName}").apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)

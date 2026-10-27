@@ -158,6 +158,7 @@ class DownloadForegroundService : Service() {
                             indeterminate = false
                         )
                         stopForeground(STOP_FOREGROUND_DETACH)
+                        stopSelf()
                     }
                     is DownloadState.Failed -> {
                         releaseWakeLock()
@@ -168,6 +169,7 @@ class DownloadForegroundService : Service() {
                             indeterminate = false
                         )
                         stopForeground(STOP_FOREGROUND_DETACH)
+                        stopSelf()
                     }
                     is DownloadState.Idle, is DownloadState.Paused -> {
                         releaseWakeLock()
@@ -202,6 +204,7 @@ class DownloadForegroundService : Service() {
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setProgress(100, progress, indeterminate)
             .setContentIntent(
                 PendingIntent.getActivity(
@@ -231,7 +234,16 @@ class DownloadForegroundService : Service() {
         releaseWakeLock()
         stateJob?.cancel()
         serviceScope.cancel()
-        networkManager.stopListening()
+        // Do NOT call networkManager.stopListening() here; networkManager is an application-scoped singleton
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        super.onTimeout(startId, fgsType)
+        android.util.Log.w("DownloadFGService", "Foreground service execution time limit reached (fgsType $fgsType). Pausing download cleanly.")
+        downloaderEngine.pauseDownload()
+        releaseWakeLock()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onBind(intent: Intent?): IBinder = binder

@@ -66,15 +66,20 @@ app/src/main/
 3. **Service Layer (`com.dualboost.downloader.service`)**:
    - `DownloadForegroundService`: Keeps process alive when screen locks or app moves to background.
    - Holds Android `PowerManager.PARTIAL_WAKE_LOCK` with automated 25-minute periodic renewal job to prevent CPU throttling on multi-hour downloads.
-   - Manages Android `NotificationManager` with a 1000ms throttler to avoid system message shedding.
+   - Manages Android `NotificationManager` with a 1000ms throttler to avoid system message shedding and sets `NotificationCompat.VISIBILITY_PRIVATE` for lock-screen privacy.
+   - Implements Android 15 (API 35) `onTimeout(startId, fgsType)` to gracefully pause downloads and release resources when reaching the system 6-hour `dataSync` execution limit.
+   - Decoupled from application-wide network monitoring: does not invoke `networkManager.stopListening()` in `onDestroy()`, preserving active telemetry for `DualBoostApp`. Invokes `stopSelf()` after `stopForeground(STOP_FOREGROUND_DETACH)` to eliminate orphaned processes.
    - Guards against race conditions by checking current engine state before initiating downloads.
 4. **Execution Engine Layer (`com.dualboost.downloader.engine`)**:
-   - `DualDownloaderEngine`: Dynamically computes headers, probes remote servers, validates storage via `StatFs`, partitions files into 10MB byte segments, manages concurrent work queues, produces live `ChunkSnapshot` arrays, calculates ETA countdown seconds (`formatEta`), computes binary Megabytes per second (`MB/s`) speed with adaptive `KB/s` formatting (`formatSpeed`), handles single-stream non-range server fallbacks, and writes to disk via a single shared `RandomAccessFile` handle serialized under `fileWriteMutex`.
+   - `DualDownloaderEngine`: Dynamically computes headers, probes remote servers, validates storage via `StatFs`, partitions files into 4MB byte segments, manages concurrent work queues, produces live `ChunkSnapshot` arrays, calculates ETA countdown seconds (`formatEta`), computes binary Megabytes per second (`MB/s`) speed with adaptive `KB/s` formatting (`formatSpeed`), handles single-stream non-range server fallbacks, and writes to disk via a single shared `RandomAccessFile` handle serialized under `fileWriteMutex`.
+   - **Download Integrity & Boundary Capping**: Strictly rejects HTTP 200 responses for chunks with `startByte > 0`, caps chunk writes to `min(buffer.size, expectedChunkBytes - bytesReceived)`, and verifies `outputFile.length() == contentLength` post-transfer. Single-stream fallbacks enforce `totalLength <= 0 || totalRead == totalLength` and `outputFile.length() == totalLength` before marking `Completed`.
+   - **Fail-Closed Resumption**: Pre-flight verifies physical file existence and byte length prior to `setLength()` allocation. Missing or altered physical files trigger metadata discard and clean restart from byte 0. Revalidates remote ETag and Last-Modified headers fail-closed.
+   - **Active Auto-Recovery & Circuit Breaking**: Emits `DownloadState.AutoRecovering` with exponential backoff (1s -> 2s -> 4s) when both network interfaces trip circuit breakers, capping chunk retries at 5 attempts before transitioning to `DownloadState.Paused`.
    - `SpeedTestEngine`: Ephemeral 3-phase throughput benchmark engine (Wi-Fi 3s -> 5G 3s -> DualBoost 4s) streaming bytes directly into an in-memory discard buffer (0 bytes stored on disk) and reporting real-time speeds in `MB/s`.
 5. **Transport Layer (`com.dualboost.downloader.network`)**:
    - `NetworkProvider`: Decoupled interface defining interface availability, signal level telemetry, cellular generation state, and client factories, allowing seamless MockWebServer integration testing.
    - `DualNetworkManager`: Listens to `ConnectivityManager` callbacks for `TRANSPORT_WIFI` and `TRANSPORT_CELLULAR`.
-   - Produces dedicated `OkHttpClient` instances whose sockets are locked to specific physical interfaces, enforcing `MODERN_TLS` (TLS 1.2+ with forward secrecy) and `CertificatePinner` for `*.workers.dev` endpoints.
+   - Produces dedicated `OkHttpClient` instances whose sockets are locked to specific physical interfaces, enforcing `MODERN_TLS` (TLS 1.2+ with forward secrecy) and `CertificatePinner` for `*.workers.dev` endpoints. Cellular workers strictly route through `cellularClient`, never falling back to unbound default clients.
    - **Signal Telemetry & Generation Detection**:
      - Wi-Fi signal level is continuously computed via `NetworkCapabilities.signalStrength` (API 29+) or legacy `WifiManager.calculateSignalLevel(rssi, 5)`.
      - Cellular signal level is computed via `NetworkCapabilities.signalStrength` mapped across 5 discrete buckets (0..4).
@@ -82,8 +87,8 @@ app/src/main/
      - Immediate Completion & Zero-Post-Processing: Full-file synchronous SHA-256 calculation on completion is bypassed for standard downloads, guaranteeing instant 100% completion without flash read bottlenecks or thermal throttling on multi-gigabyte files (e.g. 30 GB).
 
 ## Database Architecture & Persistence
-- **Runtime Engine State**: In-memory state management. Chunks and real-time telemetry reside in memory with atomic `.dualboost_meta` sidecar files in `context.noBackupFilesDir/dualboost_meta` for pause/resume continuity.
-- **Download History & File Library**: App-private atomic JSON ledger (`DownloadHistoryRepository`) storing completed download records in `context.noBackupFilesDir/download_history.json`. Uses pure Kotlin JSON serialization with atomic `.tmp` staging, thread-safe Mutex locking, and reactive `StateFlow` exposure with zero SQLite/Room overhead. Enables persistent storage metering, existence tracking, and safe `FileProvider` triggers (`ACTION_VIEW`, `ACTION_SEND`).
+- **Runtime Engine State**: In-memory state management. Chunks and real-time telemetry reside in memory with atomic `.dualboost_meta` sidecar files in `context.noBackupFilesDir/dualboost_meta` for pause/resume continuity. Shared storage fallback is completely eliminated.
+- **Download History & File Library**: App-private atomic JSON ledger (`DownloadHistoryRepository`) storing completed download records in `context.noBackupFilesDir/download_history.json`. Uses pure Kotlin JSON serialization with atomic `.tmp` staging, thread-safe Mutex locking, and reactive `StateFlow` exposure with zero SQLite/Room overhead. Enables persistent storage metering, existence tracking, and safe `FileProvider` triggers (`ACTION_VIEW`, `ACTION_SEND`). When files are exported to public storage and app-directory files are purged, `isFilePresent()`, `openFile()`, and `shareFile()` verify existence and launch intents using `contentUriString`. Canonical boundary validation (`canonicalPath.startsWith(safeRoot.canonicalPath + File.separator)`) is enforced on physical file deletion.
 
 ## API Architecture
 The app communicates with third-party HTTP/HTTPS servers implementing standard RFC 7233 Range Requests:
@@ -152,7 +157,7 @@ sequenceDiagram
 - **Zero-Copy Disk Writes**: Direct offset seek and write eliminates the memory and CPU overhead of joining temp files at the end.
 
 ## System Boundaries
-- **App Boundary**: Bounded by standard Android application permissions (`INTERNET`, `ACCESS_NETWORK_STATE`, `CHANGE_NETWORK_STATE`).
+- **App Boundary**: Bounded by standard Android application permissions (`INTERNET`, `ACCESS_NETWORK_STATE`, `POST_NOTIFICATIONS`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`). Cleartext traffic is blocked system-wide via `network_security_config.xml`.
 - **OS Boundary**: Relies on Android's `ConnectivityManager.requestNetwork` to override the default single-network routing rule.
 
 ## Scalability Considerations
@@ -160,20 +165,24 @@ sequenceDiagram
 - Concurrency is capped at 4 simultaneous coroutines (2 Wi-Fi, 2 5G) to avoid socket thrashing or TCP congestion collapses on mobile networks.
 
 ## Security Architecture
-- **Transport Security**: TLS 1.3 / HTTPS strictly enforced via `android:usesCleartextTraffic="false"` in `AndroidManifest.xml`. Cleartext HTTP is blocked across all network requests.
-- **Fail-Closed Header-Only Worker Authentication (`SEC-002`, `SEC-011`)**: Cloud Slicer strictly checks the `X-Slicer-Key` HTTP header using constant-time string comparison (`timingSafeEqual`) to prevent timing side-channel attacks and open proxy abuse. Secret keys are never transmitted via URL query parameters (`?key=`), protecting credentials from exposure in browser history, logs, and HTTP Referer headers.
-- **Anti-SSRF & DNS Rebinding Protection (`SEC-001`, `SEC-012`)**: Cloud Slicer validates target URLs (`validateTargetUrl`), rejecting non-HTTP/HTTPS protocols, RFC 1918 private subnets, loopback (`127.0.0.1`, `localhost`), link-local/cloud metadata (`169.254.169.254`), CGNAT, wildcard dynamic DNS rebinding services (`*.nip.io`, `*.sslip.io`, etc.), and internal TLDs (`.local`, `.internal`, `.lan`). In addition, pre-fetch DNS verification via Cloudflare DNS-over-HTTPS resolves and validates A records prior to fetching.
+- **Transport Security**: TLS 1.3 / HTTPS strictly enforced via `android:usesCleartextTraffic="false"` and `network_security_config.xml`. Cleartext HTTP is blocked across all network requests.
+- **Fail-Closed Header-Only Worker Authentication (`SEC-002`, `SEC-011`)**: Cloud Slicer strictly checks the `X-Slicer-Key` HTTP header using constant-time string comparison (`timingSafeEqual`) to prevent timing side-channel attacks and open proxy abuse. Secret keys are never transmitted via URL query parameters (`?key=`), nor leaked during `/health` connectivity tests.
+- **Fortified Anti-SSRF & DNS Rebinding Protection (`SEC-001`, `SEC-012`, `ADR-031`)**: Cloud Slicer validates target URLs (`validateTargetUrl`), rejecting non-HTTP/HTTPS protocols, RFC 1918 private subnets, loopback (`127.0.0.1`, `localhost`), link-local/cloud metadata (`169.254.169.254`), CGNAT, wildcard dynamic DNS rebinding services (`*.nip.io`, `*.sslip.io`, etc.), internal TLDs (`.local`, `.internal`, `.lan`), IPv4-mapped IPv6 literals (`[::ffff:x.x.x.x]`), NAT64 (`64:ff9b::/96`), 6to4 (`2002::/16`), and unique local addresses (`fc00::/7`). Worker fetches enforce `redirect: 'manual'` (rejecting 3xx with HTTP 403) and fail-closed DoH resolution.
+- **Upstream Range Enforcement & Bandwidth Protection (`ADR-031`)**: Worker rejects non-range upstream responses with HTTP 501 Not Implemented, eliminating $O(n^2)$ read-and-discard bandwidth amplification.
 - **Edge Stream Bounds (`SEC-005`)**: Maximum slice sizes are clamped to 16 MB (`MAX_SLICE_SIZE = 16 * 1024 * 1024`) to eliminate edge memory exhaustion.
-- **Path Traversal Containment (`SEC-003`)**: Android filename extraction from `Content-Disposition` and URL paths strips all directory traversal sequences (`/`, `\`) and sanitizes special characters (`[a-zA-Z0-9._\-\s()]`). `resolveWritableOutputFile` strictly enforces canonical directory containment (`candidate.canonicalPath.startsWith(safeBaseCanonical)`).
-- **Sidecar Metadata Isolation (`SEC-009`)**: `.dualboost_meta` session files are stored strictly within the application's private internal storage (`context.noBackupFilesDir/dualboost_meta`), completely shielding download URLs, ETags, and tokens from third-party app inspection.
+- **Path Traversal Containment (`SEC-003`, `ADR-031`)**: Android filename extraction from `Content-Disposition` and URL paths strips all directory traversal sequences (`/`, `\`) and sanitizes special characters (`[a-zA-Z0-9._\-\s()]`). All delete paths (`discardDownload`, `deletePhysicalFile`) strictly validate canonical containment against download roots (`canonicalPath.startsWith(safeRoot.canonicalPath + File.separator)`).
+- **Silent Download Corruption Defense (`ADR-031`)**: Ranged chunk workers immediately reject HTTP 200 on non-zero offsets, strictly cap buffer writes to `min(buffer.size, remaining)`, and verify `file.length() == contentLength`. Single-stream transfers assert `totalRead == totalLength` and `file.length() == totalLength`. Resumption pre-flight verifies physical file presence and length before allocating storage, discarding sidecars on discrepancies.
+- **Sidecar Metadata Isolation (`SEC-009`, `ADR-031`)**: `.dualboost_meta` session files are stored strictly within the application's private internal storage (`context.noBackupFilesDir/dualboost_meta`), completely shielding download URLs, ETags, and tokens from third-party app inspection. Shared storage fallback is completely removed.
 - **Intent Injection Defense (`SEC-004`)**: Exported `MainActivity` strictly pre-populates shared URLs without unauthenticated background download execution (`auto_start` removed).
 - **Backup & Credential Isolation (`SEC-006`)**: `android:allowBackup="false"` prevents extraction of SharedPreferences or user secrets via ADB or physical backups.
-- **Logcat Privacy Sanitization (`SEC-007`)**: All logged URLs are stripped of query parameters (`?`) via `sanitizeUrlForLog` to protect pre-signed authorization tokens from exposure.
+- **Logcat Privacy Sanitization (`SEC-007`, `ADR-031`)**: All logged URLs and exception messages are stripped of query parameters (`?`) via `sanitizeLogMessage` to protect pre-signed authorization tokens from exposure.
 - **Cryptographic File Integrity (`SEC-013`)**: Streaming SHA-256 integrity calculation upon download completion with interactive 1-click clipboard verification badge in the Compose UI.
+- **Dedicated Release Signing Pipeline (`ADR-031`)**: Release builds sign exclusively with dedicated release certificates generated locally or provided via credentials, completely eliminating debug keystore usage in release artifacts.
 
 ## Deployment Architecture
-- Built via Gradle CLI (`.\gradlew.bat assembleDebug`).
-- Deployed directly to attached Android device via ADB (`adb install -r app-debug.apk`).
+- Built via Gradle CLI (`.\gradlew.bat assembleRelease`).
+- Authentic release APK generated at `app/build/outputs/apk/release/app-release.apk`.
+- Deployed directly to attached Android device via ADB (`adb install -r app-release.apk`).
 - Tested headlessly via `adb shell am start` and monitored via `adb logcat`.
 
 ## Architecture Decisions

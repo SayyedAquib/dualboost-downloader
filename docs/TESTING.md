@@ -10,7 +10,67 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (113 active tests across 13 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (160 active tests across 19 test suites, 100% passing):
+
+- **SecurityHardeningPhase1Test** (6 tests):
+  - `testRangedChunk_WhenServerReturnsHttp200_RejectsChunkAndDoesNotClobberOtherBytes`: Tests H-2a defense; simulates rogue server returning HTTP 200 to ranged chunk request; asserts engine immediately rejects with `ProtocolException` and prevents clobbering neighboring chunk byte ranges on disk.
+  - `testRangedChunk_BuffersAreCappedToExpectedChunkBytes`: Tests H-2a write capping; asserts buffer reads are strictly capped to `min(buffer.size, remaining)` so oversized bodies cannot spill past chunk boundaries.
+  - `testSingleStreamFallback_WhenTruncated_ReportsFailureInsteadOfCompleted`: Tests H-2b defense; asserts premature EOF or dropped connection during single-stream transfer triggers failure rather than falsely marking `Completed`.
+  - `testResume_WhenPartialFileTruncatedOrDeleted_RestartsCleanlyInsteadOfZeroFilling`: Tests H-2c defense; asserts deleted or truncated partial files invalidate sidecar metadata and force clean restarts from byte 0, eliminating sparse zero-byte holes.
+  - `testCircuitBreaker_EmitsAutoRecoveringAndBacksOff_BeforePausing`: Tests M-4; asserts dual interface circuit break triggers `DownloadState.AutoRecovering`, exponential backoff (1s -> 2s -> 4s), 5-attempt retry caps, and escalates to `DownloadState.Paused`.
+  - `testDiscardDownload_RejectsPathTraversalOutsideDownloadDir`: Tests M-5; asserts canonical directory containment validation (`+ File.separator`) blocks path traversal deletion attempts.
+
+- **SecurityHardeningPhase2Test** (3 tests):
+  - `testSettingsBottomSheet_HealthCheckOmitsSecret`: Tests M-1; verifies that `/health` ping requests omit `X-Slicer-Key` to avoid needless credential exposure.
+  - `testWorkerSSRF_RejectsIPv4MappedIPv6AndPrivateRanges`: Tests M-2; validates Cloud Slicer address parsing against IPv4-mapped IPv6 literals (`[::ffff:192.168.1.1]`), NAT64, 6to4, and unique local addresses.
+  - `testWorkerRangeHandling_NonRangeUpstreamReturns501InsteadOfAmplifying`: Tests M-6; verifies Cloud Slicer immediately aborts with HTTP 501 when upstream origins refuse Range headers, preventing quadratic bandwidth amplification.
+
+- **SecurityHardeningPhase3Test** (2 tests):
+  - `testDownloadForegroundService_OnDestroyDoesNotStopNetworkManagerListening`: Asserts `service.onDestroy()` does not call `networkManager.stopListening()`, preserving app-wide network telemetry.
+  - `testDownloadHistory_SupportsContentUriStringWhenAppDirDeleted`: Asserts `isFilePresent()`, `openFile()`, and `shareFile()` verify and launch successfully using `contentUriString` after app-dir files are deleted post-MediaStore export.
+
+- **EngineBoundaryAndStorageSafetyTest** (16 tests):
+  - `testResolveWritableOutputFile_FilenameCollisionSequence`: Asserts non-conflicting filename increments (`file.bin` -> `file (1).bin` -> `file (2).bin` -> `file (3).bin`).
+  - `testResolveWritableOutputFile_ReusesExistingFileWhenMetaUrlMatches`: Verifies reuse of existing files when `.dualboost_meta` sidecar matches the URL.
+  - `testResolveWritableOutputFile_StrictPathTraversalBoundaryCheck`: Confirms directory traversal sequences (`../../`, `..\\..\\`, `/var/tmp/`) are strictly confined within the designated target directory.
+  - `testCheckAvailableStorage_ZeroOrNegativeRequiredBytes_NeverThrows`: Ensures zero or negative byte requirements return immediately without throwing.
+  - `testCheckAvailableStorage_ExistingFileSizeCoversRequired_NeverThrows`: Validates existing partial file size is subtracted, preventing false out-of-storage rejections.
+  - `testCheckAvailableStorage_64BitOverflow_ThrowsInsufficientStorage`: Verifies 64-bit Long arithmetic overflow guard (`neededAdditionalBytes > Long.MAX_VALUE - safetyBuffer`) throwing informative `IOException`.
+  - `testExtractFileName_PercentDecodingAndSpaceReplacement`: Validates percent-decoding and `_20` replacement into human-readable space characters.
+  - `testExtractFileName_UrlWithQueryContainingDotsAndSlashes`: Ensures query strings containing dots and slashes do not corrupt the target file name.
+  - `testExtractFileNameFromDisposition_SemicolonsInsideQuotesSanitizedToUnderscores`: Asserts semicolons in quoted disposition headers are safely sanitized into underscores by regex filtering.
+  - `testExtractFileNameFromDisposition_EmptyOrDotsOnly_ReturnsNull`: Ensures empty or traversal-only disposition filenames return null.
+  - `testComputeSha256_NonExistentFileReturnsNull`: Verifies null return when checking non-existent files.
+  - `testComputeSha256_ZeroByteFileReturnsNull`: Verifies null return for zero-byte files.
+  - `testComputeSha256_AccurateHexDigest`: Validates bit-for-bit SHA-256 computation against known reference digests.
+  - `testGetMimeType_CaseInsensitiveAndFallback`: Asserts case-insensitive extension matching (`.APK`), unknown extension fallback, and extensionless fallback to `application/octet-stream`.
+  - `testSanitizeUrlForLog_VariousFormats`: Confirms sensitive query parameters and tokens are stripped from log outputs.
+  - `testStartDownload_WhenAlreadyDownloadingSameUrl_IsIdempotent`: Verifies calling `startDownload` on an already-running download with identical URL is safe and idempotent.
+
+- **FormatAndTelemetryEdgeCasesTest** (12 tests):
+  - `testFormatEta_SubSecondAndZero`: Validates countdown formatting for zero and negative seconds (`"< 1s"`).
+  - `testFormatEta_SecondsOnly`: Validates sub-minute countdowns (`"1s"`, `"45s"`, `"59s"`).
+  - `testFormatEta_MinutesAndSeconds`: Asserts exact minutes (`"1m"`) and mixed minute/second countdowns (`"1m 20s"`, `"59m 59s"`).
+  - `testFormatEta_HoursAndMinutes`: Asserts exact hours (`"1h 0m"`, `"24h 0m"`) and multi-hour countdowns (`"1h 1m"`, `"25h 1m"`).
+  - `testFormatSpeed_ZeroAndNegative`: Asserts zero and negative speeds default to `"0.0 MB/s"`.
+  - `testFormatSpeed_SubMegabyteUsesKbps`: Validates automatic adaptation to `KB/s` for sub-megabyte transfers (`0.5 MB/s` -> `"512 KB/s"`).
+  - `testFormatSpeed_MegabyteAndAbove`: Asserts decimal precision formatting for transfers >= 1.0 MB/s.
+  - `testFormatSpeedComponents_ZeroAndNegative`: Asserts hero component formatting for zero and negative speeds.
+  - `testFormatSpeedComponents_SubMegabyte`: Asserts hero component splitting for sub-megabyte values (`"512"`, `"KB/s"`).
+  - `testFormatSpeedComponents_MegabyteAndAbove`: Asserts hero component splitting for megabyte values (`"42.8"`, `"MB/s"`).
+  - `testDownloadChunk_TotalBytesCalculation`: Validates chunk total byte mathematical invariants across 1-byte, 100-byte, and 4MB ranges.
+  - `testDownloadChunk_DefaultValues`: Validates initial chunk status (`PENDING`) and assigned network (`DEFAULT`).
+  - `testChunkSnapshot_PropertiesPreserved`: Asserts chunk snapshot immutability and progress values.
+  - `testSpeedTestStateCompleted_BoostCalculationAndCompatibilityGetters`: Validates speed test completion state, boost percentage, and Mbps compatibility getters.
+  - `testSpeedTestStateRunning_ProgressAndPhase`: Validates speed test active phase, running progress bounds, and live telemetry fields.
+
+- **SecurityAndResilienceEdgeCasesTest** (8 tests):
+  - `testRootDetector_ExecutesSafelyWithoutCrashing`: Verifies `RootDetector.isDeviceRooted()` executes without throwing exceptions or security errors across test JVMs.
+  - `testSlicerPreferences_BuildSlicedUrl_EndpointsAndSlashes`: Asserts `/slice` endpoint construction idempotency across URLs with/without trailing slashes and pre-existing `/slice` paths.
+  - `testSlicerPreferences_BuildSlicedUrl_SpecialCharactersInTarget`: Validates URL encoding of target URLs containing spaces, hashes, and complex query parameters.
+  - `testSlicerPreferences_StorageAndTrimming`: Confirms in-memory preference storage, secret masking, and whitespace trimming.
+  - `testTruncatedChunk_TriggersRollbackAndSuccessfulRetry`: End-to-end MockWebServer test where server truncates a chunk stream mid-transfer; asserts engine rolls back byte counters, restores chunk status to `PENDING`, retries, and delivers 100% bit-for-bit SHA-256 payload integrity.
+
 
 - **DownloadHistoryRepositoryTest** (9 tests):
   - `testSerializationRoundTrip`: Validates pure Kotlin JSON serialization and parsing of `DownloadHistoryItem` preserving all fields.

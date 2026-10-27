@@ -120,8 +120,9 @@ class SpeedTestEngine(
                 Log.d(TAG, "Speed test cancelled by user")
                 _speedTestState.value = SpeedTestState.Idle
             } catch (e: Exception) {
-                Log.e(TAG, "Speed test encountered error: ${e.message}", e)
-                _speedTestState.value = SpeedTestState.Error(e.message ?: "Speed test encountered an unexpected error.")
+                val sanitizedMsg = e.message?.replace(Regex("(https?://[^\\s?]+)\\?[^\\s]*"), "$1?[query-redacted]")
+                Log.e(TAG, "Speed test encountered error: $sanitizedMsg")
+                _speedTestState.value = SpeedTestState.Error(sanitizedMsg ?: "Speed test encountered an unexpected error.")
             } finally {
                 cancelAllCalls()
             }
