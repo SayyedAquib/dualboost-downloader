@@ -52,6 +52,12 @@ For all new features, bug fixes, and architectural modifications, strictly follo
 ## Database Rules
 - Keep download chunks and state in-memory during transfer. Do not introduce an SQLite/Room layer until scheduled in future iterations.
 
+## Architecture & Concurrency Rules
+- **Zero UI Network Calls (`ADR-032`)**: Compose UI composable functions must NEVER execute direct network operations or instantiate `OkHttpClient` directly. All network health checks, probes, and transfers must route through ViewModel, Repository, and Engine on `Dispatchers.IO`.
+- **Single Dispatch Boundary (`ADR-032`)**: Production runtime initiates downloads exclusively through `ContextCompat.startForegroundService()`. `DownloadForegroundService` is the single authoritative dispatcher triggering the engine.
+- **Two-Stage Atomic Persistence (`ADR-032`)**: All disk metadata and ledger persistence must implement two-stage atomic fallbacks: if `renameTo()` fails, delete destination and retry rename; if still failing, use `copyTo(overwrite = true)` with temp file deletion and warning logging.
+- **Concurrent Memory Visibility (`ADR-032`)**: Any state or counter mutated across worker coroutines and read by telemetry monitors or UI StateFlows must use atomic primitives (`AtomicLong`, `AtomicInteger`, `AtomicBoolean`) or `@Volatile` annotations.
+
 ## Security Rules
 - Do not log sensitive user URLs, authorization tokens, or carrier IMSI/IMEI identifiers; sanitize exception strings with `sanitizeLogMessage()` before logging.
 - Strip `Log.v`, `Log.d`, and `Log.i` calls in release builds via ProGuard/R8 `-assumenosideeffects`.

@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -258,8 +259,30 @@ fun MainScreen(
     var showHistorySheet by remember { mutableStateOf(false) }
     var showCancelConfirmDialog by remember { mutableStateOf(false) }
     var pendingCancelFileName by remember { mutableStateOf<String?>(null) }
+    var showExitDownloadConfirmDialog by remember { mutableStateOf(false) }
 
     val downloadState by viewModel.downloadState.collectAsState()
+    val isAnySheetOrDialogActive = drawerState.isOpen ||
+            showSpeedTestSheet ||
+            showSettingsSheet ||
+            showHistorySheet ||
+            showInfoDialog ||
+            showCancelConfirmDialog ||
+            showExitDownloadConfirmDialog
+    val isDownloadRunning = downloadState is DownloadState.Downloading || downloadState is DownloadState.Probing
+
+    BackHandler(enabled = isAnySheetOrDialogActive || isDownloadRunning) {
+        when {
+            drawerState.isOpen -> drawerScope.launch { drawerState.close() }
+            showInfoDialog -> showInfoDialog = false
+            showCancelConfirmDialog -> showCancelConfirmDialog = false
+            showExitDownloadConfirmDialog -> showExitDownloadConfirmDialog = false
+            showSpeedTestSheet -> showSpeedTestSheet = false
+            showSettingsSheet -> showSettingsSheet = false
+            showHistorySheet -> showHistorySheet = false
+            isDownloadRunning -> showExitDownloadConfirmDialog = true
+        }
+    }
     val wifiAvailable by viewModel.isWifiAvailable.collectAsState()
     val cellularAvailable by viewModel.isCellularAvailable.collectAsState()
     val wifiSignalLevel by viewModel.wifiSignalLevel.collectAsState()
@@ -1091,9 +1114,9 @@ fun MainScreen(
                                 val rowWifiColor = if (isDarkState) Color(0xFF00E5FF) else Color(0xFF00838F)
                                 val rowCellularColor = if (isDarkState) Color(0xFFB388FF) else Color(0xFF651FFF)
 
-                                val totalDownloaded = state.downloadedBytes.coerceAtLeast(1L).toFloat()
-                                val wifiRatio = (state.wifiDownloadedBytes / totalDownloaded).coerceIn(0f, 1f)
-                                val cellularRatio = (state.cellularDownloadedBytes / totalDownloaded).coerceIn(0f, 1f)
+                                val sessionBytes = (state.wifiDownloadedBytes + state.cellularDownloadedBytes).coerceAtLeast(1L).toFloat()
+                                val wifiRatio = (state.wifiDownloadedBytes / sessionBytes).coerceIn(0f, 1f)
+                                val cellularRatio = (state.cellularDownloadedBytes / sessionBytes).coerceIn(0f, 1f)
 
                                 Box(
                                     modifier = Modifier
@@ -1422,6 +1445,42 @@ fun MainScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            viewModel.retryDownload()
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.error,
+                                            contentColor = MaterialTheme.colorScheme.onError
+                                        )
+                                    ) {
+                                        Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Retry")
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            viewModel.resetToIdle()
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+                                    ) {
+                                        Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onErrorContainer)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer)
+                                    }
+                                }
                             }
                         }
                     }
@@ -1670,6 +1729,62 @@ fun MainScreen(
         )
     }
 
+    if (showExitDownloadConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDownloadConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Rounded.Download,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Download In Progress",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "A transfer is actively downloading in the foreground. Would you like to minimize to background and keep downloading, or cancel the transfer?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showExitDownloadConfirmDialog = false
+                        (context as? android.app.Activity)?.moveTaskToBack(true)
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Minimize to Background")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        showExitDownloadConfirmDialog = false
+                        viewModel.discardDownload()
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+                ) {
+                    Text("Cancel Download")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
+
     if (showHistorySheet) {
         val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         HistoryBottomSheet(
@@ -1688,7 +1803,8 @@ fun MainScreen(
 
     if (showSettingsSheet) {
         SettingsBottomSheet(
-            onDismiss = { showSettingsSheet = false }
+            onDismiss = { showSettingsSheet = false },
+            viewModel = viewModel
         )
     }
 }

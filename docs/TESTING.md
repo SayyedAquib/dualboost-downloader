@@ -10,7 +10,28 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (160 active tests across 19 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (171 active tests across 22 test suites, 100% passing):
+
+- **CrashVaultTest** (2 tests):
+  - `testRecordCrash_WritesSanitizedCrashDump`: Verifies `CrashVault` writes structured, timestamped crash dumps to `noBackupFilesDir/crash_vault.log`, ensuring URL query parameters and auth tokens are completely redacted from stack traces.
+  - `testSanitizeCrashLog_RedactsUrlsWithParameters`: Tests regex-based URL redaction, ensuring sensitive domains, paths, and API keys are masked to `https://host/[REDACTED]`.
+
+- **ProductionHardeningResilienceTest** (11 tests):
+  - `testDownloadChunk_ConcurrentReadWriteSafety_PreservesDataIntegrity`: Launches 4 concurrent worker coroutines mutating `DownloadChunk` byte counters, statuses, and assigned networks alongside a reader coroutine to verify atomic memory visibility and absence of race conditions.
+  - `testResumption_BaselineInterfaceAccounting_DoesNotDistortSessionCounters`: Tests that resuming an interrupted download initializes session Wi-Fi and Cellular counters strictly to 0L, while tracking pre-existing progress in `resumedBytes`, eliminating speed spikes and carrier metric distortions.
+
+- **DownloadRepositoryTest** (8 tests):
+  - `testRepository_StartDownload_FallsBackToEngineWhenServiceUnavailable`: Verifies single-dispatch FGS boundary fallback to direct engine execution in headless JVM test runners.
+  - `testRepository_TestWorkerConnectivity_SuccessAndFailure`: Validates worker health checks via OkHttpClient in `Dispatchers.IO`, returning `WorkerTestStatus.Success` on 200 and `WorkerTestStatus.Error` on failure or 401.
+  - `testRepository_ResetToIdle_ResetsFailedState`: Asserts `resetToIdle()` cleanly resets `DownloadState.Failed` to `DownloadState.Idle`.
+
+- **MainViewModelTest** (19 tests):
+  - `testWorkerTestStatus_InitialStateIsIdle`: Asserts reactive worker test status stream initializes to `WorkerTestStatus.Idle`.
+  - `testFailedState_PreservesUrlAndSupportsRetry`: Validates that failed state retains the attempted URL and triggers retry on `retryDownload()`.
+
+- **ServiceLifecycleTest** (3 tests):
+  - `testServiceConstants_CorrectAndConsistent`: Verifies FGS actions (`ACTION_START_DOWNLOAD`, `ACTION_CANCEL_DOWNLOAD`, `ACTION_PAUSE_DOWNLOAD`, `ACTION_RESUME_DOWNLOAD`, `ACTION_DISCARD_DOWNLOAD`).
+  - `testServiceActionNaming_FollowsReverseDomainConvention`: Asserts all action strings adhere to reverse-domain naming.
 
 - **SecurityHardeningPhase1Test** (6 tests):
   - `testRangedChunk_WhenServerReturnsHttp200_RejectsChunkAndDoesNotClobberOtherBytes`: Tests H-2a defense; simulates rogue server returning HTTP 200 to ranged chunk request; asserts engine immediately rejects with `ProtocolException` and prevents clobbering neighboring chunk byte ranges on disk.

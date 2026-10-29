@@ -47,7 +47,21 @@ android {
         resolvedKeyAlias = keystoreProps.getProperty("RELEASE_KEY_ALIAS") ?: keystoreProps.getProperty("keyAlias") ?: "dualboost"
         resolvedKeyPassword = keystoreProps.getProperty("RELEASE_KEY_PASSWORD") ?: keystoreProps.getProperty("keyPassword") ?: ""
     } else {
-        // SEC-AUDIT H-1: Never sign release builds with public debug keystore.
+        // SEC-AUDIT H-1 & Seam 10: Strict CI Signing Gate
+        val isStrictSigning = System.getenv("STRICT_SIGNING")?.toBoolean() == true ||
+                System.getenv("CI")?.toBoolean() == true ||
+                project.hasProperty("strictSigning")
+        if (isStrictSigning) {
+            throw GradleException(
+                "STRICT SIGNING FAILURE: Production or CI build detected without configured release keystore! " +
+                "Provide RELEASE_KEYSTORE_PATH or keystore.properties before assembling release artifacts."
+            )
+        }
+        logger.warn(
+            "WARNING [DualBoost Security]: Release build is using auto-generated local keystore 'release-local.jks'. " +
+            "Suitable for local CLI development only. For production releases, set STRICT_SIGNING=true and provide official signing keys."
+        )
+
         // Auto-generate a dedicated local release keystore for CLI builds if neither env vars nor keystore.properties are supplied.
         val autoKeystore = rootProject.file("release-local.jks")
         val defaultPass = "DualBoostReleaseKey2026!"

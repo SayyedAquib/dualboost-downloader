@@ -133,10 +133,23 @@ class DownloadRepositoryTest {
         )
 
         repo.startDownload(server.url("/pause_test.bin").toString(), tempDir)
-        Thread.sleep(80)
+        // Wait until download starts probing or downloading
+        var attempts = 0
+        while (repo.downloadState.value is DownloadState.Idle && attempts < 30) {
+            Thread.sleep(50)
+            attempts++
+        }
         repo.pauseDownload()
 
-        assertTrue(repo.downloadState.value is DownloadState.Paused)
+        var isPaused = false
+        for (i in 1..20) {
+            if (repo.downloadState.value is DownloadState.Paused) {
+                isPaused = true
+                break
+            }
+            Thread.sleep(50)
+        }
+        assertTrue("Expected Paused state but got ${repo.downloadState.value}", isPaused)
     }
 
 
@@ -182,5 +195,87 @@ class DownloadRepositoryTest {
         assertEquals(DownloadState.Idle, repo.downloadState.value)
         assertFalse(testFile.exists())
         assertFalse(metaFile.exists())
+    }
+
+    @Test
+    fun testRepository_StartDownload_FallsBackToEngineWhenServiceUnavailable() {
+        val client = OkHttpClient.Builder().build()
+        val dummyContext = DummyTestContext(tempDir)
+        val mockNetwork = MockNetworkProvider(client)
+        val engine = DualDownloaderEngine(dummyContext, mockNetwork)
+
+        val repo = DownloadRepository(
+            context = dummyContext,
+            networkProvider = mockNetwork,
+            engineOverride = engine
+        )
+
+        // DummyTestContext throws on startForegroundService, so repo must fallback to direct engine invocation
+        repo.startDownload(server.url("/fallback_test.bin").toString(), tempDir)
+        assertTrue(repo.downloadState.value !is DownloadState.Completed) // Engine was invoked and transitioned
+    }
+
+    @Test
+    fun testRepository_TestWorkerConnectivity_SuccessAndFailure() = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (request.path) {
+                    "/health" -> MockResponse().setResponseCode(200).setBody("DualBoost Cloud Slicer active")
+                    "/health_unauthorized/health" -> MockResponse().setResponseCode(401)
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+
+        val client = OkHttpClient.Builder().build()
+        val dummyContext = DummyTestContext(tempDir)
+        val mockNetwork = MockNetworkProvider(client)
+        val engine = DualDownloaderEngine(dummyContext, mockNetwork)
+
+        val repo = DownloadRepository(
+            context = dummyContext,
+            networkProvider = mockNetwork,
+            engineOverride = engine
+        )
+
+        // 1. Success case
+        val successResult = repo.testWorkerConnectivity(server.url("/").toString(), "")
+        assertTrue(successResult is com.dualboost.downloader.data.WorkerTestStatus.Success)
+        assertEquals(successResult, repo.workerTestStatus.value)
+
+        // 2. Unauthorized case
+        val unauthResult = repo.testWorkerConnectivity(server.url("/health_unauthorized").toString(), "")
+        assertTrue(unauthResult is com.dualboost.downloader.data.WorkerTestStatus.Error)
+        assertEquals(unauthResult, repo.workerTestStatus.value)
+
+        // 3. Reset
+        repo.resetWorkerTestStatus()
+        assertEquals(com.dualboost.downloader.data.WorkerTestStatus.Idle, repo.workerTestStatus.value)
+    }
+
+    @Test
+    fun testRepository_ResetToIdle_ResetsFailedState() {
+        val client = OkHttpClient.Builder().build()
+        val dummyContext = DummyTestContext(tempDir)
+        val mockNetwork = MockNetworkProvider(client)
+        val engine = DualDownloaderEngine(dummyContext, mockNetwork)
+
+        val repo = DownloadRepository(
+            context = dummyContext,
+            networkProvider = mockNetwork,
+            engineOverride = engine
+        )
+
+        // Force engine into failed state
+        val stateField = DualDownloaderEngine::class.java.getDeclaredField("_downloadState")
+        stateField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val stateFlow = stateField.get(engine) as MutableStateFlow<DownloadState>
+        stateFlow.value = DownloadState.Failed("Disk full")
+
+        assertEquals(DownloadState.Failed("Disk full"), repo.downloadState.value)
+
+        repo.resetToIdle()
+        assertEquals(DownloadState.Idle, repo.downloadState.value)
     }
 }

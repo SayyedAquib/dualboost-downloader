@@ -10,6 +10,9 @@ class ServiceLifecycleTest {
     fun testServiceConstants_CorrectAndConsistent() {
         assertEquals("com.dualboost.ACTION_START_DOWNLOAD", DownloadForegroundService.ACTION_START_DOWNLOAD)
         assertEquals("com.dualboost.ACTION_CANCEL_DOWNLOAD", DownloadForegroundService.ACTION_CANCEL_DOWNLOAD)
+        assertEquals("com.dualboost.ACTION_PAUSE_DOWNLOAD", DownloadForegroundService.ACTION_PAUSE_DOWNLOAD)
+        assertEquals("com.dualboost.ACTION_RESUME_DOWNLOAD", DownloadForegroundService.ACTION_RESUME_DOWNLOAD)
+        assertEquals("com.dualboost.ACTION_DISCARD_DOWNLOAD", DownloadForegroundService.ACTION_DISCARD_DOWNLOAD)
         assertEquals("extra_download_url", DownloadForegroundService.EXTRA_URL)
         assertEquals("dualboost_download_channel", DownloadForegroundService.CHANNEL_ID)
         assertEquals(1001, DownloadForegroundService.NOTIFICATION_ID)
@@ -19,6 +22,9 @@ class ServiceLifecycleTest {
     fun testServiceActionNaming_FollowsReverseDomainConvention() {
         assertTrue(DownloadForegroundService.ACTION_START_DOWNLOAD.startsWith("com.dualboost."))
         assertTrue(DownloadForegroundService.ACTION_CANCEL_DOWNLOAD.startsWith("com.dualboost."))
+        assertTrue(DownloadForegroundService.ACTION_PAUSE_DOWNLOAD.startsWith("com.dualboost."))
+        assertTrue(DownloadForegroundService.ACTION_RESUME_DOWNLOAD.startsWith("com.dualboost."))
+        assertTrue(DownloadForegroundService.ACTION_DISCARD_DOWNLOAD.startsWith("com.dualboost."))
         assertFalse(DownloadForegroundService.CHANNEL_ID.contains(" "))
     }
 

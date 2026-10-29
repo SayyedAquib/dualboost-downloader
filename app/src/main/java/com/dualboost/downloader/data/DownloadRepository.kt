@@ -7,15 +7,23 @@ import com.dualboost.downloader.engine.DualDownloaderEngine
 import com.dualboost.downloader.network.DualNetworkManager
 import com.dualboost.downloader.network.NetworkProvider
 import com.dualboost.downloader.service.DownloadForegroundService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 class DownloadRepository(
     private val context: Context,
     val networkProvider: NetworkProvider? = null,
     val engineOverride: DualDownloaderEngine? = null,
     val speedTestEngineOverride: com.dualboost.downloader.engine.SpeedTestEngine? = null,
-    val historyRepositoryOverride: DownloadHistoryRepository? = null
+    val historyRepositoryOverride: DownloadHistoryRepository? = null,
+    val isServiceEnabled: Boolean = (engineOverride == null)
 ) {
 
     val historyRepository: DownloadHistoryRepository by lazy {
@@ -43,6 +51,53 @@ class DownloadRepository(
     val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> get() = (networkProvider ?: networkManager).cellularGeneration
     val historyItems: StateFlow<List<DownloadHistoryItem>> get() = historyRepository.historyItems
 
+    private val _workerTestStatus = MutableStateFlow<WorkerTestStatus>(WorkerTestStatus.Idle)
+    val workerTestStatus: StateFlow<WorkerTestStatus> = _workerTestStatus.asStateFlow()
+
+    suspend fun testWorkerConnectivity(rawUrl: String, secretKey: String): WorkerTestStatus {
+        _workerTestStatus.value = WorkerTestStatus.Testing
+        val result = withContext(Dispatchers.IO) {
+            try {
+                val cleanBase = rawUrl.trim().trimEnd('/')
+                val healthUrl = if (cleanBase.endsWith("/health")) cleanBase else "$cleanBase/health"
+
+                val client = networkProvider?.getDefaultClient() ?: OkHttpClient.Builder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(5, TimeUnit.SECONDS)
+                    .build()
+
+                // SEC-AUDIT M-1: Health check is an unauthenticated ping; do not expose secret in request headers
+                val request = Request.Builder().url(healthUrl).get().build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string() ?: ""
+                        if (body.contains("DualBoost Cloud Slicer")) {
+                            WorkerTestStatus.Success("Worker is live and verified! Ready to slice streams.")
+                        } else {
+                            WorkerTestStatus.Success("Connected (HTTP ${response.code})")
+                        }
+                    } else if (response.code == 401) {
+                        WorkerTestStatus.Error("HTTP 401: Unauthorized. Please check Secret Key.")
+                    } else {
+                        WorkerTestStatus.Error("Worker returned HTTP ${response.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                WorkerTestStatus.Error("Connection failed: ${e.message ?: "Unknown error"}")
+            }
+        }
+        _workerTestStatus.value = result
+        return result
+    }
+
+    fun resetWorkerTestStatus() {
+        _workerTestStatus.value = WorkerTestStatus.Idle
+    }
+
+    fun resetToIdle() {
+        downloaderEngine.resetToIdle()
+    }
+
     init {
         try {
             if (networkProvider is DualNetworkManager) {
@@ -61,14 +116,17 @@ class DownloadRepository(
     }
 
     fun startDownload(url: String, targetDir: File = downloaderEngine.getDefaultDownloadDir()) {
-        try {
-            val intent = Intent(context, DownloadForegroundService::class.java).apply {
-                action = DownloadForegroundService.ACTION_START_DOWNLOAD
-                putExtra(DownloadForegroundService.EXTRA_URL, url)
+        if (isServiceEnabled) {
+            try {
+                val intent = Intent(context, DownloadForegroundService::class.java).apply {
+                    action = DownloadForegroundService.ACTION_START_DOWNLOAD
+                    putExtra(DownloadForegroundService.EXTRA_URL, url)
+                }
+                ContextCompat.startForegroundService(context, intent)
+                return
+            } catch (_: Exception) {
+                // Safe fallback in test environments or if ForegroundServiceStartNotAllowedException is thrown
             }
-            ContextCompat.startForegroundService(context, intent)
-        } catch (_: Exception) {
-            // Safe in test environments without Android service runner
         }
         downloaderEngine.startDownload(url, targetDir)
     }

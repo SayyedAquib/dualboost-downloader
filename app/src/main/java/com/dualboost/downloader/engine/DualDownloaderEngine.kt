@@ -53,7 +53,7 @@ class DualDownloaderEngine(
     private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
 
-    private var downloadJob: Job? = null
+    @Volatile private var downloadJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // Active calls tracking to guarantee instantaneous cancellation upon Pause / Cancel
@@ -64,8 +64,8 @@ class DualDownloaderEngine(
     internal val activeCallsCount: Int get() = activeCalls.size
 
     // Active download tracking for seamless resume and discard
-    private var currentOutputFile: File? = null
-    private var currentUrl: String? = null
+    @Volatile private var currentOutputFile: File? = null
+    @Volatile private var currentUrl: String? = null
 
     private fun registerActiveCall(call: Call): Boolean {
         val isJobAlive = downloadJob?.isActive ?: isExecuting.get()
@@ -303,8 +303,18 @@ class DualDownloaderEngine(
             val parent = metaFile.parentFile ?: return
             val tempFile = File(parent, "${metaFile.name}.tmp")
             tempFile.writeText(content)
-            tempFile.renameTo(metaFile)
-        } catch (_: Exception) {}
+            val renamed = tempFile.renameTo(metaFile)
+            if (!renamed) {
+                if (metaFile.exists()) metaFile.delete()
+                val retryRename = tempFile.renameTo(metaFile)
+                if (!retryRename) {
+                    tempFile.copyTo(metaFile, overwrite = true)
+                    tempFile.delete()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist completed chunks metadata: ${e.message}")
+        }
     }
 
     fun restoreIncompleteDownload(targetDir: File = getDefaultDownloadDir()): Boolean {
@@ -447,7 +457,7 @@ class DualDownloaderEngine(
                 } else {
                     e.localizedMessage ?: "Unknown error"
                 }
-                _downloadState.value = DownloadState.Failed(errorMessage)
+                _downloadState.value = DownloadState.Failed(errorMessage, currentUrl ?: sanitizedUrl)
             } finally {
                 isExecuting.set(false)
             }
@@ -531,10 +541,18 @@ class DualDownloaderEngine(
                     if (internalTmp.exists()) internalTmp.delete()
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w(TAG, "Error cleaning files during discardDownload: ${e.message}")
+        }
         currentOutputFile = null
         currentUrl = null
         _downloadState.value = DownloadState.Idle
+    }
+
+    fun resetToIdle() {
+        if (_downloadState.value is DownloadState.Failed || _downloadState.value is DownloadState.Completed) {
+            _downloadState.value = DownloadState.Idle
+        }
     }
 
 
@@ -838,7 +856,9 @@ class DualDownloaderEngine(
                 try {
                     if (outputFile.exists()) outputFile.delete()
                     if (metaFile.exists()) metaFile.delete()
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error cleaning stale non-resumable download: ${e.message}")
+                }
             }
         }
 
@@ -882,9 +902,36 @@ class DualDownloaderEngine(
         val queueMutex = Mutex()
         val fileWriteMutex = Mutex()
 
-        val totalDownloadedBytes = AtomicLong(initialCompletedBytes)
-        val wifiDownloadedBytes = AtomicLong(initialCompletedBytes)
+        val resumedBytes = initialCompletedBytes
+        val totalDownloadedBytes = AtomicLong(resumedBytes)
+        val wifiDownloadedBytes = AtomicLong(0L)
         val cellularDownloadedBytes = AtomicLong(0L)
+
+        // Immediate initial Downloading state transition
+        _downloadState.value = DownloadState.Downloading(
+            fileName = fileName,
+            totalBytes = contentLength,
+            downloadedBytes = resumedBytes,
+            wifiDownloadedBytes = 0L,
+            cellularDownloadedBytes = 0L,
+            wifiSpeedMBps = 0.0,
+            cellularSpeedMBps = 0.0,
+            totalSpeedMBps = 0.0,
+            progressPercentage = if (contentLength > 0) (resumedBytes.toFloat() / contentLength.toFloat()).coerceIn(0f, 1f) else 0f,
+            supportsRanges = true,
+            isDesktopSpoofed = isDesktopSpoofed,
+            isCloudSlicerActive = isCloudSlicerActive,
+            chunkSnapshots = chunks.map { c ->
+                ChunkSnapshot(
+                    index = c.index,
+                    progress = (c.downloadedBytes.toFloat() / c.totalBytes.coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f),
+                    networkType = c.assignedNetwork,
+                    status = c.status
+                )
+            },
+            estimatedSecondsRemaining = null,
+            resumedBytes = resumedBytes
+        )
 
 
         // Interface Circuit-Breaker consecutive failure counters
@@ -954,7 +1001,8 @@ class DualDownloaderEngine(
                         isDesktopSpoofed = isDesktopSpoofed,
                         isCloudSlicerActive = isCloudSlicerActive,
                         chunkSnapshots = snapshots,
-                        estimatedSecondsRemaining = etaSeconds
+                        estimatedSecondsRemaining = etaSeconds,
+                        resumedBytes = resumedBytes
                     )
                 }
             }
@@ -1223,7 +1271,9 @@ class DualDownloaderEngine(
             if (internalTmp.exists()) internalTmp.delete()
             val legacyMeta = File(actualTargetDir, "$fileName.dualboost_meta")
             if (legacyMeta.exists()) legacyMeta.delete()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed cleaning metadata after download completion: ${e.message}")
+        }
 
         val sha256: String? = null
         val contentUri = exportToMediaStore(outputFile, fileName)

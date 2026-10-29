@@ -96,6 +96,7 @@ open class MainViewModel(
     val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> = repository?.cellularGeneration ?: MutableStateFlow(com.dualboost.downloader.network.CellularGeneration.FIVE_G)
     val isDeviceRooted: Boolean = com.dualboost.downloader.security.RootDetector.isDeviceRooted()
     val historyItems: StateFlow<List<DownloadHistoryItem>> = repository?.historyItems ?: MutableStateFlow(emptyList())
+    val workerTestStatus: StateFlow<com.dualboost.downloader.data.WorkerTestStatus> = repository?.workerTestStatus ?: MutableStateFlow(com.dualboost.downloader.data.WorkerTestStatus.Idle)
 
     fun getSignalLabel(level: Int): String {
         return when (level) {
@@ -186,7 +187,7 @@ open class MainViewModel(
         _selectedPreset.value = null
     }
 
-    fun startDownload(customUrl: String? = null) {
+    open fun startDownload(customUrl: String? = null) {
         val targetUrl = (customUrl ?: _urlInput.value).trim()
         if (targetUrl.isNotBlank()) {
             if (_urlInput.value != targetUrl) {
@@ -194,6 +195,32 @@ open class MainViewModel(
             }
             repository?.startDownload(targetUrl)
         }
+    }
+
+    fun retryDownload() {
+        val lastState = downloadState.value
+        val urlToRetry = if (lastState is DownloadState.Failed && lastState.url.isNotBlank()) {
+            lastState.url
+        } else {
+            _urlInput.value
+        }
+        if (urlToRetry.isNotBlank()) {
+            startDownload(urlToRetry)
+        }
+    }
+
+    fun resetToIdle() {
+        repository?.resetToIdle()
+    }
+
+    fun testWorkerConnectivity(rawUrl: String, secretKey: String) {
+        viewModelScope.launch {
+            repository?.testWorkerConnectivity(rawUrl, secretKey)
+        }
+    }
+
+    fun resetWorkerTestStatus() {
+        repository?.resetWorkerTestStatus()
     }
 
     fun pauseDownload() {

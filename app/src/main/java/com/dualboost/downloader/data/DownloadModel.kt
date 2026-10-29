@@ -17,10 +17,26 @@ data class DownloadChunk(
     val index: Int,
     val startByte: Long,
     val endByte: Long,
-    var downloadedBytes: Long = 0,
-    var status: ChunkStatus = ChunkStatus.PENDING,
-    var assignedNetwork: NetworkInterfaceType = NetworkInterfaceType.DEFAULT
+    @Volatile var status: ChunkStatus = ChunkStatus.PENDING,
+    @Volatile var assignedNetwork: NetworkInterfaceType = NetworkInterfaceType.DEFAULT
 ) {
+    val downloadedBytesAtomic = java.util.concurrent.atomic.AtomicLong(0L)
+
+    var downloadedBytes: Long
+        get() = downloadedBytesAtomic.get()
+        set(value) { downloadedBytesAtomic.set(value) }
+
+    constructor(
+        index: Int,
+        startByte: Long,
+        endByte: Long,
+        downloadedBytes: Long,
+        status: ChunkStatus = ChunkStatus.PENDING,
+        assignedNetwork: NetworkInterfaceType = NetworkInterfaceType.DEFAULT
+    ) : this(index, startByte, endByte, status, assignedNetwork) {
+        this.downloadedBytes = downloadedBytes
+    }
+
     val totalBytes: Long get() = (endByte - startByte) + 1
 }
 
@@ -48,7 +64,8 @@ sealed class DownloadState {
         val isDesktopSpoofed: Boolean = false,
         val isCloudSlicerActive: Boolean = false,
         val chunkSnapshots: List<ChunkSnapshot> = emptyList(),
-        val estimatedSecondsRemaining: Long? = null
+        val estimatedSecondsRemaining: Long? = null,
+        val resumedBytes: Long = 0L
     ) : DownloadState() {
         val wifiSpeedMbps: Double get() = wifiSpeedMBps
         val cellularSpeedMbps: Double get() = cellularSpeedMBps
@@ -65,7 +82,7 @@ sealed class DownloadState {
         val isDualChannel: Boolean = true
     ) : DownloadState()
     data class AutoRecovering(val message: String, val retryAttempt: Int) : DownloadState()
-    data class Failed(val error: String) : DownloadState()
+    data class Failed(val error: String, val url: String = "") : DownloadState()
     data class Paused(
         val fileName: String = "",
         val filePath: String = "",

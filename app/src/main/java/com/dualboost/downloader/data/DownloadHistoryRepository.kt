@@ -246,7 +246,15 @@ class DownloadHistoryRepository(
             // On Android's ext4/f2fs, renameTo() atomically replaces the target file
             val tempFile = File(parentDir, "${historyFile.name}.tmp")
             tempFile.writeText(jsonText)
-            tempFile.renameTo(historyFile)
+            val renamed = tempFile.renameTo(historyFile)
+            if (!renamed) {
+                if (historyFile.exists()) historyFile.delete()
+                val retry = tempFile.renameTo(historyFile)
+                if (!retry) {
+                    tempFile.copyTo(historyFile, overwrite = true)
+                    tempFile.delete()
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to persist download history to disk: ${e.message}", e)
         }

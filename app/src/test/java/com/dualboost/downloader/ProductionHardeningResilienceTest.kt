@@ -3,9 +3,9 @@ package com.dualboost.downloader
 import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.engine.DualDownloaderEngine
 import com.dualboost.downloader.network.NetworkProvider
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -242,6 +242,125 @@ class ProductionHardeningResilienceTest {
         val finalState = engine.downloadState.value
         assertTrue("Download must succeed even after ETag mismatch reset: $finalState", finalState is DownloadState.Completed)
         assertEquals("Downloaded file size must equal total length", totalLength, targetFile.length())
+    }
+
+    @Test
+    fun testDownloadChunk_ConcurrentReadWriteSafety_PreservesDataIntegrity() = runBlocking {
+        val chunk = com.dualboost.downloader.data.DownloadChunk(
+            index = 0,
+            startByte = 0L,
+            endByte = 10_000_000L
+        )
+
+        val writerJobs = (1..4).map { workerId ->
+            launch(Dispatchers.Default) {
+                for (i in 1..50_000) {
+                    chunk.downloadedBytes = (workerId * 1_000_000L) + i.toLong()
+                    if (i % 2 == 0) {
+                        chunk.status = com.dualboost.downloader.data.ChunkStatus.DOWNLOADING
+                        chunk.assignedNetwork = com.dualboost.downloader.data.NetworkInterfaceType.WIFI
+                    } else {
+                        chunk.status = com.dualboost.downloader.data.ChunkStatus.PENDING
+                        chunk.assignedNetwork = com.dualboost.downloader.data.NetworkInterfaceType.CELLULAR
+                    }
+                }
+            }
+        }
+
+        // Reader job acting like 500ms telemetry monitor
+        val readerJob = launch(Dispatchers.Default) {
+            for (i in 1..20_000) {
+                val bytes = chunk.downloadedBytes
+                val status = chunk.status
+                val network = chunk.assignedNetwork
+                assertTrue("Bytes must never be negative", bytes >= 0L)
+                assertNotNull("Status must never be null", status)
+                assertNotNull("Network must never be null", network)
+            }
+        }
+
+        writerJobs.forEach { it.join() }
+        readerJob.join()
+        assertTrue("Chunk should have processed all increments", chunk.downloadedBytes > 0L)
+    }
+
+    @Test
+    fun testResumption_BaselineInterfaceAccounting_DoesNotDistortSessionCounters() = runBlocking {
+        val payload = ByteArray(6 * 1024 * 1024)
+        java.util.Random(42).nextBytes(payload)
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.method == "HEAD") {
+                    return MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Length", payload.size.toString())
+                        .setHeader("Accept-Ranges", "bytes")
+                }
+                val rangeHeader = request.getHeader("Range")
+                if (rangeHeader != null) {
+                    val range = rangeHeader.removePrefix("bytes=").split("-")
+                    val start = range[0].toInt()
+                    val end = range[1].toInt()
+                    val slice = okio.Buffer().write(payload, start, (end - start) + 1)
+                    return MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Content-Range", "bytes $start-$end/${payload.size}")
+                        .throttleBody(512 * 1024, 300, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        .setBody(slice)
+                }
+                return MockResponse().setResponseCode(400)
+            }
+        }
+
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+        val targetUrl = server.url("/resumed_accounting.bin").toString()
+        val fileName = engine.extractFileName(targetUrl)
+        val metaFile = engine.getMetaFile(tempDir, fileName)
+        val outputFile = java.io.File(tempDir, fileName)
+
+        val preDownloadedBytes = 4 * 1024 * 1024L
+        java.io.RandomAccessFile(outputFile, "rw").use { raf ->
+            raf.setLength(payload.size.toLong())
+            raf.seek(0)
+            raf.write(payload, 0, preDownloadedBytes.toInt())
+        }
+        engine.saveCompletedChunks(metaFile, targetUrl, payload.size.toLong(), setOf(0))
+
+        var recordedDownloadingState: DownloadState.Downloading? = null
+        val job = launch(Dispatchers.Default) {
+            engine.downloadState.collect { state ->
+                if (state is DownloadState.Downloading) {
+                    recordedDownloadingState = state
+                }
+            }
+        }
+
+        engine.startDownload(targetUrl, tempDir)
+
+        var finished = false
+        var timeoutMs = 15_000L
+        while (!finished && timeoutMs > 0) {
+            val state = engine.downloadState.value
+            if (state is DownloadState.Completed) {
+                finished = true
+            } else if (state is DownloadState.Failed) {
+                fail("Download failed: ${state.error}")
+            }
+            Thread.sleep(50)
+            timeoutMs -= 50
+        }
+        job.cancel()
+        assertTrue("Download should finish", finished)
+
+        assertNotNull("Should capture a downloading state", recordedDownloadingState)
+        val dlState = recordedDownloadingState!!
+        assertEquals("resumedBytes must match initial completed bytes", preDownloadedBytes, dlState.resumedBytes)
+        assertTrue(
+            "Session wifiDownloadedBytes (${dlState.wifiDownloadedBytes}) must only account for session bytes (< 3MB), not start at pre-downloaded bytes (4MB)",
+            dlState.wifiDownloadedBytes < preDownloadedBytes
+        )
     }
 }
 

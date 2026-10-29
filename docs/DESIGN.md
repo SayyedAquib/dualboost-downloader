@@ -97,7 +97,17 @@ To ensure physical network transparency across any wallpaper palette:
 - Centered placeholder text when no active download is running: *"Paste a URL or share a link from Chrome to begin."*
 
 ### Error States
-- Red container card (`#FFEBEE`) containing explicit error messages (e.g., DNS failure, timeout, HTTP 404).
+- Red container card (`errorContainer`) containing explicit error messages (e.g., DNS failure, timeout, HTTP 404).
+- **Actionable Error Recovery (`ADR-032`)**: Elevated failure card includes side-by-side action buttons:
+  - **Retry**: High-contrast filled `Button` with error container tint and `Icons.Rounded.Refresh` to restart or re-attempt the transfer using the preserved URL.
+  - **Dismiss**: Outlined `Button` with error border and `Icons.Rounded.Close` to cleanly reset the UI state to `Idle`.
+
+### Back Navigation & System Dialogs (`ADR-032`)
+- **Smart Back Handling**: System back gestures first dismiss open modals, sheets, and drawers sequentially.
+- **Active Download Interception Dialog**: When back is triggered while a download is running, an alert dialog appears with `Icons.Rounded.Download` icon:
+  - "Minimize to Background" (`moveTaskToBack(true)`) allowing uninterrupted transfer while freeing the user to use other applications.
+  - "Cancel Download" safely discarding the transfer and returning to `Idle`.
+  - Outside tap / dismiss retains the user in the active transfer view.
 
 ### Animations
 - Smooth linear progress transitions.

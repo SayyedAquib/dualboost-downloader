@@ -45,8 +45,8 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    private var wifiNetwork: Network? = null
-    private var cellularNetwork: Network? = null
+    @Volatile private var wifiNetwork: Network? = null
+    @Volatile private var cellularNetwork: Network? = null
     private var telephonyCallback: Any? = null
 
     private val _isWifiAvailable = MutableStateFlow(false)
@@ -85,8 +85,8 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         .retryOnConnectionFailure(true)
         .build()
 
-    private var wifiClient: OkHttpClient = baseOkHttpClient
-    private var cellularClient: OkHttpClient = baseOkHttpClient
+    @Volatile private var wifiClient: OkHttpClient = baseOkHttpClient
+    @Volatile private var cellularClient: OkHttpClient = baseOkHttpClient
 
     private val wifiCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {

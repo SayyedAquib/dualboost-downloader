@@ -294,6 +294,28 @@ class MainViewModelTest {
         assertEquals(com.dualboost.downloader.data.NetworkInterfaceType.WIFI, snapshot.networkType)
         assertEquals(com.dualboost.downloader.data.ChunkStatus.DOWNLOADING, snapshot.status)
     }
+
+    @Test
+    fun testWorkerTestStatus_InitialStateIsIdle() {
+        val viewModel = MainViewModel(repository = null)
+        assertEquals(com.dualboost.downloader.data.WorkerTestStatus.Idle, viewModel.workerTestStatus.value)
+    }
+
+    @Test
+    fun testFailedState_PreservesUrlAndSupportsRetry() {
+        val failedState = DownloadState.Failed("Connection refused", "https://example.com/test.zip")
+        val stateFlow = kotlinx.coroutines.flow.MutableStateFlow<DownloadState>(failedState)
+        var startedUrl: String? = null
+        val viewModel = object : MainViewModel(repository = null, downloadStateOverride = stateFlow) {
+            override fun startDownload(customUrl: String?) {
+                startedUrl = customUrl
+            }
+        }
+
+        viewModel.retryDownload()
+        assertEquals("https://example.com/test.zip", startedUrl)
+    }
 }
+
 
 

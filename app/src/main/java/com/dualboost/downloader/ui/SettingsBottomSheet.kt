@@ -39,24 +39,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dualboost.downloader.data.SlicerPreferences
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.util.concurrent.TimeUnit
-
-sealed class WorkerTestStatus {
-    object Idle : WorkerTestStatus()
-    object Testing : WorkerTestStatus()
-    data class Success(val message: String) : WorkerTestStatus()
-    data class Error(val message: String) : WorkerTestStatus()
-}
+import com.dualboost.downloader.data.WorkerTestStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsBottomSheet(
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    viewModel: MainViewModel? = null
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -66,7 +55,16 @@ fun SettingsBottomSheet(
     var workerUrl by remember { mutableStateOf(SlicerPreferences.getSlicerUrl(context)) }
     var secretKey by remember { mutableStateOf(SlicerPreferences.getSlicerSecret(context)) }
     var isPasswordVisible by remember { mutableStateOf(false) }
-    var testStatus by remember { mutableStateOf<WorkerTestStatus>(WorkerTestStatus.Idle) }
+    val vmTestStatus = viewModel?.workerTestStatus?.collectAsState()?.value
+    var localTestStatus by remember { mutableStateOf<WorkerTestStatus>(WorkerTestStatus.Idle) }
+    val testStatus = vmTestStatus ?: localTestStatus
+    fun resetTestStatus() {
+        if (viewModel != null) {
+            viewModel.resetWorkerTestStatus()
+        } else {
+            localTestStatus = WorkerTestStatus.Idle
+        }
+    }
     var showSetupGuide by remember { mutableStateOf(false) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -210,7 +208,7 @@ fun SettingsBottomSheet(
                 value = workerUrl,
                 onValueChange = {
                     workerUrl = it
-                    testStatus = WorkerTestStatus.Idle
+                    resetTestStatus()
                 },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Cloudflare Worker URL") },
@@ -226,7 +224,7 @@ fun SettingsBottomSheet(
                     if (workerUrl.isNotBlank()) {
                         IconButton(onClick = {
                             workerUrl = ""
-                            testStatus = WorkerTestStatus.Idle
+                            resetTestStatus()
                         }) {
                             Icon(
                                 imageVector = Icons.Rounded.Clear,
@@ -254,7 +252,7 @@ fun SettingsBottomSheet(
                 value = secretKey,
                 onValueChange = {
                     secretKey = it
-                    testStatus = WorkerTestStatus.Idle
+                    resetTestStatus()
                 },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Secret Key (Optional)") },
@@ -306,10 +304,10 @@ fun SettingsBottomSheet(
                             Toast.makeText(context, "Please enter a Worker URL first", Toast.LENGTH_SHORT).show()
                             return@OutlinedButton
                         }
-                        testStatus = WorkerTestStatus.Testing
-                        coroutineScope.launch {
-                            val result = testWorkerConnectivity(workerUrl.trim(), secretKey.trim())
-                            testStatus = result
+                        if (viewModel != null) {
+                            viewModel.testWorkerConnectivity(workerUrl.trim(), secretKey.trim())
+                        } else {
+                            localTestStatus = WorkerTestStatus.Error("ViewModel not available")
                         }
                     },
                     modifier = Modifier.weight(1f),
@@ -584,37 +582,4 @@ private fun SetupStepItem(
     }
 }
 
-private suspend fun testWorkerConnectivity(rawUrl: String, secretKey: String): WorkerTestStatus {
-    return withContext(Dispatchers.IO) {
-        try {
-            val cleanBase = rawUrl.trim().trimEnd('/')
-            val healthUrl = if (cleanBase.endsWith("/health")) cleanBase else "$cleanBase/health"
-
-            val client = OkHttpClient.Builder()
-                .connectTimeout(5, TimeUnit.SECONDS)
-                .readTimeout(5, TimeUnit.SECONDS)
-                .build()
-
-            // SEC-AUDIT M-1: Health check is an unauthenticated ping; do not expose secret in request headers
-            val request = Request.Builder().url(healthUrl).get().build()
-
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string() ?: ""
-                    if (body.contains("DualBoost Cloud Slicer")) {
-                        WorkerTestStatus.Success("Worker is live and verified! Ready to slice streams.")
-                    } else {
-                        WorkerTestStatus.Success("Connected (HTTP ${response.code})")
-                    }
-                } else if (response.code == 401) {
-                    WorkerTestStatus.Error("HTTP 401: Unauthorized. Please check Secret Key.")
-                } else {
-                    WorkerTestStatus.Error("Worker returned HTTP ${response.code}")
-                }
-            }
-        } catch (e: Exception) {
-            WorkerTestStatus.Error("Connection failed: ${e.message ?: "Unknown error"}")
-        }
-    }
-}
 

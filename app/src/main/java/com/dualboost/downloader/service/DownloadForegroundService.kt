@@ -53,14 +53,21 @@ class DownloadForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        if (action == ACTION_START_DOWNLOAD) {
-            val url = intent.getStringExtra(EXTRA_URL)
+        if (action == ACTION_START_DOWNLOAD || action == ACTION_RESUME_DOWNLOAD) {
+            val url = intent?.getStringExtra(EXTRA_URL)
             acquireWakeLock()
             startForegroundNotification("Initializing download...")
             val currentState = downloaderEngine.downloadState.value
-            if (!url.isNullOrBlank() && currentState !is DownloadState.Downloading && currentState !is DownloadState.Probing) {
-                downloaderEngine.startDownload(url)
+            val targetUrl = url ?: (currentState as? DownloadState.Paused)?.url
+            if (!targetUrl.isNullOrBlank() && currentState !is DownloadState.Downloading && currentState !is DownloadState.Probing) {
+                downloaderEngine.startDownload(targetUrl)
             }
+        } else if (action == ACTION_PAUSE_DOWNLOAD) {
+            val currentState = downloaderEngine.downloadState.value
+            if (currentState !is DownloadState.Idle && currentState !is DownloadState.Paused) {
+                downloaderEngine.pauseDownload()
+            }
+            releaseWakeLock()
         } else if (action == ACTION_CANCEL_DOWNLOAD) {
             val currentState = downloaderEngine.downloadState.value
             if (currentState !is DownloadState.Idle && currentState !is DownloadState.Paused) {
@@ -70,6 +77,10 @@ class DownloadForegroundService : Service() {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         } else if (action == ACTION_DISCARD_DOWNLOAD) {
+            val currentState = downloaderEngine.downloadState.value
+            val fileName = (currentState as? DownloadState.Downloading)?.fileName
+                ?: (currentState as? DownloadState.Paused)?.fileName
+            downloaderEngine.discardDownload(fileName = fileName)
             releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -155,7 +166,9 @@ class DownloadForegroundService : Service() {
                             title = "Download Complete!",
                             content = "${state.fileName} (${formatBytes(state.totalBytes)})",
                             progress = 100,
-                            indeterminate = false
+                            indeterminate = false,
+                            isPaused = false,
+                            canControl = false
                         )
                         stopForeground(STOP_FOREGROUND_DETACH)
                         stopSelf()
@@ -166,12 +179,25 @@ class DownloadForegroundService : Service() {
                             title = "Download Failed",
                             content = state.error,
                             progress = 0,
-                            indeterminate = false
+                            indeterminate = false,
+                            isPaused = false,
+                            canControl = false
                         )
                         stopForeground(STOP_FOREGROUND_DETACH)
                         stopSelf()
                     }
-                    is DownloadState.Idle, is DownloadState.Paused -> {
+                    is DownloadState.Paused -> {
+                        releaseWakeLock()
+                        updateNotification(
+                            title = "Download Paused",
+                            content = "${state.fileName} (Tap Resume to continue)",
+                            progress = (state.progressPercentage * 100).toInt(),
+                            indeterminate = false,
+                            isPaused = true,
+                            canControl = true
+                        )
+                    }
+                    is DownloadState.Idle -> {
                         releaseWakeLock()
                     }
                 }
@@ -192,17 +218,31 @@ class DownloadForegroundService : Service() {
         }
     }
 
-    private fun updateNotification(title: String, content: String, progress: Int, indeterminate: Boolean) {
-        val notification = buildNotification(title, content, progress, indeterminate)
+    private fun updateNotification(
+        title: String,
+        content: String,
+        progress: Int,
+        indeterminate: Boolean,
+        isPaused: Boolean = false,
+        canControl: Boolean = true
+    ) {
+        val notification = buildNotification(title, content, progress, indeterminate, isPaused, canControl)
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
-    private fun buildNotification(title: String, content: String, progress: Int, indeterminate: Boolean) =
-        NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun buildNotification(
+        title: String,
+        content: String,
+        progress: Int,
+        indeterminate: Boolean,
+        isPaused: Boolean = false,
+        canControl: Boolean = true
+    ): android.app.Notification {
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(content)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setOngoing(true)
+            .setOngoing(!isPaused && canControl)
             .setOnlyAlertOnce(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setProgress(100, progress, indeterminate)
@@ -214,7 +254,37 @@ class DownloadForegroundService : Service() {
                     PendingIntent.FLAG_IMMUTABLE
                 )
             )
-            .build()
+
+        if (canControl) {
+            if (isPaused) {
+                val resumeIntent = Intent(this, DownloadForegroundService::class.java).apply {
+                    action = ACTION_RESUME_DOWNLOAD
+                }
+                val resumePending = PendingIntent.getService(
+                    this, 1, resumeIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                builder.addAction(android.R.drawable.ic_media_play, "Resume", resumePending)
+            } else {
+                val pauseIntent = Intent(this, DownloadForegroundService::class.java).apply {
+                    action = ACTION_PAUSE_DOWNLOAD
+                }
+                val pausePending = PendingIntent.getService(
+                    this, 2, pauseIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                builder.addAction(android.R.drawable.ic_media_pause, "Pause", pausePending)
+            }
+
+            val cancelIntent = Intent(this, DownloadForegroundService::class.java).apply {
+                action = ACTION_DISCARD_DOWNLOAD
+            }
+            val cancelPending = PendingIntent.getService(
+                this, 3, cancelIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPending)
+        }
+
+        return builder.build()
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -263,6 +333,8 @@ class DownloadForegroundService : Service() {
 
         const val ACTION_START_DOWNLOAD = "com.dualboost.ACTION_START_DOWNLOAD"
         const val ACTION_CANCEL_DOWNLOAD = "com.dualboost.ACTION_CANCEL_DOWNLOAD"
+        const val ACTION_PAUSE_DOWNLOAD = "com.dualboost.ACTION_PAUSE_DOWNLOAD"
+        const val ACTION_RESUME_DOWNLOAD = "com.dualboost.ACTION_RESUME_DOWNLOAD"
         const val ACTION_DISCARD_DOWNLOAD = "com.dualboost.ACTION_DISCARD_DOWNLOAD"
         const val EXTRA_URL = "extra_download_url"
     }

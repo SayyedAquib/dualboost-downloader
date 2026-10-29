@@ -204,5 +204,30 @@ class ResumableDownloadTest {
         assertFalse("Metadata file must be deleted on discard", metaFile.exists())
         assertEquals(DownloadState.Idle, engine.downloadState.value)
     }
+
+    @Test
+    fun testSaveCompletedChunks_AtomicFallback_SucceedsWhenDestinationPreExists() {
+        val client = OkHttpClient.Builder().build()
+        val engine = DualDownloaderEngine(DummyTestContext(tempDir), TestNetworkProvider(client))
+
+        val metaFile = engine.getMetaFile(tempDir, "atomic_meta.bin")
+        // Pre-create the destination file with dummy content
+        metaFile.writeText("pre-existing content")
+        assertTrue(metaFile.exists())
+
+        // Save new chunks - must atomically replace via rename or fallback copy
+        engine.saveCompletedChunks(
+            metaFile = metaFile,
+            url = "https://example.com/atomic.bin",
+            totalBytes = 8_000_000L,
+            completedIndices = setOf(0, 1),
+            etag = "\"etag-atomic-123\""
+        )
+
+        assertTrue(metaFile.exists())
+        val text = metaFile.readText()
+        assertTrue("Meta text must contain updated completedChunks", text.contains("completedChunks=0,1"))
+        assertTrue("Meta text must contain updated etag", text.contains("etag=\"etag-atomic-123\""))
+    }
 }
 

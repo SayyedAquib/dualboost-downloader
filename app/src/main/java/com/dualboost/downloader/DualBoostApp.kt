@@ -10,6 +10,7 @@ class DualBoostApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        com.dualboost.downloader.security.CrashVault.install(this)
         instance = this
         repository = DownloadRepository(this)
     }
