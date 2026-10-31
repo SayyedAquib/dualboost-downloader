@@ -127,7 +127,14 @@ Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (175 active t
   - `testRepository_ExposesNetworkStateFlows`: Validates that `isWifiAvailable` and `isCellularAvailable` flows are exposed directly to consumers.
   - `testRepository_DiscardDownload_TransitionsToIdleAndCleansFiles`: Verifies `discardDownload()` stops foreground service without triggering pause, cancels engine with `isDiscarding`, cleans partial files and metadata, and transitions directly to `Idle`.
 
-- **DualNetworkManagerTest** (8 tests):
+- **ThermalAndIoOptimizationTest** (3 tests):
+  - `testThermalBackoff_SevereHeat_PausesCellularWhenWifiAvailable`: Asserts that under SEVERE thermal status (3+), cellular chunk requests are completely paused (0 requests) and 100% of chunks are transferred over Wi-Fi, maintaining exact SHA-256 payload integrity.
+  - `testThermalBackoff_SevereHeat_FallbackToSingleCellularWorkerWhenWifiUnavailable`: Verifies that when Wi-Fi is down and thermal status is SEVERE, cellular transfers safely complete with single-worker pacing rather than stalling the download.
+  - `testThermalBackoff_ModerateHeat_DualChannelWith64KBBufferIntegrity`: Asserts that under MODERATE thermal status (2), both interfaces operate concurrently and 64 KB streaming buffers preserve byte-for-byte integrity without over-reading chunk boundaries.
+
+- **DualNetworkManagerTest** (10 tests):
+  - `testDynamicCellularGeneration_HandoverPreserves5GState`: Verifies that active 5G NSA states delivered by `TelephonyDisplayInfo` are never regressed back to 4G LTE by subsequent `onCapabilitiesChanged` packet telemetry.
+  - `testCellularKeepAlive_OnDemandLifecycle`: Asserts that `acquireCellularKeepAlive()` and `releaseCellularKeepAlive()` cleanly transition keep-alive state flags on demand.
   - `testNetworkProvider_BothDisconnectedInitially`: Validates default state when neither interface is active.
   - `testNetworkProvider_WifiOnlyMode`: Tests socket client availability and state flags in Wi-Fi-only mode.
   - `testNetworkProvider_CellularOnlyMode`: Tests socket client availability and state flags in Cellular-only mode.

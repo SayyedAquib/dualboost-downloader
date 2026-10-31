@@ -43,6 +43,10 @@ interface NetworkProvider {
         get() = MutableStateFlow(4)
     val cellularGeneration: StateFlow<CellularGeneration>
         get() = MutableStateFlow(CellularGeneration.FIVE_G)
+    val isCellularKeepAliveActive: StateFlow<Boolean>
+        get() = MutableStateFlow(false)
+    fun acquireCellularKeepAlive() {}
+    fun releaseCellularKeepAlive() {}
     fun getWifiClient(): OkHttpClient?
     fun getCellularClient(): OkHttpClient?
     fun getDefaultClient(): OkHttpClient
@@ -55,6 +59,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
 
     @Volatile private var wifiNetwork: Network? = null
     @Volatile private var cellularNetwork: Network? = null
+    @Volatile private var hasReceivedDisplayInfo = false
     private var telephonyCallback: Any? = null
 
     private val _isWifiAvailable = MutableStateFlow(false)
@@ -83,6 +88,10 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
 
     private val _cellularGeneration = MutableStateFlow(CellularGeneration.FOUR_G)
     override val cellularGeneration: StateFlow<CellularGeneration> = _cellularGeneration.asStateFlow()
+
+    private val _isCellularKeepAliveActive = MutableStateFlow(false)
+    override val isCellularKeepAliveActive: StateFlow<Boolean> = _isCellularKeepAliveActive.asStateFlow()
+    @Volatile private var activeCellularCallback: ConnectivityManager.NetworkCallback? = null
 
     // SEC-AUDIT H-2: Cloudflare Edge CA pins (*.workers.dev) for Cloud Slicer endpoint
     // Primary: Cloudflare Inc ECC CA-3
@@ -183,6 +192,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 _isCellularAvailable.value = false
                 _cellularSignalLevel.value = 0
                 _isRoamingActive.value = false
+                hasReceivedDisplayInfo = false
                 if (_isWifiAvailable.value) {
                     _isModemStandbyDetected.value = true
                 }
@@ -240,7 +250,9 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         _isRoamingActive.value = isRoaming
         _isModemStandbyDetected.value = false
         detectCarrierName()
-        detectInitialCellularGeneration(capabilities)
+        if (!hasReceivedDisplayInfo) {
+            detectInitialCellularGeneration(capabilities)
+        }
     }
 
     private fun detectCarrierName() {
@@ -256,6 +268,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
     }
 
     private fun detectInitialCellularGeneration(capabilities: NetworkCapabilities) {
+        if (hasReceivedDisplayInfo) return
         try {
             val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
             if (telephonyManager != null) {
@@ -289,20 +302,15 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
             }
         }
 
-        // Explicitly request Cellular interface (keeps mobile data alive while Wi-Fi is on)
+        // Register passive listener for Cellular interface (monitors signal & carrier with 0 idle radio battery drain)
         val cellularRequest = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
         try {
-            connectivityManager.requestNetwork(cellularRequest, cellularCallback)
+            connectivityManager.registerNetworkCallback(cellularRequest, cellularCallback)
         } catch (e: Exception) {
-            Log.w(TAG, "requestNetwork for Cellular failed, falling back to registerNetworkCallback", e)
-            try {
-                connectivityManager.registerNetworkCallback(cellularRequest, cellularCallback)
-            } catch (e2: Exception) {
-                Log.e(TAG, "registerNetworkCallback for Cellular failed", e2)
-            }
+            Log.w(TAG, "registerNetworkCallback for Cellular failed", e)
         }
 
         // Immediately inspect currently active networks to populate initial state
@@ -335,6 +343,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
                 val callback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
                     override fun onDisplayInfoChanged(telephonyDisplayInfo: TelephonyDisplayInfo) {
+                        hasReceivedDisplayInfo = true
                         val override = telephonyDisplayInfo.overrideNetworkType
                         val is5GDetected = override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ||
                                 override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_ADVANCED ||
@@ -349,7 +358,50 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         }
     }
 
+    override fun acquireCellularKeepAlive() {
+        if (_isCellularKeepAliveActive.value) return
+        _isCellularKeepAliveActive.value = true
+        Log.d(TAG, "Acquiring on-demand cellular keep-alive request for active transfer")
+        try {
+            val cellularRequest = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            val cb = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    cellularCallback.onAvailable(network)
+                }
+                override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                    cellularCallback.onCapabilitiesChanged(network, networkCapabilities)
+                }
+                override fun onLost(network: Network) {
+                    cellularCallback.onLost(network)
+                }
+            }
+            activeCellularCallback = cb
+            connectivityManager.requestNetwork(cellularRequest, cb)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not acquire on-demand cellular request", e)
+        }
+    }
+
+    override fun releaseCellularKeepAlive() {
+        if (!_isCellularKeepAliveActive.value) return
+        _isCellularKeepAliveActive.value = false
+        Log.d(TAG, "Releasing on-demand cellular keep-alive request (allowing modem sleep)")
+        activeCellularCallback?.let { cb ->
+            try {
+                connectivityManager.unregisterNetworkCallback(cb)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not unregister on-demand cellular callback", e)
+            }
+            activeCellularCallback = null
+        }
+    }
+
     fun stopListening() {
+        releaseCellularKeepAlive()
+        hasReceivedDisplayInfo = false
         try {
             connectivityManager.unregisterNetworkCallback(wifiCallback)
         } catch (_: Exception) {}

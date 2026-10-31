@@ -44,10 +44,15 @@ import kotlin.math.min
 class DualDownloaderEngine(
     private val context: Context,
     private val networkManager: NetworkProvider,
-    historyRepositoryOverride: com.dualboost.downloader.data.DownloadHistoryRepository? = null
+    historyRepositoryOverride: com.dualboost.downloader.data.DownloadHistoryRepository? = null,
+    thermalStatusProviderOverride: com.dualboost.downloader.thermal.ThermalStatusProvider? = null
 ) {
     val historyRepository: com.dualboost.downloader.data.DownloadHistoryRepository by lazy {
         historyRepositoryOverride ?: com.dualboost.downloader.data.DownloadHistoryRepository(context)
+    }
+
+    val thermalStatusProvider: com.dualboost.downloader.thermal.ThermalStatusProvider by lazy {
+        thermalStatusProviderOverride ?: com.dualboost.downloader.thermal.SystemThermalStatusProvider(context)
     }
 
     private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
@@ -422,6 +427,8 @@ class DualDownloaderEngine(
         isExecuting.set(true)
         downloadJob = scope.launch {
             try {
+                networkManager.acquireCellularKeepAlive()
+                thermalStatusProvider.startListening()
                 executeDownload(sanitizedUrl, targetDir)
             } catch (e: CancellationException) {
                 if (!isDiscarding.get()) {
@@ -459,6 +466,8 @@ class DualDownloaderEngine(
                 }
                 _downloadState.value = DownloadState.Failed(errorMessage, currentUrl ?: sanitizedUrl)
             } finally {
+                thermalStatusProvider.stopListening()
+                networkManager.releaseCellularKeepAlive()
                 isExecuting.set(false)
             }
         }
@@ -1010,6 +1019,7 @@ class DualDownloaderEngine(
             // Resilient Worker coroutine function
             suspend fun runWorker(
                 interfaceType: NetworkInterfaceType,
+                workerIndex: Int,
                 clientProvider: () -> OkHttpClient?,
                 sharedRandomAccessFile: RandomAccessFile
             ) {
@@ -1063,6 +1073,27 @@ class DualDownloaderEngine(
                             if (shouldBreak) break
                             val backoff = min(1000L * (1L shl (autoRecoveryCycles.get().coerceAtLeast(1) - 1)), 4000L)
                             delay(backoff)
+                            continue
+                        }
+                    }
+
+                    // Dynamic Thermal Backoff (Slice 3): shed or throttle cellular load under heat
+                    if (interfaceType == NetworkInterfaceType.CELLULAR) {
+                        val thermal = thermalStatusProvider.thermalStatus.value
+                        val wifiAvailable = networkManager.isWifiAvailable.value
+                        if (thermal >= com.dualboost.downloader.thermal.ThermalStatus.SEVERE) {
+                            if (wifiAvailable) {
+                                // Offload 100% to Wi-Fi to allow cellular radio to cool down
+                                delay(500)
+                                continue
+                            } else if (workerIndex > 0) {
+                                // Wi-Fi unavailable: throttle to single cellular worker
+                                delay(500)
+                                continue
+                            }
+                        } else if (thermal == com.dualboost.downloader.thermal.ThermalStatus.MODERATE && workerIndex > 0) {
+                            // Moderate heat: throttle cellular concurrency down to 1 worker
+                            delay(500)
                             continue
                         }
                     }
@@ -1124,7 +1155,7 @@ class DualDownloaderEngine(
                                 if (response.code == 206 || (response.code == 200 && chunk.startByte == 0L)) {
                                     val body = response.body ?: throw IOException("Empty body for chunk ${chunk.index}")
                                     val inputStream = body.byteStream()
-                                    val buffer = ByteArray(32 * 1024)
+                                    val buffer = ByteArray(64 * 1024)
                                     var bytesRead: Int
                                     var chunkOffset = chunk.startByte
                                     val expectedChunkBytes = (chunk.endByte - chunk.startByte) + 1
@@ -1214,10 +1245,10 @@ class DualDownloaderEngine(
             val sharedRaf = RandomAccessFile(outputFile, "rw")
             try {
                 val workers = listOf(
-                    launch { runWorker(NetworkInterfaceType.WIFI, { networkManager.getWifiClient() }, sharedRaf) },
-                    launch { runWorker(NetworkInterfaceType.WIFI, { networkManager.getWifiClient() }, sharedRaf) },
-                    launch { runWorker(NetworkInterfaceType.CELLULAR, { networkManager.getCellularClient() }, sharedRaf) },
-                    launch { runWorker(NetworkInterfaceType.CELLULAR, { networkManager.getCellularClient() }, sharedRaf) }
+                    launch { runWorker(NetworkInterfaceType.WIFI, 0, { networkManager.getWifiClient() }, sharedRaf) },
+                    launch { runWorker(NetworkInterfaceType.WIFI, 1, { networkManager.getWifiClient() }, sharedRaf) },
+                    launch { runWorker(NetworkInterfaceType.CELLULAR, 0, { networkManager.getCellularClient() }, sharedRaf) },
+                    launch { runWorker(NetworkInterfaceType.CELLULAR, 1, { networkManager.getCellularClient() }, sharedRaf) }
                 )
 
                 workers.joinAll()

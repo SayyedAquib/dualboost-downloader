@@ -55,6 +55,7 @@ class SpeedTestEngine(
         activeJob?.cancel()
         activeJob = scope.launch {
             try {
+                networkProvider.acquireCellularKeepAlive()
                 var wifiSpeedMBps = 0f
                 var cellularSpeedMBps = 0f
                 var dualBoostSpeedMBps = 0f
@@ -125,6 +126,7 @@ class SpeedTestEngine(
                 _speedTestState.value = SpeedTestState.Error(sanitizedMsg ?: "Speed test encountered an unexpected error.")
             } finally {
                 cancelAllCalls()
+                networkProvider.releaseCellularKeepAlive()
             }
         }
     }
@@ -133,6 +135,7 @@ class SpeedTestEngine(
         activeJob?.cancel()
         activeJob = null
         cancelAllCalls()
+        networkProvider.releaseCellularKeepAlive()
         _speedTestState.value = SpeedTestState.Idle
     }
 

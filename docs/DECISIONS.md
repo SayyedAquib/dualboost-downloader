@@ -1267,3 +1267,46 @@ Implement 4 resilient compatibility vertical slices with strict TDD test coverag
 
 
 
+
+
+## ADR-034: Dynamic 5G NSA Handover Resilience, On-Demand Cellular Radio & Adaptive Thermal Backoff
+
+### Status
+Accepted
+
+### Context
+During production testing on a Google Pixel 9 during a 23 GB download, three physical-layer engineering challenges were observed:
+1. **Dynamic 4G -> 5G Handover Clobbering**: In India and many global regions, Airtel and carriers operate 5G Non-Standalone (NSA) anchored to an LTE control cell. When mobile data transitioned to 5G mid-download, the Android system status bar correctly showed "5G", but DualBoost displayed "4G LTE Cellular". Investigating log telemetry revealed that packet counter updates in `onCapabilitiesChanged` repeatedly queried `telephonyManager.dataNetworkType` (which returns `NETWORK_TYPE_LTE` on NSA), constantly clobbering the live 5G state back to 4G.
+2. **Idle Modem Battery Drain**: `DualNetworkManager` held an unconditional `requestNetwork` for the cellular interface at all times. On modern 5G baseband processors, maintaining an active network request forces the cellular modem to stay awake continuously, draining 8-15% battery per hour even when no downloads are running.
+3. **Thermal Saturation & Disk Write Amplification**: Aggregating multi-gigabyte downloads across Wi-Fi and 5G simultaneously activates two high-power RF front-ends alongside continuous disk writes. The Pixel 9 thermal subsystem elevated skin temperatures toward moderate and severe throttling zones, while 32 KB chunk streaming buffers produced ~736,000 disk write syscalls and mutex locks for a single 23 GB transfer.
+
+### Decision
+Implement four vertical engineering slices verified with strict TDD:
+
+1. **Slice 1: Dynamic 4G -> 5G Handover Resilience (`TelephonyDisplayInfo` as Primary Authority)**:
+   - Added `@Volatile private var hasReceivedDisplayInfo = false` to `DualNetworkManager`.
+   - `detectInitialCellularGeneration()` only provides a provisional baseline on startup.
+   - Once `TelephonyCallback.onDisplayInfoChanged()` delivers live display info (`OVERRIDE_NETWORK_TYPE_NR_NSA`, `OVERRIDE_NETWORK_TYPE_NR_ADVANCED`, or `NETWORK_TYPE_NR`), it becomes the authoritative source of truth.
+   - Subsequent `onCapabilitiesChanged` callbacks are strictly prevented from overwriting the live generation state back to 4G LTE.
+
+2. **Slice 2: On-Demand Cellular Radio & Keep-Alive Lifecycle**:
+   - Added `isCellularKeepAliveActive: StateFlow<Boolean>`, `acquireCellularKeepAlive()`, and `releaseCellularKeepAlive()` to `NetworkProvider` and `DualNetworkManager`.
+   - `startListening()` uses a passive `registerNetworkCallback` to observe cellular signal strength and carrier metadata with 0 idle radio battery drain.
+   - `acquireCellularKeepAlive()` issues an explicit `requestNetwork` strictly when active downloads or speed benchmarks commence (`startDownload`, `onStartCommand`, `startSpeedTest`).
+   - `releaseCellularKeepAlive()` unregisters the request immediately when transfers complete, pause, fail, or cancel, allowing the modem to enter deep C-states.
+
+3. **Slice 3: Adaptive Thermal Backoff (`ThermalStatusProvider`)**:
+   - Introduced `ThermalStatusProvider` interface and `SystemThermalStatusProvider` registering `PowerManager.OnThermalStatusChangedListener` (API 29+).
+   - In `DualDownloaderEngine`, chunk workers dynamically query thermal status before claiming pending chunks:
+     - Under `THERMAL_STATUS_MODERATE` (2): Cellular concurrency throttles from 2 workers down to 1 worker.
+     - Under `THERMAL_STATUS_SEVERE` (3+): When Wi-Fi is active, cellular chunk workers pause entirely (`continue`), shedding 100% of RF baseband load to Wi-Fi until the chassis cools down. If Wi-Fi is unavailable, cellular safely throttles to a single paced worker.
+
+4. **Slice 4: 64 KB Stream Buffer Coalescing**:
+   - Upgraded chunk streaming workers from 32 KB to 64 KB (`65,536` bytes) buffers.
+   - Halves the number of `fileWriteMutex` locks, `seek()`, and `write()` syscalls (reducing 736,000 syscalls down to 368,000 on a 23 GB transfer), significantly slashing CPU overhead, thread context switching, and write amplification.
+
+### Consequences
+- Eliminates the Airtel 5G NSA display mismatch bug permanently.
+- Slashes idle background power consumption to near-zero while preserving full real-time carrier and signal telemetry.
+- Prevents thermal throttling shutdown during sustained large-scale downloads by automatically offloading cellular heat to Wi-Fi.
+- 100% backward-compatible across unit test runners and devices down to API 26.

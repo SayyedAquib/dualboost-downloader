@@ -17,6 +17,8 @@ class DualNetworkManagerTest {
         val vpnFlow = MutableStateFlow(false)
         val carrierFlow = MutableStateFlow<String?>(null)
         val modemStandbyFlow = MutableStateFlow(false)
+        val generationFlow = MutableStateFlow(com.dualboost.downloader.network.CellularGeneration.FOUR_G)
+        val keepAliveFlow = MutableStateFlow(false)
 
         var wifiClientInstance: OkHttpClient? = null
         var cellularClientInstance: OkHttpClient? = null
@@ -32,6 +34,16 @@ class DualNetworkManagerTest {
         override val isVpnActive: StateFlow<Boolean> = vpnFlow
         override val cellularCarrierName: StateFlow<String?> = carrierFlow
         override val isModemStandbyDetected: StateFlow<Boolean> = modemStandbyFlow
+        override val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> = generationFlow
+        override val isCellularKeepAliveActive: StateFlow<Boolean> = keepAliveFlow
+
+        override fun acquireCellularKeepAlive() {
+            keepAliveFlow.value = true
+        }
+
+        override fun releaseCellularKeepAlive() {
+            keepAliveFlow.value = false
+        }
 
         override fun getWifiClient(): OkHttpClient? =
             if (vpnFlow.value) defaultClientInstance else wifiClientInstance
@@ -43,6 +55,10 @@ class DualNetworkManagerTest {
         }
 
         override fun getDefaultClient(): OkHttpClient = defaultClientInstance
+
+        fun setCellularGeneration(gen: com.dualboost.downloader.network.CellularGeneration) {
+            generationFlow.value = gen
+        }
 
         fun setWifiConnected(connected: Boolean) {
             wifiFlow.value = connected
@@ -204,6 +220,35 @@ class DualNetworkManagerTest {
         // Action: Modem wakes up or mobile data becomes active
         provider.setModemStandby(false)
         assertFalse("Modem standby resets when cellular radio engages", provider.isModemStandbyDetected.value)
+    }
+
+    @Test
+    fun testDynamicCellularGeneration_HandoverPreserves5GState() {
+        val provider = DynamicNetworkProvider()
+        assertEquals("Initial generation should be 4G LTE", com.dualboost.downloader.network.CellularGeneration.FOUR_G, provider.cellularGeneration.value)
+
+        // Handover to 5G NSA (e.g. Airtel 5G Plus)
+        provider.setCellularGeneration(com.dualboost.downloader.network.CellularGeneration.FIVE_G)
+        assertEquals("Generation must update to 5G", com.dualboost.downloader.network.CellularGeneration.FIVE_G, provider.cellularGeneration.value)
+
+        // Capabilities or signal changes occur mid-download
+        provider.setCarrierName("airtel")
+        assertEquals("Carrier name updated", "airtel", provider.cellularCarrierName.value)
+        assertEquals("5G generation must NOT be clobbered back to 4G", com.dualboost.downloader.network.CellularGeneration.FIVE_G, provider.cellularGeneration.value)
+    }
+
+    @Test
+    fun testCellularKeepAlive_OnDemandLifecycle() {
+        val provider = DynamicNetworkProvider()
+        assertFalse("Cellular keep-alive should be inactive initially during idle", provider.isCellularKeepAliveActive.value)
+
+        // Transfer starts (Download or Speed Test):
+        provider.acquireCellularKeepAlive()
+        assertTrue("Cellular keep-alive must be active during transfer", provider.isCellularKeepAliveActive.value)
+
+        // Transfer finishes, cancels, or pauses:
+        provider.releaseCellularKeepAlive()
+        assertFalse("Cellular keep-alive must be released to let radio sleep", provider.isCellularKeepAliveActive.value)
     }
 }
 

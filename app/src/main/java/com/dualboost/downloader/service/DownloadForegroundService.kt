@@ -55,6 +55,7 @@ class DownloadForegroundService : Service() {
         val action = intent?.action
         if (action == ACTION_START_DOWNLOAD || action == ACTION_RESUME_DOWNLOAD) {
             val url = intent?.getStringExtra(EXTRA_URL)
+            networkManager.acquireCellularKeepAlive()
             acquireWakeLock()
             startForegroundNotification("Initializing download...")
             val currentState = downloaderEngine.downloadState.value
@@ -67,12 +68,14 @@ class DownloadForegroundService : Service() {
             if (currentState !is DownloadState.Idle && currentState !is DownloadState.Paused) {
                 downloaderEngine.pauseDownload()
             }
+            networkManager.releaseCellularKeepAlive()
             releaseWakeLock()
         } else if (action == ACTION_CANCEL_DOWNLOAD) {
             val currentState = downloaderEngine.downloadState.value
             if (currentState !is DownloadState.Idle && currentState !is DownloadState.Paused) {
                 downloaderEngine.pauseDownload()
             }
+            networkManager.releaseCellularKeepAlive()
             releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -81,6 +84,7 @@ class DownloadForegroundService : Service() {
             val fileName = (currentState as? DownloadState.Downloading)?.fileName
                 ?: (currentState as? DownloadState.Paused)?.fileName
             downloaderEngine.discardDownload(fileName = fileName)
+            networkManager.releaseCellularKeepAlive()
             releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -161,6 +165,7 @@ class DownloadForegroundService : Service() {
                         )
                     }
                     is DownloadState.Completed -> {
+                        networkManager.releaseCellularKeepAlive()
                         releaseWakeLock()
                         updateNotification(
                             title = "Download Complete!",
@@ -174,6 +179,7 @@ class DownloadForegroundService : Service() {
                         stopSelf()
                     }
                     is DownloadState.Failed -> {
+                        networkManager.releaseCellularKeepAlive()
                         releaseWakeLock()
                         updateNotification(
                             title = "Download Failed",
@@ -187,6 +193,7 @@ class DownloadForegroundService : Service() {
                         stopSelf()
                     }
                     is DownloadState.Paused -> {
+                        networkManager.releaseCellularKeepAlive()
                         releaseWakeLock()
                         updateNotification(
                             title = "Download Paused",
@@ -301,6 +308,7 @@ class DownloadForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        networkManager.releaseCellularKeepAlive()
         releaseWakeLock()
         stateJob?.cancel()
         serviceScope.cancel()

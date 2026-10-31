@@ -103,7 +103,9 @@ For all new features, bug fixes, and architectural modifications, strictly follo
 - Keep commit messages concise and imperative: e.g., `Add dynamic chunk work queue self-balancing`.
 
 ## Performance Rules
-- Never buffer entire file chunks in RAM; stream directly into `RandomAccessFile` using a 32 KB byte buffer.
+- Never buffer entire file chunks in RAM; stream directly into `RandomAccessFile` using a 64 KB byte buffer (`65,536` bytes) for I/O coalescing.
+- Limit concurrent network worker coroutines to at most 4 (2 Wi-Fi, 2 5G) under normal conditions; dynamically throttle cellular concurrency to 1 worker under `MODERATE` heat, and pause cellular transfers under `SEVERE` heat when Wi-Fi is available.
+- Cellular Radio Management: Maintain passive `registerNetworkCallback` while idle to prevent radio wake locks; acquire explicit `requestNetwork` keep-alive strictly during active transfers and release immediately upon pause/completion/cancellation.
 - Limit concurrent network worker coroutines to at most 4 (2 Wi-Fi, 2 5G) to prevent socket thrashing.
 - Throttle UI telemetry updates to at most once every 500ms.
 

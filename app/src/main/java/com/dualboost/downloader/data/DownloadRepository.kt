@@ -24,7 +24,8 @@ class DownloadRepository(
     val engineOverride: DualDownloaderEngine? = null,
     val speedTestEngineOverride: com.dualboost.downloader.engine.SpeedTestEngine? = null,
     val historyRepositoryOverride: DownloadHistoryRepository? = null,
-    val isServiceEnabled: Boolean = (engineOverride == null)
+    val isServiceEnabled: Boolean = (engineOverride == null),
+    val thermalStatusProviderOverride: com.dualboost.downloader.thermal.ThermalStatusProvider? = null
 ) {
 
     val historyRepository: DownloadHistoryRepository by lazy {
@@ -35,8 +36,12 @@ class DownloadRepository(
         (networkProvider as? DualNetworkManager) ?: DualNetworkManager(context)
     }
 
+    val thermalStatusProvider: com.dualboost.downloader.thermal.ThermalStatusProvider by lazy {
+        thermalStatusProviderOverride ?: com.dualboost.downloader.thermal.SystemThermalStatusProvider(context)
+    }
+
     val downloaderEngine: DualDownloaderEngine by lazy {
-        engineOverride ?: DualDownloaderEngine(context, networkProvider ?: networkManager, historyRepository)
+        engineOverride ?: DualDownloaderEngine(context, networkProvider ?: networkManager, historyRepository, thermalStatusProvider)
     }
 
     val speedTestEngine: com.dualboost.downloader.engine.SpeedTestEngine by lazy {
@@ -54,6 +59,7 @@ class DownloadRepository(
     val wifiSignalLevel: StateFlow<Int> get() = (networkProvider ?: networkManager).wifiSignalLevel
     val cellularSignalLevel: StateFlow<Int> get() = (networkProvider ?: networkManager).cellularSignalLevel
     val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> get() = (networkProvider ?: networkManager).cellularGeneration
+    val thermalStatus: StateFlow<Int> get() = (thermalStatusProviderOverride ?: downloaderEngine.thermalStatusProvider).thermalStatus
     val historyItems: StateFlow<List<DownloadHistoryItem>> get() = historyRepository.historyItems
 
     private val _workerTestStatus = MutableStateFlow<WorkerTestStatus>(WorkerTestStatus.Idle)
