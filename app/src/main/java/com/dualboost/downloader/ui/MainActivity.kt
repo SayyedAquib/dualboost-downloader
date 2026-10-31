@@ -288,6 +288,11 @@ fun MainScreen(
     val wifiSignalLevel by viewModel.wifiSignalLevel.collectAsState()
     val cellularSignalLevel by viewModel.cellularSignalLevel.collectAsState()
     val cellularGeneration by viewModel.cellularGeneration.collectAsState()
+    val showBatteryGuidance by viewModel.showBatteryGuidance.collectAsState()
+    val isVpnActive by viewModel.isVpnActive.collectAsState()
+    val isRoamingActive by viewModel.isRoamingActive.collectAsState()
+    val cellularCarrierName by viewModel.cellularCarrierName.collectAsState()
+    val isModemStandbyDetected by viewModel.isModemStandbyDetected.collectAsState()
 
     val urlInput by viewModel.urlInput.collectAsState()
     val selectedPreset by viewModel.selectedPreset.collectAsState()
@@ -489,10 +494,177 @@ fun MainScreen(
                 }
             }
 
+            // OEM Battery Optimization Guidance Banner (Slice 3)
+            AnimatedVisibility(
+                visible = showBatteryGuidance,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.BatteryAlert,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Battery Optimization Warning",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Aggressive OEM background restrictions may terminate downloads when your screen turns off. Allow battery exemption for uninterrupted multi-channel transfers.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = { viewModel.dismissBatteryGuidance() },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "Dismiss",
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            FilledTonalButton(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                            data = Uri.parse("package:${context.packageName}")
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {
+                                        try {
+                                            context.startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                        } catch (_: Exception) {}
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "Exempt App",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // VPN Active Status Banner (Slice 2)
+            AnimatedVisibility(
+                visible = isVpnActive,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.VpnKey,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "VPN Active: Secure Multi-Stream Mode",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Text(
+                                text = "Downloads route through your encrypted VPN tunnel to preserve privacy.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Data Roaming Guard Banner (Slice 1)
+            AnimatedVisibility(
+                visible = isRoamingActive,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Data Roaming Active: Mobile Data Paused",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                text = "Cellular aggregation paused to safeguard against unexpected roaming charges.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Network Aggregation Hero Cards
             val is4G = cellularGeneration == com.dualboost.downloader.network.CellularGeneration.FOUR_G
             val cellularName = if (is4G) "4G LTE" else "5G"
-            val cellularTitle = if (is4G) "4G LTE Cellular" else "5G Cellular"
+            val cellularCarrierSuffix = cellularCarrierName?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
+            val cellularTitle = "$cellularName Cellular$cellularCarrierSuffix"
+            val cellularSubtitle = when {
+                isRoamingActive -> "Roaming (Paused)"
+                cellularAvailable -> viewModel.getSignalLabel(cellularSignalLevel)
+                isModemStandbyDetected -> "Modem Standby"
+                else -> "Standby"
+            }
 
             Row(
                 modifier = Modifier
@@ -515,7 +687,7 @@ fun MainScreen(
                         .weight(1f)
                         .fillMaxHeight(),
                     title = cellularTitle,
-                    subtitle = if (cellularAvailable) viewModel.getSignalLabel(cellularSignalLevel) else "Standby",
+                    subtitle = cellularSubtitle,
                     icon = if (cellularAvailable) Icons.Rounded.SignalCellularAlt else Icons.Rounded.SignalCellularOff,
                     isActive = cellularAvailable,
                     activeColor = cellularColor
@@ -593,11 +765,27 @@ fun MainScreen(
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Using Wi-Fi only: Enable 'Mobile data always active' in Developer Options to aggregate 5G.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column {
+                            if (isModemStandbyDetected) {
+                                Text(
+                                    text = "Cellular Modem in Standby",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Your device sleeps mobile data while Wi-Fi is active. Enable 'Mobile data always active' in Developer Options to unleash dual-channel aggregation.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Text(
+                                    text = "Using Wi-Fi only: Enable 'Mobile data always active' in Developer Options to aggregate $cellularName.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             } else {

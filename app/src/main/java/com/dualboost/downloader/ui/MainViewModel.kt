@@ -2,6 +2,8 @@ package com.dualboost.downloader.ui
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.PowerManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dualboost.downloader.DualBoostApp
@@ -82,15 +84,52 @@ val DEFAULT_PRESETS = listOf(
     )
 )
 
+interface PowerExemptionChecker {
+    fun isIgnoringBatteryOptimizations(): Boolean
+    fun isAggressiveOem(): Boolean
+}
+
+class SystemPowerExemptionChecker(private val context: Context?) : PowerExemptionChecker {
+    override fun isIgnoringBatteryOptimizations(): Boolean {
+        if (context == null) return true
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        return powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+    }
+
+    override fun isAggressiveOem(): Boolean {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        return manufacturer in AGGRESSIVE_OEMS
+    }
+
+    companion object {
+        val AGGRESSIVE_OEMS = setOf(
+            "samsung", "xiaomi", "redmi", "poco", "huawei", "honor",
+            "oppo", "oneplus", "realme", "vivo", "transsion", "infinix", "tecno"
+        )
+    }
+}
+
 open class MainViewModel(
     val repository: DownloadRepository? = runCatching { DualBoostApp.instance.repository }.getOrNull(),
-    downloadStateOverride: StateFlow<DownloadState>? = null
+    downloadStateOverride: StateFlow<DownloadState>? = null,
+    val powerExemptionChecker: PowerExemptionChecker = SystemPowerExemptionChecker(runCatching { DualBoostApp.instance }.getOrNull())
 ) : ViewModel() {
+
+    private val _showBatteryGuidance = MutableStateFlow(false)
+    val showBatteryGuidance: StateFlow<Boolean> = _showBatteryGuidance.asStateFlow()
+
+    fun dismissBatteryGuidance() {
+        _showBatteryGuidance.value = false
+    }
 
     val downloadState: StateFlow<DownloadState> = downloadStateOverride ?: repository?.downloadState ?: MutableStateFlow(DownloadState.Idle)
     val speedTestState: StateFlow<com.dualboost.downloader.data.SpeedTestState> = repository?.speedTestState ?: MutableStateFlow(com.dualboost.downloader.data.SpeedTestState.Idle)
     val isWifiAvailable: StateFlow<Boolean> = repository?.isWifiAvailable ?: MutableStateFlow(false)
     val isCellularAvailable: StateFlow<Boolean> = repository?.isCellularAvailable ?: MutableStateFlow(false)
+    val isRoamingActive: StateFlow<Boolean> = repository?.isRoamingActive ?: MutableStateFlow(false)
+    val isVpnActive: StateFlow<Boolean> = repository?.isVpnActive ?: MutableStateFlow(false)
+    val cellularCarrierName: StateFlow<String?> = repository?.cellularCarrierName ?: MutableStateFlow(null)
+    val isModemStandbyDetected: StateFlow<Boolean> = repository?.isModemStandbyDetected ?: MutableStateFlow(false)
     val wifiSignalLevel: StateFlow<Int> = repository?.wifiSignalLevel ?: MutableStateFlow(4)
     val cellularSignalLevel: StateFlow<Int> = repository?.cellularSignalLevel ?: MutableStateFlow(4)
     val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> = repository?.cellularGeneration ?: MutableStateFlow(com.dualboost.downloader.network.CellularGeneration.FIVE_G)
@@ -156,6 +195,9 @@ open class MainViewModel(
     }
 
     init {
+        if (!powerExemptionChecker.isIgnoringBatteryOptimizations() && powerExemptionChecker.isAggressiveOem()) {
+            _showBatteryGuidance.value = true
+        }
         val currentState = downloadState.value
         if (currentState is DownloadState.Paused && currentState.url.isNotBlank()) {
             _urlInput.value = currentState.url

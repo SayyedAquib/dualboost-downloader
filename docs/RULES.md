@@ -74,6 +74,10 @@ For all new features, bug fixes, and architectural modifications, strictly follo
 
 ## Network & Service Lifecycle Rules
 - Strict Physical Socket Isolation: Cellular workers must route exclusively through `cellularClient`; NEVER fall back to the default unbound client.
+- **Network Request Permissions**: Android's `ConnectivityManager.requestNetwork()` strictly requires `android.permission.CHANGE_NETWORK_STATE` to hold dual network handles active. Never remove this permission from `AndroidManifest.xml`.
+- **Roaming Guard Policy (`ADR-033`)**: Cellular requests must filter `NET_CAPABILITY_NOT_ROAMING`. When roaming is detected (`isRoamingActive == true`), cellular data routing must immediately be revoked (`getCellularClient() -> null`) to safeguard users against unexpected roaming charges.
+- **VPN Tunnel Inviolability (`ADR-033`)**: When a VPN is active (`isVpnActive == true`), the app must never attempt raw physical socket binding (`Network.socketFactory`) as it causes kernel `EPERM` denials or leaks traffic outside the encrypted tunnel. All multi-stream workers must route through `baseOkHttpClient`.
+- **OEM Battery Exemption Transparency (`ADR-033`)**: On aggressive OEM manufacturers (Samsung, Xiaomi, Huawei, Oppo, Vivo, OnePlus), background service survival must be monitored via `PowerExemptionChecker` and users offered direct one-tap battery exemption navigation.
 - App-Wide Network Singleton Protection: `DownloadForegroundService.onDestroy()` must NEVER call `networkManager.stopListening()`. Network listener lifecycle belongs strictly to `DualBoostApp`.
 - Always call `stopSelf()` immediately after calling `stopForeground(STOP_FOREGROUND_DETACH)` to prevent orphaned service processes.
 - Implement Android 15 (API 35) `onTimeout(startId, fgsType)` to pause downloads and release wake locks before system termination.

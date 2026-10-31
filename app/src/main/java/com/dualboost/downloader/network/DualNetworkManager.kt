@@ -29,6 +29,14 @@ enum class CellularGeneration {
 interface NetworkProvider {
     val isWifiAvailable: StateFlow<Boolean>
     val isCellularAvailable: StateFlow<Boolean>
+    val isRoamingActive: StateFlow<Boolean>
+        get() = MutableStateFlow(false)
+    val isVpnActive: StateFlow<Boolean>
+        get() = MutableStateFlow(false)
+    val cellularCarrierName: StateFlow<String?>
+        get() = MutableStateFlow(null)
+    val isModemStandbyDetected: StateFlow<Boolean>
+        get() = MutableStateFlow(false)
     val wifiSignalLevel: StateFlow<Int>
         get() = MutableStateFlow(4)
     val cellularSignalLevel: StateFlow<Int>
@@ -54,6 +62,18 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
 
     private val _isCellularAvailable = MutableStateFlow(false)
     override val isCellularAvailable: StateFlow<Boolean> = _isCellularAvailable.asStateFlow()
+
+    private val _isRoamingActive = MutableStateFlow(false)
+    override val isRoamingActive: StateFlow<Boolean> = _isRoamingActive.asStateFlow()
+
+    private val _isVpnActive = MutableStateFlow(false)
+    override val isVpnActive: StateFlow<Boolean> = _isVpnActive.asStateFlow()
+
+    private val _cellularCarrierName = MutableStateFlow<String?>(null)
+    override val cellularCarrierName: StateFlow<String?> = _cellularCarrierName.asStateFlow()
+
+    private val _isModemStandbyDetected = MutableStateFlow(false)
+    override val isModemStandbyDetected: StateFlow<Boolean> = _isModemStandbyDetected.asStateFlow()
 
     private val _wifiSignalLevel = MutableStateFlow(4)
     override val wifiSignalLevel: StateFlow<Int> = _wifiSignalLevel.asStateFlow()
@@ -87,6 +107,17 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
 
     @Volatile private var wifiClient: OkHttpClient = baseOkHttpClient
     @Volatile private var cellularClient: OkHttpClient = baseOkHttpClient
+
+    private val defaultNetworkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+            val isVpn = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+            _isVpnActive.value = isVpn
+        }
+
+        override fun onLost(network: Network) {
+            _isVpnActive.value = false
+        }
+    }
 
     private val wifiCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -135,6 +166,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 })
                 .build()
             _isCellularAvailable.value = true
+            _isModemStandbyDetected.value = false
             connectivityManager.getNetworkCapabilities(network)?.let { updateCellularDetails(it) }
         }
 
@@ -150,6 +182,10 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 cellularClient = baseOkHttpClient
                 _isCellularAvailable.value = false
                 _cellularSignalLevel.value = 0
+                _isRoamingActive.value = false
+                if (_isWifiAvailable.value) {
+                    _isModemStandbyDetected.value = true
+                }
             }
         }
     }
@@ -200,7 +236,23 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
             4
         }
         _cellularSignalLevel.value = level.coerceIn(1, 4)
+        val isRoaming = !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING)
+        _isRoamingActive.value = isRoaming
+        _isModemStandbyDetected.value = false
+        detectCarrierName()
         detectInitialCellularGeneration(capabilities)
+    }
+
+    private fun detectCarrierName() {
+        try {
+            val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+            val simCarrier = telephonyManager?.simOperatorName?.takeIf { it.isNotBlank() }
+            val netCarrier = telephonyManager?.networkOperatorName?.takeIf { it.isNotBlank() }
+            val carrier = simCarrier ?: netCarrier
+            if (!carrier.isNullOrBlank()) {
+                _cellularCarrierName.value = carrier
+            }
+        } catch (_: Exception) {}
     }
 
     private fun detectInitialCellularGeneration(capabilities: NetworkCapabilities) {
@@ -221,19 +273,62 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
     }
 
     fun startListening() {
-        // Explicitly request Wi-Fi interface
+        // Explicitly request Wi-Fi interface (with registerNetworkCallback fallback)
         val wifiRequest = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
-        connectivityManager.requestNetwork(wifiRequest, wifiCallback)
+        try {
+            connectivityManager.requestNetwork(wifiRequest, wifiCallback)
+        } catch (e: Exception) {
+            Log.w(TAG, "requestNetwork for Wi-Fi failed, falling back to registerNetworkCallback", e)
+            try {
+                connectivityManager.registerNetworkCallback(wifiRequest, wifiCallback)
+            } catch (e2: Exception) {
+                Log.e(TAG, "registerNetworkCallback for Wi-Fi failed", e2)
+            }
+        }
 
         // Explicitly request Cellular interface (keeps mobile data alive while Wi-Fi is on)
         val cellularRequest = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
-        connectivityManager.requestNetwork(cellularRequest, cellularCallback)
+        try {
+            connectivityManager.requestNetwork(cellularRequest, cellularCallback)
+        } catch (e: Exception) {
+            Log.w(TAG, "requestNetwork for Cellular failed, falling back to registerNetworkCallback", e)
+            try {
+                connectivityManager.registerNetworkCallback(cellularRequest, cellularCallback)
+            } catch (e2: Exception) {
+                Log.e(TAG, "registerNetworkCallback for Cellular failed", e2)
+            }
+        }
+
+        // Immediately inspect currently active networks to populate initial state
+        try {
+            val allNetworks = connectivityManager.allNetworks
+            for (network in allNetworks) {
+                val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
+                if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        wifiCallback.onAvailable(network)
+                        wifiCallback.onCapabilitiesChanged(network, caps)
+                    }
+                    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                        cellularCallback.onAvailable(network)
+                        cellularCallback.onCapabilitiesChanged(network, caps)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Initial active network probe exception", e)
+        }
+
+        // Monitor default network for VPN transport encapsulation
+        try {
+            connectivityManager.registerDefaultNetworkCallback(defaultNetworkCallback)
+        } catch (_: Exception) {}
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
@@ -261,6 +356,9 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         try {
             connectivityManager.unregisterNetworkCallback(cellularCallback)
         } catch (_: Exception) {}
+        try {
+            connectivityManager.unregisterNetworkCallback(defaultNetworkCallback)
+        } catch (_: Exception) {}
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && telephonyCallback is TelephonyCallback) {
             try {
@@ -272,10 +370,13 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
     }
 
     override fun getWifiClient(): OkHttpClient? {
+        if (_isVpnActive.value) return baseOkHttpClient
         return if (_isWifiAvailable.value) wifiClient else null
     }
 
     override fun getCellularClient(): OkHttpClient? {
+        if (_isRoamingActive.value) return null
+        if (_isVpnActive.value) return baseOkHttpClient
         return if (_isCellularAvailable.value) cellularClient else null
     }
 

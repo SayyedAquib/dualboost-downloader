@@ -2,6 +2,7 @@ package com.dualboost.downloader.data
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.dualboost.downloader.engine.DualDownloaderEngine
 import com.dualboost.downloader.network.DualNetworkManager
@@ -46,6 +47,10 @@ class DownloadRepository(
     val speedTestState: StateFlow<SpeedTestState> get() = speedTestEngine.speedTestState
     val isWifiAvailable: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isWifiAvailable
     val isCellularAvailable: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isCellularAvailable
+    val isRoamingActive: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isRoamingActive
+    val isVpnActive: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isVpnActive
+    val cellularCarrierName: StateFlow<String?> get() = (networkProvider ?: networkManager).cellularCarrierName
+    val isModemStandbyDetected: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isModemStandbyDetected
     val wifiSignalLevel: StateFlow<Int> get() = (networkProvider ?: networkManager).wifiSignalLevel
     val cellularSignalLevel: StateFlow<Int> get() = (networkProvider ?: networkManager).cellularSignalLevel
     val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> get() = (networkProvider ?: networkManager).cellularGeneration
@@ -105,13 +110,13 @@ class DownloadRepository(
             } else if (networkProvider == null) {
                 networkManager.startListening()
             }
-        } catch (_: Exception) {
-            // Safe fallback in headless test environments
+        } catch (e: Exception) {
+            Log.w("DownloadRepository", "Could not start network listening: ${e.message}")
         }
         try {
             downloaderEngine.restoreIncompleteDownload()
-        } catch (_: Exception) {
-            // Safe fallback in headless test environments
+        } catch (e: Exception) {
+            Log.w("DownloadRepository", "Could not restore incomplete download: ${e.message}")
         }
     }
 

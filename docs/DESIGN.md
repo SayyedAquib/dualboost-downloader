@@ -118,6 +118,10 @@ To ensure physical network transparency across any wallpaper palette:
 ### Badges & Status Indicators
 - **Desktop Mode Active**: `primaryContainer` with 8.dp rounded corners, `1.dp` border at `primary.copy(alpha = 0.35f)`, displaying `⚡ Desktop Mode Active`.
 - **Cloud Slicer Active**: `tertiaryContainer.copy(alpha = 0.85f)` with 8.dp rounded corners, `1.dp` border at `tertiary.copy(alpha = 0.35f)`, displaying `⚡ Cloud Slicer Active`. Rendered in both Downloading and Paused cards when stage 3 cloud stream slicing is engaged.
+- **Battery Optimization Warning Banner (`ADR-033`)**: High-visibility `tertiaryContainer` card with `Icons.Rounded.BatteryAlert` warning users on aggressive OEM devices (Samsung, Xiaomi, Oppo, etc.) when battery optimization is unexempted, providing one-tap "Exempt App" navigation (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) and "Dismiss" actions.
+- **VPN Active Status Banner (`ADR-033`)**: `secondaryContainer` card with `Icons.Rounded.VpnKey` informing users when an active VPN tunnel is detected and multi-stream acceleration is safely routed through the encrypted tunnel.
+- **Data Roaming Guard Banner (`ADR-033`)**: High-contrast `errorContainer` warning banner with `Icons.Rounded.Warning` alerting users when cellular data is paused to prevent unexpected international or partner roaming fees.
+- **Cellular Carrier Transparency & Modem Standby Diagnostics (`ADR-033`)**: Hero cellular card dynamically displays carrier name (`5G Cellular (Verizon)`). Subtitle indicates `Roaming (Paused)` or `Modem Standby`. When Wi-Fi is active and cellular drops into standby, the context banner provides clear guidance to toggle "Mobile data always active" in Android Developer Options.
 
 ### Settings Modal Sheet (`SettingsBottomSheet`)
 - Material 3 `ModalBottomSheet` with `RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)`.

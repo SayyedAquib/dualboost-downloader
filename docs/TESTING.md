@@ -10,7 +10,7 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (171 active tests across 22 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (175 active tests across 22 test suites, 100% passing):
 
 - **CrashVaultTest** (2 tests):
   - `testRecordCrash_WritesSanitizedCrashDump`: Verifies `CrashVault` writes structured, timestamped crash dumps to `noBackupFilesDir/crash_vault.log`, ensuring URL query parameters and auth tokens are completely redacted from stack traces.
@@ -25,9 +25,10 @@ Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (171 active t
   - `testRepository_TestWorkerConnectivity_SuccessAndFailure`: Validates worker health checks via OkHttpClient in `Dispatchers.IO`, returning `WorkerTestStatus.Success` on 200 and `WorkerTestStatus.Error` on failure or 401.
   - `testRepository_ResetToIdle_ResetsFailedState`: Asserts `resetToIdle()` cleanly resets `DownloadState.Failed` to `DownloadState.Idle`.
 
-- **MainViewModelTest** (19 tests):
+- **MainViewModelTest** (20 tests):
   - `testWorkerTestStatus_InitialStateIsIdle`: Asserts reactive worker test status stream initializes to `WorkerTestStatus.Idle`.
   - `testFailedState_PreservesUrlAndSupportsRetry`: Validates that failed state retains the attempted URL and triggers retry on `retryDownload()`.
+  - `testShowBatteryGuidance_TrueForAggressiveOemWhenNotIgnored`: Validates `PowerExemptionChecker` evaluation, asserting `showBatteryGuidance` is true on non-exempt aggressive OEMs and resets to false upon `dismissBatteryGuidance()`.
 
 - **ServiceLifecycleTest** (3 tests):
   - `testServiceConstants_CorrectAndConsistent`: Verifies FGS actions (`ACTION_START_DOWNLOAD`, `ACTION_CANCEL_DOWNLOAD`, `ACTION_PAUSE_DOWNLOAD`, `ACTION_RESUME_DOWNLOAD`, `ACTION_DISCARD_DOWNLOAD`).
@@ -126,12 +127,15 @@ Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (171 active t
   - `testRepository_ExposesNetworkStateFlows`: Validates that `isWifiAvailable` and `isCellularAvailable` flows are exposed directly to consumers.
   - `testRepository_DiscardDownload_TransitionsToIdleAndCleansFiles`: Verifies `discardDownload()` stops foreground service without triggering pause, cancels engine with `isDiscarding`, cleans partial files and metadata, and transitions directly to `Idle`.
 
-- **DualNetworkManagerTest** (5 tests):
+- **DualNetworkManagerTest** (8 tests):
   - `testNetworkProvider_BothDisconnectedInitially`: Validates default state when neither interface is active.
   - `testNetworkProvider_WifiOnlyMode`: Tests socket client availability and state flags in Wi-Fi-only mode.
   - `testNetworkProvider_CellularOnlyMode`: Tests socket client availability and state flags in Cellular-only mode.
   - `testNetworkProvider_DualChannelAggregatedMode`: Tests concurrent dual-socket mode when both interfaces are connected.
   - `testNetworkProvider_DynamicDisconnectionMidStream`: Tests dynamic interface detachment when Wi-Fi drops mid-session.
+  - `testRoamingDetection_RevokesCellularClient`: Asserts that when roaming is detected, `isRoamingActive` is true and `getCellularClient()` immediately returns `null` to prevent carrier overage fees.
+  - `testVpnDetection_RoutesThroughDefaultOkHttpClient`: Asserts that when an active VPN tunnel is detected (`isVpnActive = true`), both Wi-Fi and Cellular requests fall back to `baseOkHttpClient` rather than raw socket factories, preventing `EPERM` kernel crashes and tunnel bypasses.
+  - `testCarrierNameAndModemStandby_ExposedCorrectly`: Asserts that carrier names are correctly propagated and modem standby is detected when Wi-Fi is active but cellular requests are unfulfilled.
 
 - **ServiceLifecycleTest** (3 tests):
   - `testServiceConstants_CorrectAndConsistent`: Verifies actions, channel ID (`dualboost_download_channel`), notification ID (`1001`), and extra keys.

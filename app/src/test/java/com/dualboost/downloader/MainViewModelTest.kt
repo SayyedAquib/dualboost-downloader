@@ -315,6 +315,44 @@ class MainViewModelTest {
         viewModel.retryDownload()
         assertEquals("https://example.com/test.zip", startedUrl)
     }
+
+    @Test
+    fun testBatteryGuidance_AggressiveOemAndUnexempted_ShowsGuidance() {
+        val aggressiveUnexemptedChecker = object : com.dualboost.downloader.ui.PowerExemptionChecker {
+            override fun isIgnoringBatteryOptimizations(): Boolean = false
+            override fun isAggressiveOem(): Boolean = true
+        }
+
+        val viewModel = MainViewModel(
+            repository = null,
+            powerExemptionChecker = aggressiveUnexemptedChecker
+        )
+
+        assertTrue("Aggressive OEM without battery exemption must show guidance", viewModel.showBatteryGuidance.value)
+
+        // User dismisses guidance
+        viewModel.dismissBatteryGuidance()
+        assertFalse("Dismissing guidance must set showBatteryGuidance to false", viewModel.showBatteryGuidance.value)
+    }
+
+    @Test
+    fun testBatteryGuidance_NonAggressiveOrAlreadyExempted_DoesNotShowGuidance() {
+        // Non-aggressive OEM (e.g. Google Pixel)
+        val pixelChecker = object : com.dualboost.downloader.ui.PowerExemptionChecker {
+            override fun isIgnoringBatteryOptimizations(): Boolean = false
+            override fun isAggressiveOem(): Boolean = false
+        }
+        val pixelViewModel = MainViewModel(repository = null, powerExemptionChecker = pixelChecker)
+        assertFalse("Non-aggressive OEMs should not be prompted for battery exemption", pixelViewModel.showBatteryGuidance.value)
+
+        // Aggressive OEM but already exempted by user
+        val alreadyExemptedChecker = object : com.dualboost.downloader.ui.PowerExemptionChecker {
+            override fun isIgnoringBatteryOptimizations(): Boolean = true
+            override fun isAggressiveOem(): Boolean = true
+        }
+        val exemptedViewModel = MainViewModel(repository = null, powerExemptionChecker = alreadyExemptedChecker)
+        assertFalse("Already exempted devices should not be prompted", exemptedViewModel.showBatteryGuidance.value)
+    }
 }
 
 
