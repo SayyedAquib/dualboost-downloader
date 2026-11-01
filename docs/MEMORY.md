@@ -1,9 +1,38 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-033 (Multi-OEM Compatibility, Roaming Guard & VPN-Safe Fallback). The codebase is backed by **180 unit and integration tests across 23 test suites (100% passing green)** following the completion of ADR-034 (Dynamic 5G NSA Handover Resilience, On-Demand Cellular Radio & Adaptive Thermal Backoff) with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and dedicated release signing.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-033 (Multi-OEM Compatibility, Roaming Guard & VPN-Safe Fallback). The codebase is backed by **186 unit and integration tests across 24 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and dedicated release signing. The download completed card button UI has been upgraded to a 2-tier thumb-reachable hierarchy with zero text wrapping.
 
 ## Recently Completed
+- **Completed Download Card 2-Tier Action Hierarchy & Zero-Wrap UI Fix (`MainActivity.kt` / `DownloadCompletedActions`)**:
+  - **Problem Solved**: Squeezed 3-button horizontal row caused the middle "Show in Files" button to break into an awkward two-line wrap ("Show in \n Files"), triggering mismatched heights and misaligned share icon buttons across mobile screen widths.
+  - **New 2-Tier Architecture**:
+    - **Hero Primary Action**: Full-width filled "Open File" button (`height = 48dp`, `RoundedCornerShape(14.dp)`, Play icon, semi-bold typography) optimized for thumb-reachability as the primary post-download intent (`ACTION_VIEW`).
+    - **Split Secondary Action Row**: 50/50 balanced row (`height = 44dp`, `Modifier.weight(1f)`, 8dp gap) containing tonal filled "Show in Files" (`ACTION_VIEW_DOWNLOADS` / Google Files integration) and tonal filled "Share" button (`ACTION_SEND`, with icon + text label).
+    - Enforced strict single-line text constraints (`maxLines = 1`, `softWrap = false`, `overflow = TextOverflow.Ellipsis`, compact 12dp horizontal padding) and merged semantics (`Modifier.semantics(mergeDescendants = true)`), completely eliminating line-wrapping and height misalignment.
+  - **Modularized Composable**: Extracted `DownloadCompletedActions` for clear separation of concerns and direct component testability.
+  - **Verification & TDD**:
+    - Implemented unit verification in `UIFlowAndViewModelComprehensiveTest.kt` (`testCompletedState_PayloadAttributesAndFormatting`).
+    - Added instrumented Compose UI test in `MainComposeUiTest.kt` (`testCompletedActionsComponent_RendersHeroOpenButtonAndSplitSecondaryActionRow`).
+    - All 186 unit tests passing 100% green across 24 suites (`testDebugUnitTest`).
+    - Assembled production release APK (`assembleRelease` in 21s) and installed directly to Pixel 9 (`adb install -r app/build/outputs/apk/release/app-release.apk`).
+- **Asymmetric Work-Stealing, Dynamic Chunk Sizing & Straggler Tail Hedging (ADR-035 / 185 Tests across 24 Suites)**:
+  - **Slice 1: Tiered Batch Calculation & Contiguous Chunk Claiming**:
+    - Created `calculateBatchSize(speedMBps)` dynamically scaling chunk batches: 1 chunk (<15 MB/s), 2 chunks / 8 MB (15-30 MB/s), 4 chunks / 16 MB (>30 MB/s).
+    - Implemented `claimContiguousPendingChunks()` to claim unbroken sequential blocks atomically under `queueMutex`.
+    - Verified via strict TDD in `AsymmetricWorkStealingTest.kt` (`testCalculateBatchSize_TieredScaling`, `testClaimContiguousPendingChunks_ClaimsSequentialBlocks`, `testClaimContiguousPendingChunks_StopsAtNonContiguousGap`).
+  - **Slice 2: Batched HTTP Range Execution & Multi-Chunk Atomic Commit**:
+    - Dispatches a single HTTP request for the entire multi-chunk span (`Range: bytes=first.startByte - last.endByte`), reducing TCP/HTTP handshake latency on gigabit 5G.
+    - Streams 64 KB buffers directly to disk and commits all individual chunk indices to `.dualboost_meta` atomically.
+    - Verified via `testBatchedDownload_RangeHeaderCoversMultiChunkSpan_AndAllIndicesCommitted` in `AsymmetricWorkStealingTest.kt`.
+  - **Slice 3: Speculative Straggler Tail Hedging**:
+    - Implemented `findStragglerCandidate()` and `hedgeStragglerTail()`.
+    - When the pending queue empties, idle workers detect lagging chunks on slower interfaces with > 512 KB unread and speculatively download the remaining tail (`Range: bytes=tailStart-tailEnd`), eliminating tail-end download stalls.
+    - Verified in `AsymmetricWorkStealingTest.kt` (`testFindStragglerCandidate_IdentifiesSlowestOtherInterface`).
+  - **Complete Verification & Live Deployment on Pixel 9**:
+    - 185 automated tests passing 100% green across all 24 suites (`BUILD SUCCESSFUL in 1m 33s`).
+    - Assembled production release APK via `.\gradlew.bat assembleRelease` (exited with code 0).
+    - Streamed install directly to Pixel 9 over wireless ADB (`192.168.1.3:35795`) and launched app.
 - **5G Handover Resilience, Battery Life & Thermal Heating Optimizations (ADR-034 / 180 Tests across 23 Suites)**:
   - **Slice 1: Dynamic 4G -> 5G Handover Resilience**:
     - Resolved the Airtel 5G NSA clobbering bug where `telephonyManager.dataNetworkType` (returning LTE) repeatedly overwrote live 5G states back to 4G.

@@ -1310,3 +1310,39 @@ Implement four vertical engineering slices verified with strict TDD:
 - Slashes idle background power consumption to near-zero while preserving full real-time carrier and signal telemetry.
 - Prevents thermal throttling shutdown during sustained large-scale downloads by automatically offloading cellular heat to Wi-Fi.
 - 100% backward-compatible across unit test runners and devices down to API 26.
+
+
+## ADR-035: Asymmetric Work-Stealing, Dynamic Chunk Sizing & Speculative Straggler Tail Hedging
+
+### Status
+Accepted
+
+### Context
+When aggregating Wi-Fi and 5G cellular connections simultaneously, physical link throughputs are rarely symmetrical. In production environments (such as a 23 GB download on a Pixel 9):
+1. **HTTP/TCP Handshake Overhead at High Speeds**: Gigabit 5G (300-600 Mbps) completes a 4 MB chunk in under 60 milliseconds, introducing connection renegotiation overhead, TLS handshakes, and TCP slow-start jitter if limited to single 4 MB requests.
+2. **The Distributed Tail Straggler Bottleneck**: When a large download reaches 95%+ completion and the pending chunk queue empties, the fast 5G interface sits idle waiting for a slower Wi-Fi worker to finish its last remaining chunk. A single slow chunk on Wi-Fi can stall the final completion for 10-30 seconds despite gigabit cellular capability being available.
+
+### Decision
+Implement an adaptive hybrid work-stealing engine with three core architectural components verified via strict TDD:
+
+1. **Slice 1: Tiered Batch Calculation & Contiguous Chunk Claiming**:
+   - Implemented `calculateBatchSize(speedMBps: Double): Int` scaling dynamically based on real-time measured link speed:
+     - `< 15 MB/s`: 1 chunk (4 MB standard request)
+     - `15 .. 30 MB/s`: 2 contiguous chunks (8 MB request span)
+     - `> 30 MB/s`: 4 contiguous chunks (16 MB request span)
+   - Implemented `claimContiguousPendingChunks()` to claim sequential contiguous chunks atomically under `queueMutex`, stopping immediately at any non-pending gap to preserve unbroken byte boundaries.
+
+2. **Slice 2: Batched Multi-Chunk Range Streaming & Atomic Commit**:
+   - Single HTTP request spans multiple chunks (`Range: bytes=firstChunk.startByte - lastChunk.endByte`).
+   - Streams 64 KB coalesced blocks directly to disk with `RandomAccessFile`, updating individual chunk progress metrics for UI snapshots.
+   - On completion, commits all chunk indices to `completedIndices` and metadata atomically, ensuring 100% pause/resume safety.
+
+3. **Slice 3: Speculative Straggler Tail Hedging**:
+   - Implemented `findStragglerCandidate(pendingChunks, interfaceType, minUnreadBytes)` identifying in-flight chunks on other interfaces with > 512 KB unread.
+   - When the pending queue empties and a worker is about to idle, it hedges the slowest chunk by requesting its unread upper byte range (`bytes=tailStart-tailEnd`).
+   - Synchronized file writes via `fileWriteMutex` ensure exact SHA-256 payload integrity regardless of which worker completes the write first.
+
+### Consequences
+- Maximizes aggregate throughput on asymmetric connections by keeping ultra-fast 5G pipelines continuously filled with 8-16 MB request spans.
+- Eliminates the tail straggler problem completely: fast workers rescue slow lagging chunks at the end of downloads.
+- Retains 100% backward compatibility with existing 4 MB metadata sidecars and pause/resume logic.

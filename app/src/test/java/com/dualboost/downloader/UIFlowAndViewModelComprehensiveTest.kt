@@ -168,6 +168,24 @@ class UIFlowAndViewModelComprehensiveTest {
         assertEquals("0.0", val0)
         assertEquals("MB/s", unit0)
     }
+
+    @Test
+    fun testCompletedState_PayloadAttributesAndFormatting() {
+        val completed = DownloadState.Completed(
+            fileName = "Mirzapur.The.Movie.2026.4K-2160p.x265-MoviesLeech.mkv",
+            filePath = "/storage/emulated/0/Download/Mirzapur.The.Movie.2026.4K-2160p.x265-MoviesLeech.mkv",
+            totalBytes = 23_080_000_000L,
+            durationSeconds = 620,
+            averageSpeedMBps = 37.2,
+            isDualChannel = true
+        )
+
+        assertEquals("Mirzapur.The.Movie.2026.4K-2160p.x265-MoviesLeech.mkv", com.dualboost.downloader.ui.cleanDisplayName(completed.fileName))
+        assertEquals("10m 20s", com.dualboost.downloader.ui.formatDuration(completed.durationSeconds))
+        assertEquals("21.49 GB", com.dualboost.downloader.ui.formatBytes(completed.totalBytes))
+        assertTrue("Dual-channel boost must be preserved in completed state", completed.isDualChannel)
+        assertTrue("Average speed must be preserved", completed.averageSpeedMBps > 30.0)
+    }
 }
 
 

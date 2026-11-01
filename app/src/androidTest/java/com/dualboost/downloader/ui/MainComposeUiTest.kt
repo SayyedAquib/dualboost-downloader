@@ -323,4 +323,38 @@ class MainComposeUiTest {
         composeTestRule.onNodeWithText("Copy Script").assertIsDisplayed()
         composeTestRule.onNodeWithText("Save Settings").assertIsDisplayed()
     }
+
+    @Test
+    fun testCompletedActionsComponent_RendersHeroOpenButtonAndSplitSecondaryActionRow() {
+        var openFileCalled = false
+        var openLocationCalled = false
+        var shareFileCalled = false
+
+        composeTestRule.setContent {
+            DualBoostTheme {
+                DownloadCompletedActions(
+                    filePath = "/storage/emulated/0/Download/ubuntu-24.04-desktop-arm64.iso",
+                    contentUriString = null,
+                    onOpenFile = { _, _ -> openFileCalled = true },
+                    onOpenFileLocation = { _, _ -> openLocationCalled = true },
+                    onShareFile = { _, _ -> shareFileCalled = true }
+                )
+            }
+        }
+
+        // 1. Verify Hero Primary CTA "Open File"
+        composeTestRule.onNodeWithText("Open File").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+        org.junit.Assert.assertTrue("onOpenFile must be invoked on Open File click", openFileCalled)
+
+        // 2. Verify Split Secondary Action "Show in Files"
+        composeTestRule.onNodeWithText("Show in Files").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+        org.junit.Assert.assertTrue("onOpenFileLocation must be invoked on Show in Files click", openLocationCalled)
+
+        // 3. Verify Split Secondary Action "Share"
+        composeTestRule.onNodeWithText("Share").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+        org.junit.Assert.assertTrue("onShareFile must be invoked on Share click", shareFileCalled)
+    }
 }

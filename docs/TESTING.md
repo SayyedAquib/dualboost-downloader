@@ -127,6 +127,13 @@ Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (175 active t
   - `testRepository_ExposesNetworkStateFlows`: Validates that `isWifiAvailable` and `isCellularAvailable` flows are exposed directly to consumers.
   - `testRepository_DiscardDownload_TransitionsToIdleAndCleansFiles`: Verifies `discardDownload()` stops foreground service without triggering pause, cancels engine with `isDiscarding`, cleans partial files and metadata, and transitions directly to `Idle`.
 
+- **AsymmetricWorkStealingTest** (5 tests):
+  - `testCalculateBatchSize_TieredScaling`: Asserts that batch sizing scales correctly from 1 chunk (4 MB) below 15 MB/s, to 2 chunks (8 MB) for 15-30 MB/s, and 4 chunks (16 MB) above 30 MB/s.
+  - `testClaimContiguousPendingChunks_ClaimsSequentialBlocks`: Verifies contiguous batch claiming across sequential chunks without gaps or overlaps.
+  - `testClaimContiguousPendingChunks_StopsAtNonContiguousGap`: Confirms that batch claiming immediately stops if a non-pending chunk intervenes, preserving contiguous byte spans.
+  - `testFindStragglerCandidate_IdentifiesSlowestOtherInterface`: Validates that idle workers identify lagging chunks on other interfaces having > 512 KB unread bytes.
+  - `testBatchedDownload_RangeHeaderCoversMultiChunkSpan_AndAllIndicesCommitted`: Verifies multi-chunk HTTP range requests across MockWebServer and confirms byte-for-byte SHA-256 payload integrity.
+
 - **ThermalAndIoOptimizationTest** (3 tests):
   - `testThermalBackoff_SevereHeat_PausesCellularWhenWifiAvailable`: Asserts that under SEVERE thermal status (3+), cellular chunk requests are completely paused (0 requests) and 100% of chunks are transferred over Wi-Fi, maintaining exact SHA-256 payload integrity.
   - `testThermalBackoff_SevereHeat_FallbackToSingleCellularWorkerWhenWifiUnavailable`: Verifies that when Wi-Fi is down and thermal status is SEVERE, cellular transfers safely complete with single-worker pacing rather than stalling the download.

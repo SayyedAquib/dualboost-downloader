@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -1553,52 +1554,13 @@ fun MainScreen(
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Button(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            onOpenFile(state.filePath, state.contentUriString)
-                                        },
-                                        modifier = Modifier.weight(1.2f),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.primary,
-                                            contentColor = MaterialTheme.colorScheme.onPrimary
-                                        )
-                                    ) {
-                                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Open File")
-                                    }
-
-                                    FilledTonalButton(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onOpenFileLocation(state.filePath, state.contentUriString)
-                                        },
-                                        modifier = Modifier.weight(1.2f),
-                                        shape = RoundedCornerShape(14.dp)
-                                    ) {
-                                        Icon(Icons.Rounded.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Show in Files")
-                                    }
-
-                                    FilledTonalIconButton(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onShareFile(state.filePath, state.contentUriString)
-                                        },
-                                        shape = RoundedCornerShape(14.dp),
-                                        modifier = Modifier.size(46.dp)
-                                    ) {
-                                        Icon(Icons.Rounded.Share, contentDescription = "Share", modifier = Modifier.size(18.dp))
-                                    }
-                                }
+                                DownloadCompletedActions(
+                                    filePath = state.filePath,
+                                    contentUriString = state.contentUriString,
+                                    onOpenFile = onOpenFile,
+                                    onOpenFileLocation = onOpenFileLocation,
+                                    onShareFile = onShareFile
+                                )
                             }
                         }
                     }
@@ -2306,6 +2268,98 @@ fun SegmentedChunkStrip(
     }
 }
 
+@Composable
+fun DownloadCompletedActions(
+    filePath: String,
+    contentUriString: String?,
+    onOpenFile: (String, String?) -> Unit,
+    onOpenFileLocation: (String, String?) -> Unit,
+    onShareFile: (String, String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val haptic = LocalHapticFeedback.current
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Hero Primary CTA: Full-width Open File button
+        Button(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onOpenFile(filePath, contentUriString)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .semantics(mergeDescendants = true) {},
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+        ) {
+            Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Open File",
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+            )
+        }
+
+        // Split Secondary Action Row: Show in Files & Share side-by-side
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilledTonalButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onOpenFileLocation(filePath, contentUriString)
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .semantics(mergeDescendants = true) {},
+                shape = RoundedCornerShape(14.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp)
+            ) {
+                Icon(Icons.Rounded.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Show in Files",
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
+                )
+            }
+
+            FilledTonalButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onShareFile(filePath, contentUriString)
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .semantics(mergeDescendants = true) {},
+                shape = RoundedCornerShape(14.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp)
+            ) {
+                Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Share",
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
+                )
+            }
+        }
+    }
+}
 
 fun formatBytes(bytes: Long): String {
     val mb = bytes / (1024.0 * 1024.0)

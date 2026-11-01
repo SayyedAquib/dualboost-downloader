@@ -105,6 +105,7 @@ For all new features, bug fixes, and architectural modifications, strictly follo
 ## Performance Rules
 - Never buffer entire file chunks in RAM; stream directly into `RandomAccessFile` using a 64 KB byte buffer (`65,536` bytes) for I/O coalescing.
 - Limit concurrent network worker coroutines to at most 4 (2 Wi-Fi, 2 5G) under normal conditions; dynamically throttle cellular concurrency to 1 worker under `MODERATE` heat, and pause cellular transfers under `SEVERE` heat when Wi-Fi is available.
+- Asymmetric Work-Stealing & Dynamic Batching: Fast interfaces exceeding 15 MB/s must batch contiguous chunks (8 MB or 16 MB requests) to reduce HTTP connection overhead. When the queue is empty, idle workers must speculatively hedge straggler chunks having > 512 KB unread.
 - Cellular Radio Management: Maintain passive `registerNetworkCallback` while idle to prevent radio wake locks; acquire explicit `requestNetwork` keep-alive strictly during active transfers and release immediately upon pause/completion/cancellation.
 - Limit concurrent network worker coroutines to at most 4 (2 Wi-Fi, 2 5G) to prevent socket thrashing.
 - Throttle UI telemetry updates to at most once every 500ms.

@@ -67,6 +67,7 @@ class DualDownloaderEngine(
     private val isDiscarding = AtomicBoolean(false)
     private val isExecuting = AtomicBoolean(false)
     internal val activeCallsCount: Int get() = activeCalls.size
+    internal var initialSpeedMBps: Double = 0.0
 
     // Active download tracking for seamless resume and discard
     @Volatile private var currentOutputFile: File? = null
@@ -88,7 +89,50 @@ class DualDownloaderEngine(
         return true
     }
 
-    private val CHUNK_SIZE = 4 * 1024 * 1024L // 4 MB chunks
+    private val CHUNK_SIZE = 4 * 1024 * 1024L // 4 MB base chunks
+
+    internal fun calculateBatchSize(speedMBps: Double): Int {
+        return when {
+            speedMBps >= 30.0 -> 4 // 16 MB batched span
+            speedMBps >= 15.0 -> 2 // 8 MB batched span
+            else -> 1              // 4 MB standard chunk
+        }
+    }
+
+    internal fun claimContiguousPendingChunks(
+        pendingChunks: List<DownloadChunk>,
+        maxBatchCount: Int,
+        interfaceType: NetworkInterfaceType
+    ): List<DownloadChunk> {
+        val firstPendingIndex = pendingChunks.indexOfFirst { it.status == ChunkStatus.PENDING }
+        if (firstPendingIndex == -1) return emptyList()
+
+        val batch = mutableListOf<DownloadChunk>()
+        var currentIndex = firstPendingIndex
+        while (currentIndex < pendingChunks.size && batch.size < maxBatchCount) {
+            val chunk = pendingChunks[currentIndex]
+            if (chunk.status == ChunkStatus.PENDING) {
+                chunk.status = ChunkStatus.DOWNLOADING
+                chunk.assignedNetwork = interfaceType
+                batch.add(chunk)
+                currentIndex++
+            } else {
+                break
+            }
+        }
+        return batch
+    }
+
+    internal fun findStragglerCandidate(
+        chunks: List<DownloadChunk>,
+        currentInterface: NetworkInterfaceType,
+        minUnreadBytes: Long = 512 * 1024L
+    ): DownloadChunk? {
+        return chunks
+            .filter { it.status == ChunkStatus.DOWNLOADING && it.assignedNetwork != currentInterface }
+            .filter { (it.totalBytes - it.downloadedBytes) >= minUnreadBytes }
+            .maxByOrNull { it.totalBytes - it.downloadedBytes }
+    }
 
     internal fun isDirWritable(dir: File): Boolean {
         return try {
@@ -243,7 +287,8 @@ class DualDownloaderEngine(
         val etag: String? = null,
         val lastModified: String? = null,
         val isDesktopSpoofed: Boolean = false,
-        val isCloudSlicerActive: Boolean = false
+        val isCloudSlicerActive: Boolean = false,
+        val chunkSize: Long = 4 * 1024 * 1024L
     )
 
     internal fun readMetaInfo(metaFile: File): MetaInfo? {
@@ -264,6 +309,7 @@ class DualDownloaderEngine(
 
             val isDesktop = metaMap["isDesktopSpoofed"]?.toBoolean() ?: false
             val isSlicer = metaMap["isCloudSlicerActive"]?.toBoolean() ?: false
+            val savedChunkSize = metaMap["chunkSize"]?.toLongOrNull() ?: (4 * 1024 * 1024L)
 
             MetaInfo(
                 url = savedUrl,
@@ -272,7 +318,8 @@ class DualDownloaderEngine(
                 etag = metaMap["etag"],
                 lastModified = metaMap["lastModified"],
                 isDesktopSpoofed = isDesktop,
-                isCloudSlicerActive = isSlicer
+                isCloudSlicerActive = isSlicer,
+                chunkSize = savedChunkSize
             )
         } catch (_: Exception) {
             null
@@ -292,12 +339,14 @@ class DualDownloaderEngine(
         etag: String? = null,
         lastModified: String? = null,
         isDesktopSpoofed: Boolean = false,
-        isCloudSlicerActive: Boolean = false
+        isCloudSlicerActive: Boolean = false,
+        chunkSize: Long = CHUNK_SIZE
     ) {
         try {
             val content = buildString {
                 appendLine("url=$url")
                 appendLine("totalLength=$totalBytes")
+                appendLine("chunkSize=$chunkSize")
                 if (!etag.isNullOrBlank()) appendLine("etag=$etag")
                 if (!lastModified.isNullOrBlank()) appendLine("lastModified=$lastModified")
                 appendLine("isDesktopSpoofed=$isDesktopSpoofed")
@@ -353,10 +402,11 @@ class DualDownloaderEngine(
                 }
             }
             val totalBytes = metaInfo.totalLength
+            val cSize = metaInfo.chunkSize
 
             val completedBytes = metaInfo.completedChunks.sumOf { chunkIndex ->
-                val start = chunkIndex * CHUNK_SIZE
-                val end = min(start + CHUNK_SIZE - 1, totalBytes - 1)
+                val start = chunkIndex * cSize
+                val end = min(start + cSize - 1, totalBytes - 1)
                 max(0L, (end - start) + 1)
             }
             val progress = if (totalBytes > 0) completedBytes.toFloat() / totalBytes.toFloat() else 0f
@@ -882,9 +932,11 @@ class DualDownloaderEngine(
             completedIndices.addAll(existingMeta.completedChunks)
         }
 
+        val effectiveChunkSize = if (canResume && existingMeta != null) existingMeta.chunkSize else CHUNK_SIZE
+
         // Divide file into chunks
-        val maxSupportedChunks = 500_000 // 2 TB at 4MB chunks - prevents OOM from corrupted Content-Length
-        val estimatedChunks = (contentLength + CHUNK_SIZE - 1) / CHUNK_SIZE
+        val maxSupportedChunks = 1_000_000 // 2 TB at 2MB chunks - prevents OOM from corrupted Content-Length
+        val estimatedChunks = (contentLength + effectiveChunkSize - 1) / effectiveChunkSize
         if (estimatedChunks > maxSupportedChunks) {
             throw IOException("Content-Length exceeds maximum supported download limit (2 TB).")
         }
@@ -893,7 +945,7 @@ class DualDownloaderEngine(
         var offset = 0L
         var index = 0
         while (offset < contentLength) {
-            val end = min(offset + CHUNK_SIZE - 1, contentLength - 1)
+            val end = min(offset + effectiveChunkSize - 1, contentLength - 1)
             chunks.add(DownloadChunk(index++, offset, end))
             offset = end + 1
         }
@@ -1016,6 +1068,76 @@ class DualDownloaderEngine(
                 }
             }
 
+            // Speculative Straggler Tail Hedging function (Slice 3)
+            suspend fun hedgeStragglerTail(
+                straggler: DownloadChunk,
+                interfaceType: NetworkInterfaceType,
+                client: OkHttpClient,
+                sharedRandomAccessFile: RandomAccessFile
+            ) {
+                val currentDownloaded = straggler.downloadedBytes
+                val tailStart = straggler.startByte + currentDownloaded
+                val tailEnd = straggler.endByte
+                val expectedTailBytes = (tailEnd - tailStart) + 1
+                if (expectedTailBytes <= 0 || straggler.status != ChunkStatus.DOWNLOADING) return
+
+                try {
+                    val request = buildRequest(url, isDesktop = isDesktopSpoofed)
+                        .addHeader("Range", "bytes=$tailStart-$tailEnd")
+                        .build()
+
+                    val call = client.newCall(request)
+                    if (!registerActiveCall(call)) return
+
+                    try {
+                        call.execute().use { response ->
+                            if (response.code == 206 || (response.code == 200 && tailStart == 0L)) {
+                                val body = response.body ?: return
+                                val inputStream = body.byteStream()
+                                val buffer = ByteArray(64 * 1024)
+                                var bytesRead: Int
+                                var streamOffset = tailStart
+                                var tailBytesReceived = 0L
+
+                                while (tailBytesReceived < expectedTailBytes && straggler.status == ChunkStatus.DOWNLOADING) {
+                                    if (!isActive) break
+                                    val remaining = expectedTailBytes - tailBytesReceived
+                                    val toRead = min(buffer.size.toLong(), remaining).toInt()
+                                    bytesRead = inputStream.read(buffer, 0, toRead)
+                                    if (bytesRead == -1) break
+
+                                    fileWriteMutex.withLock {
+                                        sharedRandomAccessFile.seek(streamOffset)
+                                        sharedRandomAccessFile.write(buffer, 0, bytesRead)
+                                    }
+                                    streamOffset += bytesRead
+                                    tailBytesReceived += bytesRead
+                                    totalDownloadedBytes.addAndGet(bytesRead.toLong())
+
+                                    if (interfaceType == NetworkInterfaceType.WIFI) {
+                                        wifiDownloadedBytes.addAndGet(bytesRead.toLong())
+                                    } else {
+                                        cellularDownloadedBytes.addAndGet(bytesRead.toLong())
+                                    }
+                                }
+
+                                if (tailBytesReceived == expectedTailBytes) {
+                                    queueMutex.withLock {
+                                        straggler.status = ChunkStatus.COMPLETED
+                                        straggler.downloadedBytes = straggler.totalBytes
+                                        completedIndices.add(straggler.index)
+                                        saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize)
+                                    }
+                                    Log.d(TAG, "Straggler chunk ${straggler.index} rescued via speculative tail hedging on $interfaceType")
+                                }
+                            }
+                        }
+                    } finally {
+                        activeCalls.remove(call)
+                    }
+                } catch (_: Exception) {}
+            }
+
             // Resilient Worker coroutine function
             suspend fun runWorker(
                 interfaceType: NetworkInterfaceType,
@@ -1098,27 +1220,49 @@ class DualDownloaderEngine(
                         }
                     }
 
-                    // 3. Acquire next available chunk
-                    val chunk: DownloadChunk? = queueMutex.withLock {
-                        val available = pendingChunks.firstOrNull { it.status == ChunkStatus.PENDING }
-                        available?.apply {
-                            status = ChunkStatus.DOWNLOADING
-                            assignedNetwork = interfaceType
-                        }
+                    // 3. Dynamic Contiguous Chunk Batching (Slice 2)
+                    val currentSpeed = if (interfaceType == NetworkInterfaceType.WIFI) wifiSpeedMBps else cellularSpeedMBps
+                    val speed = if (currentSpeed > 0.0) currentSpeed else initialSpeedMBps
+                    val batchCount = calculateBatchSize(speed)
+
+                    val chunkBatch: List<DownloadChunk> = queueMutex.withLock {
+                        claimContiguousPendingChunks(pendingChunks, batchCount, interfaceType)
                     }
 
-                    if (chunk == null) {
-                        // In-flight chunks still downloading on other workers; wait and retry
-                        delay(200)
+                    if (chunkBatch.isEmpty()) {
+                        val allDone = queueMutex.withLock { pendingChunks.all { it.status == ChunkStatus.COMPLETED } }
+                        if (allDone) break
+
+                        // Speculative Straggler Tail Hedging (Slice 3)
+                        val straggler: DownloadChunk? = queueMutex.withLock {
+                            findStragglerCandidate(pendingChunks, interfaceType)
+                        }
+
+                        if (straggler != null) {
+                            val client = clientProvider()
+                            if (client != null) {
+                                hedgeStragglerTail(straggler, interfaceType, client, sharedRandomAccessFile)
+                            }
+                        } else {
+                            delay(200)
+                        }
                         continue
                     }
+
+                    val firstChunk = chunkBatch.first()
+                    val lastChunk = chunkBatch.last()
+                    val batchStart = firstChunk.startByte
+                    val batchEnd = lastChunk.endByte
+                    val expectedBatchBytes = (batchEnd - batchStart) + 1
 
                     // 4. Resolve client for this interface (strict interface isolation: no fallback to defaultClient for cellular)
                     val client = clientProvider()
                     if (client == null) {
                         queueMutex.withLock {
-                            chunk.status = ChunkStatus.PENDING
-                            chunk.assignedNetwork = NetworkInterfaceType.DEFAULT
+                            for (c in chunkBatch) {
+                                c.status = ChunkStatus.PENDING
+                                c.assignedNetwork = NetworkInterfaceType.DEFAULT
+                            }
                         }
                         delay(1000)
                         continue
@@ -1131,7 +1275,7 @@ class DualDownloaderEngine(
                             val slicerSecret = SlicerPreferences.getSlicerSecret(context)
                             Request.Builder()
                                 .url(effectiveUrl)
-                                .header("Range", "bytes=${chunk.startByte}-${chunk.endByte}")
+                                .header("Range", "bytes=$batchStart-$batchEnd")
                                 .apply {
                                     if (slicerSecret.isNotBlank()) {
                                         header("X-Slicer-Key", slicerSecret)
@@ -1140,7 +1284,7 @@ class DualDownloaderEngine(
                                 .build()
                         } else {
                             buildRequest(url, isDesktop = isDesktopSpoofed)
-                                .addHeader("Range", "bytes=${chunk.startByte}-${chunk.endByte}")
+                                .addHeader("Range", "bytes=$batchStart-$batchEnd")
                                 .build()
                         }
 
@@ -1149,32 +1293,38 @@ class DualDownloaderEngine(
 
                         try {
                             call.execute().use { response ->
-                                if (response.code == 200 && chunk.startByte > 0L) {
-                                    throw IOException("HTTP 200 OK received for non-zero chunk ${chunk.index} (offset ${chunk.startByte}). Origin does not respect Range requests.")
+                                if (response.code == 200 && batchStart > 0L) {
+                                    throw IOException("HTTP 200 OK received for non-zero batch ${firstChunk.index}-${lastChunk.index} (offset $batchStart). Origin does not respect Range requests.")
                                 }
-                                if (response.code == 206 || (response.code == 200 && chunk.startByte == 0L)) {
-                                    val body = response.body ?: throw IOException("Empty body for chunk ${chunk.index}")
+                                if (response.code == 206 || (response.code == 200 && batchStart == 0L)) {
+                                    val body = response.body ?: throw IOException("Empty body for batch ${firstChunk.index}-${lastChunk.index}")
                                     val inputStream = body.byteStream()
                                     val buffer = ByteArray(64 * 1024)
                                     var bytesRead: Int
-                                    var chunkOffset = chunk.startByte
-                                    val expectedChunkBytes = (chunk.endByte - chunk.startByte) + 1
-                                    var chunkBytesReceived = 0L
+                                    var streamOffset = batchStart
+                                    var batchBytesReceived = 0L
 
-                                    while (chunkBytesReceived < expectedChunkBytes) {
+                                    while (batchBytesReceived < expectedBatchBytes) {
                                         if (!isActive) throw CancellationException("Worker cancelled")
-                                        val remaining = expectedChunkBytes - chunkBytesReceived
+                                        val remaining = expectedBatchBytes - batchBytesReceived
                                         val toRead = min(buffer.size.toLong(), remaining).toInt()
                                         bytesRead = inputStream.read(buffer, 0, toRead)
                                         if (bytesRead == -1) break
 
                                         fileWriteMutex.withLock {
-                                            sharedRandomAccessFile.seek(chunkOffset)
+                                            sharedRandomAccessFile.seek(streamOffset)
                                             sharedRandomAccessFile.write(buffer, 0, bytesRead)
                                         }
-                                        chunkOffset += bytesRead
-                                        chunkBytesReceived += bytesRead
+                                        streamOffset += bytesRead
+                                        batchBytesReceived += bytesRead
                                         totalDownloadedBytes.addAndGet(bytesRead.toLong())
+
+                                        for (c in chunkBatch) {
+                                            if (streamOffset > c.startByte) {
+                                                val chunkProgress = min(c.totalBytes, streamOffset - c.startByte)
+                                                c.downloadedBytes = chunkProgress
+                                            }
+                                        }
 
                                         if (interfaceType == NetworkInterfaceType.WIFI) {
                                             wifiDownloadedBytes.addAndGet(bytesRead.toLong())
@@ -1183,7 +1333,7 @@ class DualDownloaderEngine(
                                         }
                                     }
 
-                                    if (chunkBytesReceived == expectedChunkBytes) {
+                                    if (batchBytesReceived == expectedBatchBytes) {
                                         success = true
                                         // Reset circuit breaker on success
                                         if (interfaceType == NetworkInterfaceType.WIFI) {
@@ -1192,17 +1342,17 @@ class DualDownloaderEngine(
                                             cellularFailures.set(0)
                                         }
                                     } else {
-                                        // Truncated chunk! Roll back byte counters
-                                        totalDownloadedBytes.addAndGet(-chunkBytesReceived)
+                                        // Truncated batch! Roll back byte counters
+                                        totalDownloadedBytes.addAndGet(-batchBytesReceived)
                                         if (interfaceType == NetworkInterfaceType.WIFI) {
-                                            wifiDownloadedBytes.addAndGet(-chunkBytesReceived)
+                                            wifiDownloadedBytes.addAndGet(-batchBytesReceived)
                                         } else {
-                                            cellularDownloadedBytes.addAndGet(-chunkBytesReceived)
+                                            cellularDownloadedBytes.addAndGet(-batchBytesReceived)
                                         }
-                                        throw IOException("Chunk ${chunk.index} truncated: expected $expectedChunkBytes bytes, got $chunkBytesReceived")
+                                        throw IOException("Batch ${firstChunk.index}-${lastChunk.index} truncated: expected $expectedBatchBytes bytes, got $batchBytesReceived")
                                     }
                                 } else {
-                                    throw IOException("HTTP ${response.code} on chunk ${chunk.index}")
+                                    throw IOException("HTTP ${response.code} on batch ${firstChunk.index}-${lastChunk.index}")
                                 }
                             }
                         } finally {
@@ -1210,28 +1360,36 @@ class DualDownloaderEngine(
                         }
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
-                        Log.w(TAG, "Chunk ${chunk.index} failed on $interfaceType: ${sanitizeLogMessage(e.message)}")
+                        Log.w(TAG, "Batch ${firstChunk.index}-${lastChunk.index} failed on $interfaceType: ${sanitizeLogMessage(e.message)}")
                         if (interfaceType == NetworkInterfaceType.WIFI) {
                             wifiFailures.incrementAndGet()
                         } else {
                             cellularFailures.incrementAndGet()
                         }
-                        val attempts = chunkFailures.computeIfAbsent(chunk.index) { AtomicInteger(0) }.incrementAndGet()
-                        if (attempts >= 5) {
-                            Log.w(TAG, "Chunk ${chunk.index} exceeded retry limit (5). Escalating to auto-pause.")
-                            isPausedDueToExhaustion.set(true)
+                        for (c in chunkBatch) {
+                            val attempts = chunkFailures.computeIfAbsent(c.index) { AtomicInteger(0) }.incrementAndGet()
+                            if (attempts >= 5) {
+                                Log.w(TAG, "Chunk ${c.index} exceeded retry limit (5). Escalating to auto-pause.")
+                                isPausedDueToExhaustion.set(true)
+                            }
                         }
                     }
 
                     queueMutex.withLock {
                         if (success) {
-                            chunk.status = ChunkStatus.COMPLETED
-                            completedIndices.add(chunk.index)
-                            saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive)
+                            for (c in chunkBatch) {
+                                c.status = ChunkStatus.COMPLETED
+                                c.downloadedBytes = c.totalBytes
+                                completedIndices.add(c.index)
+                            }
+                            saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize)
                         } else {
-                            // Return chunk to pending queue for immediate re-dispatch
-                            chunk.status = ChunkStatus.PENDING
-                            chunk.assignedNetwork = NetworkInterfaceType.DEFAULT
+                            // Return all chunks in the batch to pending queue for immediate re-dispatch
+                            for (c in chunkBatch) {
+                                c.status = ChunkStatus.PENDING
+                                c.assignedNetwork = NetworkInterfaceType.DEFAULT
+                                c.downloadedBytes = 0L
+                            }
                         }
                     }
 
