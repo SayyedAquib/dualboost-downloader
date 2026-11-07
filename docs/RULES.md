@@ -154,5 +154,10 @@ To prevent inverted contrast regressions (e.g. black-on-dark in light mode, whit
 - **Zero Third-Party Antivirus Bloat**: Local threat detection must remain 100% pure Kotlin with zero external native C++ engines or tracking SDKs.
 - **Queue Non-Stalling Guarantee**: Overnight queues must never hang on a malicious file. When a threat is detected, update item status to `QueueItemStatus.THREAT_DETECTED` and auto-advance to the next queued file.
 
+## Social Media Downloader Rules (`ADR-039`)
+- **Telemetry Sanitization**: All social media URLs must be stripped of user-tracking query parameters (`si`, `igsh`, `utm_*`, `fbclid`) before resolution.
+- **Multi-Instance Redundancy**: The resolver must support a pool of backup instances to guarantee high availability when public services undergo maintenance or rate limiting.
+- **Zero APK Dependency Bloat**: Stream resolution must extract pre-merged video+audio streams, avoiding the need for heavy native FFmpeg binary wrappers.
+
 
 

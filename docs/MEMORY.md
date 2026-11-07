@@ -1,9 +1,27 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 (Multi-Download Queue & In-App Browser Media Sniffer) and ADR-038 (Hybrid 3-Stage Antivirus & Threat Guard System). The codebase is backed by **232 unit and integration tests across 29 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`, 1.64 MB) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 (Multi-Download Queue & In-App Browser Media Sniffer), ADR-038 (Hybrid 3-Stage Antivirus & Threat Guard System), and ADR-039 (Expanded Social Media Downloader). The codebase is backed by **248 unit and integration tests across 32 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`, 1.66 MB) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
 
 ## Recently Completed
+- **Expanded Social Media Downloader (ADR-039 / 248 Tests across 32 Suites)**:
+  - **Slice 1: Platform Detection & URL Classifier**:
+    - Created `SocialMediaModel.kt` (`SocialPlatform`, `MediaQuality`, `SocialMediaAsset`, `SocialIntakeState`).
+    - Created `SocialMediaDetector.kt`: Pure Kotlin classifier supporting 9 platforms (YouTube, Instagram, TikTok, Twitter/X, Reddit, Facebook, Pinterest, SoundCloud, Vimeo) and stripping telemetry/tracking query parameters (`si`, `igsh`, `utm_*`).
+    - Verified via `SocialMediaDetectorTest.kt` (9 tests, 100% green).
+  - **Slice 2: Resolver Engine with Multi-Instance Failover**:
+    - Created `SocialMediaResolver.kt`: High-performance, zero-bloat resolver querying open-source Cobalt/yt-stream API instances with multi-instance pool failover.
+    - Added direct on-device HTML fallback scraper for Instagram public reels (`og:video` and `og:image` extraction).
+    - Verified via `SocialMediaResolverTest.kt` (4 tests with MockWebServer, 100% green).
+  - **Slice 3: ViewModel & Social Intake Flow**:
+    - Integrated `socialIntakeState` into `MainViewModel.kt` with `checkAndPrepareSocialLink()`, `dismissSocialIntake()`, `startSocialDownload()`, and `enqueueSocialDownload()`.
+    - Automatically identifies social media links pasted into the URL input or shared from other apps via Android Share Sheet (`ACTION_SEND`).
+    - Verified via `SocialIntakeViewModelTest.kt` (3 tests, 100% green).
+  - **Slice 4: UI Quality Picker Modal & Integration**:
+    - Created `SocialMediaModalSheet.kt`: Material 3 ModalBottomSheet displaying platform hero badge, URL monospace preview, quality selection cards (`4K/1080p MAX`, `720p HD`, `Audio MP3`), and dual action buttons (`[ ⚡ Boost Download ]` and `[ ➕ Add to Queue ]`).
+    - Integrated modal and back handling in `MainActivity.kt`.
+    - Full test suite passed 100% green (248 tests across 32 test suites).
+    - Compiled production release APK (`app-release.apk`, 1.66 MB, `assembleRelease` in 3m 34s).
 - **Hybrid 3-Stage Antivirus & Threat Guard System (ADR-038 / 232 Tests across 29 Suites)**:
   - **Slice 1: Threat Detection Engine & Data Models**:
     - Created `ThreatModel.kt` (`ThreatSeverity`, `ThreatType`, and `ThreatAssessment`).

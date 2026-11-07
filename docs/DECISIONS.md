@@ -1432,3 +1432,31 @@ Implement a **Zero-Overhead Hybrid 3-Stage Antivirus & Threat Guard System**:
 - Zero-latency protection without heavy third-party antivirus C++ libraries or commercial SDK bloat.
 - Guarantees malicious files cannot write disguised executables to user storage.
 - Preserves overnight download workflows without stalling queues on malicious links.
+
+---
+
+## ADR-039: Expanded Social Media Downloader Architecture
+
+### Status
+Accepted
+
+### Context
+Users frequently want to download high-resolution content from social media platforms (Instagram Reels/Photos, YouTube Videos/Shorts, TikTok, Twitter/X, Reddit, Facebook, Pinterest, SoundCloud, and Vimeo). These platforms provide HTML webpage share links rather than direct video stream URLs. In particular, YouTube streams adaptive DASH tracks (separate video and audio tracks requiring FFmpeg muxing for 1080p/4K), while Instagram embeds OpenGraph metadata for public reels.
+
+### Decision
+Implement a **Zero-Bloat Social Media Extraction & Quality Resolution Pipeline**:
+1. **Platform Classifier & URL Normalization**:
+   - `SocialMediaDetector` recognizes 9 major platforms and shortlink variants (`youtu.be`, `instagr.am`, `vm.tiktok.com`, `v.redd.it`, `fb.watch`, `pin.it`).
+   - Strips telemetry and tracking tokens (`utm_*`, `igsh`, `si`, `fbclid`, `feature`) while preserving essential video query parameters.
+2. **Built-in High-Quality Resolver with Multi-Instance Failover**:
+   - `SocialMediaResolver` queries an instance pool of open-source Cobalt/yt-stream API services.
+   - Extracts direct 4K/1080p stream URLs with pre-merged audio tracks, avoiding the need to bundle a 30 MB native FFmpeg binary in the Android APK.
+   - Automatically fails over across backup public instances if a primary instance is busy or rate-limited.
+   - Incorporates a direct on-device HTML fallback scraper for Instagram that parses `og:video` and `og:image` from public post metadata.
+3. **Smart Modal & Quality Selection**:
+   - `SocialMediaModalSheet` presents platform-branded hero badges, original URL preview, and 1-tap quality options: `MAX (4K / 1080p)`, `HD 720p`, and `Audio Only (MP3)`.
+   - Action buttons allow users to either `[ ⚡ Boost Download ]` immediately or `[ ➕ Add to Queue ]` for batch processing.
+
+### Consequences
+- Enables full-resolution 4K/1080p and audio downloading from major social networks with zero APK bloat (app size remains 1.6 MB).
+- Seamlessly hands off resolved stream URLs to `DualDownloaderEngine` with Wi-Fi + 5G bonding and Antivirus Threat Guard protection.

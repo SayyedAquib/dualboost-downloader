@@ -10,6 +10,8 @@ import com.dualboost.downloader.DualBoostApp
 import com.dualboost.downloader.data.DownloadHistoryItem
 import com.dualboost.downloader.data.DownloadRepository
 import com.dualboost.downloader.data.DownloadState
+import com.dualboost.downloader.social.*
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -112,8 +114,62 @@ class SystemPowerExemptionChecker(private val context: Context?) : PowerExemptio
 open class MainViewModel(
     val repository: DownloadRepository? = runCatching { DualBoostApp.instance.repository }.getOrNull(),
     downloadStateOverride: StateFlow<DownloadState>? = null,
-    val powerExemptionChecker: PowerExemptionChecker = SystemPowerExemptionChecker(runCatching { DualBoostApp.instance }.getOrNull())
+    val powerExemptionChecker: PowerExemptionChecker = SystemPowerExemptionChecker(runCatching { DualBoostApp.instance }.getOrNull()),
+    socialResolverOverride: SocialMediaResolver? = null,
+    coroutineScopeOverride: CoroutineScope? = null
 ) : ViewModel() {
+
+    private val scope: CoroutineScope = coroutineScopeOverride ?: viewModelScope
+    private val socialResolver: SocialMediaResolver = socialResolverOverride ?: SocialMediaResolver()
+
+    private val _socialIntakeState = MutableStateFlow<SocialIntakeState>(SocialIntakeState.Idle)
+    val socialIntakeState: StateFlow<SocialIntakeState> = _socialIntakeState.asStateFlow()
+
+    fun checkAndPrepareSocialLink(url: String): Boolean {
+        val platform = SocialMediaDetector.detectPlatform(url) ?: return false
+        _socialIntakeState.value = SocialIntakeState.Ready(
+            originalUrl = url.trim(),
+            platform = platform
+        )
+        return true
+    }
+
+    fun dismissSocialIntake() {
+        _socialIntakeState.value = SocialIntakeState.Idle
+    }
+
+    fun startSocialDownload(url: String, quality: MediaQuality = MediaQuality.MAX) {
+        val platform = SocialMediaDetector.detectPlatform(url) ?: return
+        _socialIntakeState.value = SocialIntakeState.Resolving(url, platform)
+        scope.launch {
+            val result = socialResolver.resolve(url, quality)
+            result.onSuccess { asset ->
+                _socialIntakeState.value = SocialIntakeState.Idle
+                _urlInput.value = asset.streamUrl
+                startDownload(asset.streamUrl)
+            }.onFailure { err ->
+                _socialIntakeState.value = SocialIntakeState.Error(url, err.message ?: "Failed to resolve media stream")
+            }
+        }
+    }
+
+    fun enqueueSocialDownload(url: String, quality: MediaQuality = MediaQuality.MAX) {
+        val platform = SocialMediaDetector.detectPlatform(url) ?: return
+        _socialIntakeState.value = SocialIntakeState.Resolving(url, platform)
+        scope.launch {
+            val result = socialResolver.resolve(url, quality)
+            result.onSuccess { asset ->
+                _socialIntakeState.value = SocialIntakeState.Idle
+                enqueueDownload(
+                    url = asset.streamUrl,
+                    fileName = asset.suggestedFilename,
+                    isSequentialMode = !asset.isAudioOnly
+                )
+            }.onFailure { err ->
+                _socialIntakeState.value = SocialIntakeState.Error(url, err.message ?: "Failed to resolve media stream")
+            }
+        }
+    }
 
     private val _showBatteryGuidance = MutableStateFlow(false)
     val showBatteryGuidance: StateFlow<Boolean> = _showBatteryGuidance.asStateFlow()
@@ -276,6 +332,7 @@ open class MainViewModel(
         if (newUrl.isNotBlank()) {
             _hasClipboardContent.value = false
             _detectedClipboardUrl.value = null
+            checkAndPrepareSocialLink(newUrl)
         }
         _selectedPreset.value = DEFAULT_PRESETS.firstOrNull { it.url == newUrl.trim() }
     }

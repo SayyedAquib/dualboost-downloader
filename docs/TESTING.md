@@ -271,6 +271,27 @@ End-to-end and component UI testing on Android devices is performed using Google
   - `setThreatGuardEnabled_updatesValueCorrectly`: Tests toggling the preference.
   - `safeBrowsingApiKey_storesAndRetrievesCorrectly`: Tests saving and clearing custom Safe Browsing API keys.
 
+### Social Media Downloader Test Suite (`ADR-039`)
+- **SocialMediaDetectorTest** (9 tests):
+  - `detectsYouTubeUrls_standardShortsAndShortlinks`: Asserts accurate classification across YouTube watch, youtu.be, shorts, and live URLs.
+  - `detectsInstagramUrls_reelsPostsAndShares`: Verifies detection of Instagram reels, posts, IGTV, and instagr.am shortlinks.
+  - `detectsTikTokUrls_standardAndShortlinks`: Validates standard video paths and `vm.tiktok.com` shortlinks.
+  - `detectsTwitterAndXUrls`: Tests both `twitter.com` and `x.com` status links.
+  - `detectsRedditUrls`: Validates comments links and `v.redd.it` direct links.
+  - `detectsFacebookUrls`: Tests Facebook reels, `fb.watch`, and watch query paths.
+  - `detectsPinterestSoundCloudAndVimeo`: Validates pin.it, SoundCloud tracks, and Vimeo videos.
+  - `nonSocialUrls_returnNull`: Confirms standard files (`.zip`, `.bin`, `.iso`) are not misclassified as social media.
+  - `cleanTrackingParams_stripsTelemetryAndPreservesCoreMediaId`: Asserts removal of telemetry (`si`, `igsh`, `utm_*`) while keeping essential video parameters.
+- **SocialMediaResolverTest** (4 tests):
+  - `resolveYouTube_returnsHighQualityStreamAndSuggestedFilename`: Tests resolution of 4K/1080p stream URLs with merged audio and suggested filenames.
+  - `resolveAudioOnly_requestsMp3FormatAndSetsAudioFlag`: Confirms `downloadMode: audio` requests MP3 tracks and sets audio flags.
+  - `multiInstanceFailover_whenPrimaryFails_retriesOnSecondaryInstance`: Simulates primary instance HTTP 429 rate limit and validates automatic failover to secondary instance.
+  - `directInstagramHtmlScraper_extractsOgVideoWhenApiFails`: Validates on-device HTML fallback parser extracting `og:video` and `og:title` directly from public Instagram markup.
+- **SocialIntakeViewModelTest** (3 tests):
+  - `checkAndPrepareSocialLink_detectsInstagramAndSetsReadyState`: Verifies ViewModel transitions to `SocialIntakeState.Ready`.
+  - `startSocialDownload_resolvesHighestQualityAndStartsDownload`: Verifies resolution dispatch and handoff to `startDownload()`.
+  - `dismissSocialIntake_resetsStateToIdle`: Tests dismissing modal and resetting state to `Idle`.
+
 ## API Testing
 - Verify HTTP 206 response validation.
 - Verify fallback behavior when a mock server returns HTTP 200 (server ignored Range header).

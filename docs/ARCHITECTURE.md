@@ -234,6 +234,12 @@ sequenceDiagram
   1. *Stage 1 (Pre-Flight Heuristics)*: Inspects URL, candidate file names, and initial HTTP response headers. Catches deceptive double extensions (`.mkv.apk`), disguised executable packages (`.exe`, `.bat`, `.apk`), fake MIME types (`application/vnd.android.package-archive` disguised as video), and known malicious redirect domains.
   2. *Stage 2 (Magic Byte Stream Verification)*: Validates the first 4-100 bytes of the payload on chunk 0 before writing to disk. Blocks files masquerading as media whose header reveals ZIP/APK PK headers (`50 4B 03 04`) or Windows MZ headers (`4D 5A`).
   3. *Stage 3 (Fail-Closed Quarantine & Advanced Override)*: Throws `ThreatDetectedException`, cancels active calls immediately, deletes all temporary disk bytes, emits `DownloadState.ThreatDetected`, and displays `SecurityThreatDialog` with safe discard and advanced manual override (`allowDangerousBypass`). Overnight queues mark the item as `THREAT_DETECTED` and seamlessly auto-advance to subsequent items.
+- **Social Media Link Resolution Pipeline (`ADR-039`)**:
+  - `SocialMediaDetector`: Pure Kotlin regex classifier identifying 9 major platforms (YouTube, Instagram, TikTok, Twitter/X, Reddit, Facebook, Pinterest, SoundCloud, Vimeo) and cleaning tracking/telemetry query parameters (`?si=...`, `?igsh=...`, `?utm_*=...`).
+  - `SocialMediaResolver`: Queries high-performance open-source Cobalt/yt-stream API instances to extract 4K/1080p stream URLs with pre-merged audio tracks and zero APK bloat.
+  - Multi-Instance Failover Pool: Auto-retries across redundant public instances upon encountering HTTP 429 rate limits or timeouts.
+  - Direct On-Device Instagram Fallback: Built-in HTML scraper extracting `og:video` and `og:image` from public post metadata if API instances are unreachable.
+  - User Interface: `SocialMediaModalSheet` surfaces video title, platform hero badge, and quality picker (`MAX 4K/1080p`, `HD 720p`, `Audio MP3`), with 1-tap handoff to `DualDownloaderEngine` or `DownloadQueueRepository`.
 
 ## Constraints
 - Server must support HTTP Range requests (either via standard mobile headers, desktop browser spoofing, or Personal Cloud Slicer) for dual-channel acceleration.

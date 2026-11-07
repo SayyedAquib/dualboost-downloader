@@ -270,7 +270,9 @@ fun MainScreen(
     var showExitDownloadConfirmDialog by remember { mutableStateOf(false) }
 
     val downloadState by viewModel.downloadState.collectAsState()
+    val socialIntakeState by viewModel.socialIntakeState.collectAsState()
     val isAnySheetOrDialogActive = drawerState.isOpen ||
+            socialIntakeState !is com.dualboost.downloader.social.SocialIntakeState.Idle ||
             showSpeedTestSheet ||
             showSettingsSheet ||
             showHistorySheet ||
@@ -282,6 +284,7 @@ fun MainScreen(
     BackHandler(enabled = isAnySheetOrDialogActive || isDownloadRunning) {
         when {
             drawerState.isOpen -> drawerScope.launch { drawerState.close() }
+            socialIntakeState !is com.dualboost.downloader.social.SocialIntakeState.Idle -> viewModel.dismissSocialIntake()
             showInfoDialog -> showInfoDialog = false
             showCancelConfirmDialog -> showCancelConfirmDialog = false
             showExitDownloadConfirmDialog -> showExitDownloadConfirmDialog = false
@@ -2151,6 +2154,15 @@ fun MainScreen(
         SettingsBottomSheet(
             onDismiss = { showSettingsSheet = false },
             viewModel = viewModel
+        )
+    }
+
+    if (socialIntakeState !is com.dualboost.downloader.social.SocialIntakeState.Idle) {
+        SocialMediaModalSheet(
+            state = socialIntakeState,
+            onDismiss = { viewModel.dismissSocialIntake() },
+            onDownload = { url, quality -> viewModel.startSocialDownload(url, quality) },
+            onEnqueue = { url, quality -> viewModel.enqueueSocialDownload(url, quality) }
         )
     }
 }

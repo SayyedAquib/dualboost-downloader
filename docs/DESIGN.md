@@ -139,6 +139,14 @@ To ensure physical network transparency across any wallpaper palette:
 - **SecurityThreatDialog**: Dedicated Material 3 `AlertDialog` presenting a prominent circular red shield icon (`errorContainer`), severity classification chip (`CRITICAL RISK • DOUBLE_EXTENSION`), original requested filename vs true deceptive target payload in high-contrast monospace font, explanatory text informing that bytes were purged from storage, a prominent red `[ 🛡️ Safe Discard (Recommended) ]` button, and an explicit `[ ⚠️ Download Anyway (At your own risk) ]` bypass action.
 - **Threat Detected Inline Card**: Rendered in `MainActivity` during `DownloadState.ThreatDetected` with `1.5.dp` error border, red shield header, threat description, and side-by-side "Safe Discard" and "Override & Download" buttons.
 
+### Social Media Intake & Quality Modal (`ADR-039`)
+- **SocialMediaModalSheet**: Material 3 `ModalBottomSheet` triggered on social link paste or Share Sheet intake:
+  - **Platform Hero Badge**: 54dp circular surface (`CircleShape`) with 15% brand tint and custom platform icon (YouTube red, Instagram pink/purple, SoundCloud orange, etc.).
+  - **URL Monospace Preview**: Compact `surfaceContainerHighest` pill with link icon and single-line URL truncation.
+  - **Interactive Quality Cards**: 1-tap selection cards for `MAX (4K / 1080p)`, `HD 720p`, and `Audio Only (MP3)` with dynamic primary highlight borders and radio indicators.
+  - **Dual Action Bar**: Side-by-side action buttons: `[ ➕ Add to Queue ]` (tonal outlined) and `[ ⚡ Boost Download ]` (high-contrast filled).
+  - **Resolving & Error Overlays**: Centered 48dp spinner during stream extraction, and dedicated error state with dismiss recovery.
+
 ### Accessibility
 - Minimum touch targets of 48x48dp for all buttons.
 - Contrast ratio exceeding 4.5:1 for all text against backgrounds.
