@@ -244,6 +244,33 @@ End-to-end and component UI testing on Android devices is performed using Google
 - `testMetaInfo_SavesAndRestoresCloudSlicerActiveFlag`: Asserts `.dualboost_meta` sidecar serialization and restoration of `isCloudSlicerActive = true` into `DownloadState.Paused`.
 - `testAdaptiveProbe_Stage3_CloudSlicerFallback`: End-to-end MockWebServer test where standard mobile and desktop spoofing probes fail (returning HTTP 200 without ranges), triggering Stage 3 Personal Cloud Slicer probe, downloading chunks via slicer, setting `isCloudSlicerActive = true`, and validating 100% SHA-256 byte payload integrity.
 
+### Antivirus & Threat Guard Test Suite (`ADR-038`)
+- **ThreatDetectionEngineTest** (7 tests):
+  - `detectsDoubleExtensionTrap`: Identifies deceptive extensions such as `Mirzapur.4K.mkv.apk`.
+  - `detectsDisguisedExecutableExtensions`: Flags `.exe`, `.bat`, `.sh`, `.dex`, etc. masquerading as media.
+  - `detectsMaliciousMimeType`: Flags `application/vnd.android.package-archive` and binary executable MIME types.
+  - `detectsKnownMaliciousDomains`: Blocks domains on malware/ad-redirector threat intelligence lists.
+  - `detectsZipApkMagicBytesInMedia`: Identifies `PK\x03\x04` binary headers disguised as `.mkv`/`.mp4`.
+  - `detectsWindowsExeMagicBytesInMedia`: Identifies `MZ` binary headers disguised as media files.
+  - `cleanMediaFile_returnsCleanAssessment`: Validates that authentic media files pass without false positives.
+- **CloudThreatScannerTest** (4 tests):
+  - `missingApiKey_returnsCleanFallback`: Gracefully handles missing cloud API key without blocking user downloads.
+  - `flaggedMaliciousUrl_returnsThreatAssessment`: Queries MockWebServer and parses Google Safe Browsing threat match.
+  - `cleanUrl_returnsCleanAssessment`: Validates clean URLs without matches.
+  - `serverError_returnsCleanFallback`: Gracefully falls back to clean assessment on network timeouts or HTTP 500 errors.
+- **EngineThreatInterceptionTest** (4 tests):
+  - `preFlightThreat_blocksDownloadBeforeWorkersStart`: Confirms pre-flight checks block malicious URLs prior to network worker dispatch.
+  - `probeHeadersThreat_blocksDownloadOnMaliciousMime`: Verifies server probe response headers with malicious MIME types immediately abort downloads.
+  - `magicBytesThreat_blocksDownloadWhenPayloadIsDisguisedApk`: Verifies that if chunk 0 payload begins with `PK\x03\x04`, download throws `ThreatDetectedException`, cleans disk, and emits `ThreatDetected`.
+  - `allowDangerousBypass_allowsDownloadToProceed`: Confirms that user override explicitly bypasses security guard.
+- **QueueThreatSkippingTest** (2 tests):
+  - `maliciousItemInQueue_isMarkedThreatDetectedAndQueueAdvancesToNextItem`: Verifies that when a queue item triggers a threat, its status becomes `THREAT_DETECTED` and the queue automatically advances to the next clean file.
+  - `queueItemSerialization_supportsThreatDetectedStatus`: Tests serialization and deserialization of `QueueItemStatus.THREAT_DETECTED`.
+- **SecurityPreferencesTest** (3 tests):
+  - `threatGuard_isEnabledByDefault`: Asserts Threat Guard defaults to enabled.
+  - `setThreatGuardEnabled_updatesValueCorrectly`: Tests toggling the preference.
+  - `safeBrowsingApiKey_storesAndRetrievesCorrectly`: Tests saving and clearing custom Safe Browsing API keys.
+
 ## API Testing
 - Verify HTTP 206 response validation.
 - Verify fallback behavior when a mock server returns HTTP 200 (server ignored Range header).

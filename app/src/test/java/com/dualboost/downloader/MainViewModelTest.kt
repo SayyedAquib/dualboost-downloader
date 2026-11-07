@@ -353,6 +353,14 @@ class MainViewModelTest {
         val exemptedViewModel = MainViewModel(repository = null, powerExemptionChecker = alreadyExemptedChecker)
         assertFalse("Already exempted devices should not be prompted", exemptedViewModel.showBatteryGuidance.value)
     }
+
+    @Test
+    fun testStartDownloadWithBypass_SetsUrlInput() {
+        val viewModel = MainViewModel(repository = null)
+        val testUrl = "https://ad-redirector.net/sample.mp4"
+        viewModel.startDownloadWithBypass(testUrl)
+        assertEquals(testUrl, viewModel.urlInput.value)
+    }
 }
 
 

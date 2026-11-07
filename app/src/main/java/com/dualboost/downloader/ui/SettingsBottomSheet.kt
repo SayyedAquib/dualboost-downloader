@@ -38,6 +38,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dualboost.downloader.security.SecurityPreferences
 import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.data.WorkerTestStatus
 
@@ -487,6 +488,78 @@ fun SettingsBottomSheet(
                 }
             }
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Antivirus & Threat Guard Section
+            var threatGuardActive by remember {
+                mutableStateOf(SecurityPreferences.isThreatGuardEnabled(context))
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = if (threatGuardActive) Color(0xFF1B5E20).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Security,
+                                        contentDescription = "Threat Guard",
+                                        tint = if (threatGuardActive) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Antivirus & Threat Guard",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (threatGuardActive) "Active • Blocking malware & fake APKs" else "Disabled • Downloads uninspected",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (threatGuardActive) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = threatGuardActive,
+                            onCheckedChange = { checked ->
+                                threatGuardActive = checked
+                                SecurityPreferences.setThreatGuardEnabled(context, checked)
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Real-time 3-stage inspection blocks disguised APKs, double extensions (.mkv.apk), executable payloads, and fake MIME types before saving bytes to disk.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
 
             // Save and Clear Buttons
@@ -520,6 +593,7 @@ fun SettingsBottomSheet(
                         val trimmedSecret = secretKey.trim()
                         SlicerPreferences.setSlicerUrl(context, trimmedUrl)
                         SlicerPreferences.setSlicerSecret(context, trimmedSecret)
+                        SecurityPreferences.setThreatGuardEnabled(context, threatGuardActive)
                         Toast.makeText(context, "Settings saved successfully", Toast.LENGTH_SHORT).show()
                         onDismiss()
                     },

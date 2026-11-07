@@ -193,6 +193,20 @@ class DownloadForegroundService : Service() {
                         stopForeground(STOP_FOREGROUND_DETACH)
                         stopSelf()
                     }
+                    is DownloadState.ThreatDetected -> {
+                        networkManager.releaseCellularKeepAlive()
+                        releaseWakeLock()
+                        updateNotification(
+                            title = "🛑 Threat Detected: Download Blocked",
+                            content = "${state.suggestedFilename}: ${state.threat.description}",
+                            progress = 0,
+                            indeterminate = false,
+                            isPaused = false,
+                            canControl = false
+                        )
+                        stopForeground(STOP_FOREGROUND_DETACH)
+                        stopSelf()
+                    }
                     is DownloadState.Failed -> {
                         networkManager.releaseCellularKeepAlive()
                         releaseWakeLock()

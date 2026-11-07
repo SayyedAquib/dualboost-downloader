@@ -133,6 +133,11 @@ To ensure physical network transparency across any wallpaper palette:
 - Inputs: Outlined text fields with custom leading icons (`Language`, `VpnKey`) and clear buttons.
 - Action Buttons: "Test Worker" (with progress spinner & status banner) and "Copy Script" (with haptic feedback and toast).
 - Expandable setup accordion: Clean numbered steps for 60-second Cloudflare deployment.
+- **Antivirus & Threat Guard Card**: Dedicated surface card with green/red status badge, live `Switch` toggle, status indicator (`Active • Blocking malware & fake APKs`), and technical description of 3-stage heuristic protection.
+
+### Security Threat UI Components (`ADR-038`)
+- **SecurityThreatDialog**: Dedicated Material 3 `AlertDialog` presenting a prominent circular red shield icon (`errorContainer`), severity classification chip (`CRITICAL RISK • DOUBLE_EXTENSION`), original requested filename vs true deceptive target payload in high-contrast monospace font, explanatory text informing that bytes were purged from storage, a prominent red `[ 🛡️ Safe Discard (Recommended) ]` button, and an explicit `[ ⚠️ Download Anyway (At your own risk) ]` bypass action.
+- **Threat Detected Inline Card**: Rendered in `MainActivity` during `DownloadState.ThreatDetected` with `1.5.dp` error border, red shield header, threat description, and side-by-side "Safe Discard" and "Override & Download" buttons.
 
 ### Accessibility
 - Minimum touch targets of 48x48dp for all buttons.

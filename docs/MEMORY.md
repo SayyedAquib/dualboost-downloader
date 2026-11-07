@@ -1,10 +1,41 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-033 (Multi-OEM Compatibility, Roaming Guard & VPN-Safe Fallback), ADR-035 (Asymmetric Work-Stealing), and ADR-036 (Sequential Chunking & Instant Video Stream Preview). The codebase is backed by **194 unit and integration tests across 25 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and dedicated release signing. Users downloading 4K videos or large movies can now preview and watch files immediately within 1-2 seconds of download start.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 (Multi-Download Queue & In-App Browser Media Sniffer) and ADR-038 (Hybrid 3-Stage Antivirus & Threat Guard System). The codebase is backed by **232 unit and integration tests across 29 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`, 1.64 MB) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
 
 ## Recently Completed
-- **Sequential Chunking & Instant Video Stream Preview (ADR-036 / 194 Tests across 25 Suites)**:
+- **Hybrid 3-Stage Antivirus & Threat Guard System (ADR-038 / 232 Tests across 29 Suites)**:
+  - **Slice 1: Threat Detection Engine & Data Models**:
+    - Created `ThreatModel.kt` (`ThreatSeverity`, `ThreatType`, and `ThreatAssessment`).
+    - Created `ThreatDetectionEngine.kt`: On-device heuristic engine inspecting candidate filenames, URL paths, query parameters, and initial headers. Detects double extension traps (`.mkv.apk`), disguised executable packages (`.apk`, `.exe`, `.bat`, `.cmd`, `.sh`, `.dex`, `.vbs`, etc.), malicious MIME types (`application/vnd.android.package-archive`), known malicious ad redirect domains, and payload magic byte mismatches (`PK\x03\x04` or `MZ` in media files).
+    - Verified via `ThreatDetectionEngineTest.kt` (7 tests, 100% green).
+  - **Slice 2: Cloud Threat Scanner Client**:
+    - Created `CloudThreatScanner.kt`: Pure Kotlin zero-dependency JSON client querying Google Safe Browsing API with graceful offline and missing-API-key fallback.
+    - Verified via `CloudThreatScannerTest.kt` (4 tests with MockWebServer, 100% green).
+  - **Slice 3: DualDownloaderEngine Pre-Flight & Magic Byte Interception**:
+    - Extended `DownloadState` with `ThreatDetected(threat, url, suggestedFilename)`.
+    - Integrated pre-flight threat assessment in `executeDownload` before dispatching network calls.
+    - Integrated probe header inspection in `executeProbeWithFallback` (for both HEAD and GET range fallback probes).
+    - Integrated chunk 0 magic byte inspection in segmented chunk download and single-stream download, immediately aborting downloads on PK/MZ header detection.
+    - Added `ThreatDetectedException` and automatic partial disk byte scrubbing via `discardDownload()`.
+    - Added `allowDangerousBypass` parameter for advanced user override.
+    - Verified via `EngineThreatInterceptionTest.kt` (4 tests, 100% green).
+  - **Slice 4: Multi-Download Queue Threat Handling**:
+    - Added `QueueItemStatus.THREAT_DETECTED` to `QueueModel.kt`.
+    - Updated `QueueCoordinator.kt` to mark malicious items as `THREAT_DETECTED` with threat descriptions and auto-advance the queue to the next clean file without stalling overnight batch downloads.
+    - Verified via `QueueThreatSkippingTest.kt` (2 tests, 100% green).
+  - **Slice 5: UI Security Shield Dialog & Persistent Preferences**:
+    - Created `SecurityPreferences.kt`: SharedPreferences manager for on-device Threat Guard toggle and Google Safe Browsing API keys.
+    - Verified via `SecurityPreferencesTest.kt` (3 tests, 100% green).
+    - Created `SecurityThreatDialog.kt`: Material 3 AlertDialog with circular red shield icon, severity risk chip (`CRITICAL RISK • DOUBLE_EXTENSION`), original file vs deceptive payload comparison, and prominent `[ 🛡️ Safe Discard ]` and `[ ⚠️ Download Anyway (At your own risk) ]` actions.
+    - Connected `SecurityThreatDialog` into `MainActivity.kt` and added Antivirus toggle switch to `SettingsBottomSheet.kt`.
+    - Verified in `MainViewModelTest.kt` (test `testStartDownloadWithBypass_SetsUrlInput`).
+- **Multi-Download Queue & In-App Browser Media Sniffer (ADR-037)**:
+  - Created `DownloadQueueRepository.kt` with atomic JSON persistence (`queue.json`).
+  - Implemented `QueueCoordinator.kt` managing autonomous FIFO downloads.
+  - Implemented `MediaSnifferEngine.kt` catching direct media streams from WebView requests.
+  - Implemented `InAppBrowserSheet.kt` sandboxing streaming portals like `moviesleech.media` to suppress click-jack traps and ad loops.
+- **Sequential Chunking & Instant Video Stream Preview (ADR-036)**:
   - **Slice 1: Video Format Detection, Contiguous Byte Calculation & Sequential Work Scheduler**:
     - Implemented `DualDownloaderEngine.isVideoFile(fileName)` and `isMp4File(fileName)` detecting all major containers (`.mkv`, `.mp4`, `.webm`, `.mov`, `.avi`, `.ts`, `.m4v`, `.flv`, `.3gp`, `.wmv`).
     - Implemented `calculateContiguousPlayableBytes()` computing uninterrupted lead playback buffer from byte 0.

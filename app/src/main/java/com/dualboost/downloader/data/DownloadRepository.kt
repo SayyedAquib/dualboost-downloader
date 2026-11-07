@@ -25,11 +25,29 @@ class DownloadRepository(
     val speedTestEngineOverride: com.dualboost.downloader.engine.SpeedTestEngine? = null,
     val historyRepositoryOverride: DownloadHistoryRepository? = null,
     val isServiceEnabled: Boolean = (engineOverride == null),
-    val thermalStatusProviderOverride: com.dualboost.downloader.thermal.ThermalStatusProvider? = null
-) {
+    val thermalStatusProviderOverride: com.dualboost.downloader.thermal.ThermalStatusProvider? = null,
+    val queueRepositoryOverride: DownloadQueueRepository? = null,
+    val queueCoordinatorOverride: com.dualboost.downloader.engine.QueueCoordinator? = null
+) : com.dualboost.downloader.engine.QueueDownloadDispatcher {
 
     val historyRepository: DownloadHistoryRepository by lazy {
         historyRepositoryOverride ?: DownloadHistoryRepository(context)
+    }
+
+    val queueRepository: DownloadQueueRepository by lazy {
+        queueRepositoryOverride ?: DownloadQueueRepository(context)
+    }
+
+    val queueCoordinator: com.dualboost.downloader.engine.QueueCoordinator by lazy {
+        queueCoordinatorOverride ?: com.dualboost.downloader.engine.QueueCoordinator(
+            queueRepository = queueRepository,
+            dispatcher = this,
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+        )
+    }
+
+    val mediaSnifferEngine: com.dualboost.downloader.sniffer.MediaSnifferEngine by lazy {
+        com.dualboost.downloader.sniffer.MediaSnifferEngine()
     }
 
     val networkManager: DualNetworkManager by lazy {
@@ -48,7 +66,7 @@ class DownloadRepository(
         speedTestEngineOverride ?: com.dualboost.downloader.engine.SpeedTestEngine(networkProvider ?: networkManager)
     }
 
-    val downloadState: StateFlow<DownloadState> get() = downloaderEngine.downloadState
+    override val downloadState: StateFlow<DownloadState> get() = downloaderEngine.downloadState
     val speedTestState: StateFlow<SpeedTestState> get() = speedTestEngine.speedTestState
     val isWifiAvailable: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isWifiAvailable
     val isCellularAvailable: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isCellularAvailable
@@ -126,10 +144,15 @@ class DownloadRepository(
         }
     }
 
+    override fun startDownload(url: String, forceSequentialMode: Boolean?) {
+        startDownload(url, downloaderEngine.getDefaultDownloadDir(), forceSequentialMode)
+    }
+
     fun startDownload(
         url: String,
         targetDir: File = downloaderEngine.getDefaultDownloadDir(),
-        forceSequentialMode: Boolean? = null
+        forceSequentialMode: Boolean? = null,
+        allowDangerousBypass: Boolean = false
     ) {
         if (isServiceEnabled) {
             try {
@@ -139,6 +162,7 @@ class DownloadRepository(
                     if (forceSequentialMode != null) {
                         putExtra(DownloadForegroundService.EXTRA_FORCE_SEQUENTIAL, forceSequentialMode)
                     }
+                    putExtra("EXTRA_ALLOW_BYPASS", allowDangerousBypass)
                 }
                 ContextCompat.startForegroundService(context, intent)
                 return
@@ -146,10 +170,10 @@ class DownloadRepository(
                 // Safe fallback in test environments or if ForegroundServiceStartNotAllowedException is thrown
             }
         }
-        downloaderEngine.startDownload(url, targetDir, forceSequentialMode)
+        downloaderEngine.startDownload(url, targetDir, forceSequentialMode, allowDangerousBypass)
     }
 
-    fun pauseDownload() {
+    override fun pauseDownload() {
         downloaderEngine.pauseDownload()
         try {
             val intent = Intent(context, DownloadForegroundService::class.java).apply {

@@ -137,6 +137,72 @@ open class MainViewModel(
     val historyItems: StateFlow<List<DownloadHistoryItem>> = repository?.historyItems ?: MutableStateFlow(emptyList())
     val workerTestStatus: StateFlow<com.dualboost.downloader.data.WorkerTestStatus> = repository?.workerTestStatus ?: MutableStateFlow(com.dualboost.downloader.data.WorkerTestStatus.Idle)
 
+    val queueItems: StateFlow<List<com.dualboost.downloader.data.QueueItem>> =
+        repository?.queueRepository?.queueItems ?: MutableStateFlow(emptyList())
+
+    val isQueueActive: StateFlow<Boolean> =
+        repository?.queueCoordinator?.isQueueActive ?: MutableStateFlow(false)
+
+    val maxConcurrentDownloads: StateFlow<Int> =
+        repository?.queueCoordinator?.maxConcurrentDownloads ?: MutableStateFlow(1)
+
+    val detectedMedia: StateFlow<List<com.dualboost.downloader.sniffer.DetectedMediaItem>> =
+        repository?.mediaSnifferEngine?.detectedMedia ?: MutableStateFlow(emptyList())
+
+    fun enqueueDownload(
+        url: String,
+        fileName: String? = null,
+        isSequentialMode: Boolean = true
+    ) {
+        val targetUrl = url.trim()
+        if (targetUrl.isBlank()) return
+        val cleanName = fileName ?: targetUrl.substringBefore('?').substringAfterLast('/')
+            .takeIf { it.isNotBlank() } ?: "download_${System.currentTimeMillis()}"
+
+        val item = com.dualboost.downloader.data.QueueItem(
+            url = targetUrl,
+            fileName = cleanName,
+            isSequentialMode = isSequentialMode
+        )
+        repository?.queueRepository?.enqueue(item)
+    }
+
+    fun removeQueueItem(id: String) {
+        repository?.queueRepository?.removeItem(id)
+    }
+
+    fun reorderQueue(fromIndex: Int, toIndex: Int) {
+        repository?.queueRepository?.reorder(fromIndex, toIndex)
+    }
+
+    fun clearCompletedQueue() {
+        repository?.queueRepository?.clearCompleted()
+    }
+
+    fun startQueue() {
+        repository?.queueCoordinator?.startQueue()
+    }
+
+    fun pauseQueue() {
+        repository?.queueCoordinator?.pauseQueue()
+    }
+
+    fun setMaxConcurrentDownloads(limit: Int) {
+        repository?.queueCoordinator?.setMaxConcurrentDownloads(limit)
+    }
+
+    fun inspectBrowserRequest(
+        url: String,
+        headers: Map<String, String> = emptyMap(),
+        mimeType: String? = null
+    ): com.dualboost.downloader.sniffer.DetectedMediaItem? {
+        return repository?.mediaSnifferEngine?.inspectRequest(url, headers, mimeType)
+    }
+
+    fun clearDetectedMedia() {
+        repository?.mediaSnifferEngine?.clear()
+    }
+
     fun getSignalLabel(level: Int): String {
         return when (level) {
             4 -> "Excellent • 4/4 bars"
@@ -243,6 +309,20 @@ open class MainViewModel(
                 _urlInput.value = targetUrl
             }
             repository?.startDownload(targetUrl, forceSequentialMode = _isSequentialStreamRequested.value)
+        }
+    }
+
+    fun startDownloadWithBypass(customUrl: String? = null) {
+        val targetUrl = (customUrl ?: _urlInput.value).trim()
+        if (targetUrl.isNotBlank()) {
+            if (_urlInput.value != targetUrl) {
+                _urlInput.value = targetUrl
+            }
+            repository?.startDownload(
+                url = targetUrl,
+                forceSequentialMode = _isSequentialStreamRequested.value,
+                allowDangerousBypass = true
+            )
         }
     }
 

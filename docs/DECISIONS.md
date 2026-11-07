@@ -1378,3 +1378,57 @@ Implement **Sequential Chunking & Instant Video Stream Preview**:
 - Allows users to start playing 4K videos within 1–2 seconds of starting downloads on aggregated Wi-Fi + 5G connections.
 - Zero battery overhead from internal media decoding or ExoPlayer APK bloat; delegates directly to hardware decoders in external players.
 - Completely seamless fallback to pure max-throughput chunking for non-video files or when sequential streaming is explicitly disabled.
+
+---
+
+## ADR-037: Multi-Download Queue & In-App Browser Media Sniffer
+
+### Status
+Accepted
+
+### Context
+Users downloading series, seasons, or multiple media assets from streaming sites (like `moviesleech.media`) encounter aggressive popup ads, timer redirects, and click-jack traps. Attempting to copy links manually on mobile screens is cumbersome. Additionally, users need to queue multiple files for overnight unattended downloading.
+
+### Decision
+1. **Multi-Download Queue Architecture**:
+   - `DownloadQueueRepository` manages a persistent atomic JSON FIFO queue (`queue.json`).
+   - `QueueCoordinator` coordinates download lifecycles, claiming the next `QUEUED` item when an active download reaches terminal status (`COMPLETED`, `FAILED`, or `THREAT_DETECTED`).
+   - Supports concurrency bounds, drag-and-drop reordering, and resilient auto-advance without stalling the entire queue.
+2. **In-App Browser & Floating Media Sniffer**:
+   - Sandboxed Android `WebView` (`InAppBrowserSheet`) suppressing popups, multi-window requests, and ad redirect loops.
+   - `MediaSnifferEngine` scans URL requests and content headers in real-time, catching direct video streams (`.mkv`, `.mp4`, etc.) and surfacing an interactive pill banner with `[ ⚡ Boost Download ]` and `[ ➕ Add to Queue ]`.
+
+### Consequences
+- Completely eliminates user frustration from click-jack traps and ad loops on pirate streaming websites.
+- Enables autonomous overnight batch downloading across Wi-Fi and 5G.
+
+---
+
+## ADR-038: Hybrid 3-Stage Antivirus & Threat Guard Architecture
+
+### Status
+Accepted
+
+### Context
+Media portals often disguise malicious APK installers and trojans as video downloads (e.g. `Movie_Update.mkv.apk`, fake `application/vnd.android.package-archive` MIME types, or `PK\x03\x04` ZIP/APK binaries returned for `.mp4` URLs). Downloading and executing these files compromises the user's Android device. The application must detect and block these threats before they touch disk.
+
+### Decision
+Implement a **Zero-Overhead Hybrid 3-Stage Antivirus & Threat Guard System**:
+1. **Stage 1: Pre-Flight Heuristic & Reputation Inspection**:
+   - `ThreatDetectionEngine` inspects the target URL, candidate file names, and HTTP response headers before any payload worker starts.
+   - Detects double extension traps (`.mkv.apk`, `.mp4.apk`), executable extensions (`.apk`, `.exe`, `.bat`, `.cmd`, `.sh`, `.dex`, `.vbs`, etc.), malicious MIME types (`application/vnd.android.package-archive`, `application/x-msdownload`), and known malicious ad redirect domains.
+   - Optional `CloudThreatScanner` queries Google Safe Browsing API with pure Kotlin zero-dependency JSON templates and graceful offline fallback.
+2. **Stage 2: Magic Byte Stream Verification**:
+   - Before writing initial bytes of chunk 0 or single-stream payload to disk, the engine inspects the first 4-100 bytes for binary file signatures.
+   - Blocks files claiming media extensions (`.mp4`, `.mkv`, `.avi`, etc.) whose header starts with `PK\x03\x04` (ZIP/APK package) or `MZ` (Windows PE executable).
+3. **Stage 3: Fail-Closed Quarantine & User Override**:
+   - Throws `ThreatDetectedException`, terminating workers and cancelling in-flight HTTP calls immediately.
+   - Invokes `discardDownload(targetDir, fileName)` to scrub any partial bytes or metadata from disk.
+   - Transitions to `DownloadState.ThreatDetected` and presents a high-visibility `SecurityThreatDialog` with `[ 🛡️ Safe Discard ]` and an advanced `[ ⚠️ Download Anyway (At your own risk) ]` override (`allowDangerousBypass`).
+   - Overnight queues mark items as `QueueItemStatus.THREAT_DETECTED` with threat descriptions and auto-advance to subsequent clean items.
+   - Configurable via `SecurityPreferences` with an in-app toggle in `SettingsBottomSheet`.
+
+### Consequences
+- Zero-latency protection without heavy third-party antivirus C++ libraries or commercial SDK bloat.
+- Guarantees malicious files cannot write disguised executables to user storage.
+- Preserves overnight download workflows without stalling queues on malicious links.

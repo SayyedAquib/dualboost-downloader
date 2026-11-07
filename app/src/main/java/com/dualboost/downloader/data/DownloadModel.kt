@@ -88,6 +88,11 @@ sealed class DownloadState {
     ) : DownloadState()
     data class AutoRecovering(val message: String, val retryAttempt: Int) : DownloadState()
     data class Failed(val error: String, val url: String = "") : DownloadState()
+    data class ThreatDetected(
+        val threat: com.dualboost.downloader.security.ThreatAssessment,
+        val url: String,
+        val suggestedFilename: String
+    ) : DownloadState()
     data class Paused(
         val fileName: String = "",
         val filePath: String = "",

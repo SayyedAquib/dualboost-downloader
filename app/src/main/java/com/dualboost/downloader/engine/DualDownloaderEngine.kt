@@ -17,6 +17,7 @@ import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.data.NetworkInterfaceType
 import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.network.NetworkProvider
+import com.dualboost.downloader.security.SecurityPreferences
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,11 +42,19 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
 
+class ThreatDetectedException(
+    val threat: com.dualboost.downloader.security.ThreatAssessment,
+    val url: String,
+    val fileName: String
+) : IOException("Threat detected: ${threat.description}")
+
 class DualDownloaderEngine(
     private val context: Context,
     private val networkManager: NetworkProvider,
     historyRepositoryOverride: com.dualboost.downloader.data.DownloadHistoryRepository? = null,
-    thermalStatusProviderOverride: com.dualboost.downloader.thermal.ThermalStatusProvider? = null
+    thermalStatusProviderOverride: com.dualboost.downloader.thermal.ThermalStatusProvider? = null,
+    threatEngineOverride: com.dualboost.downloader.security.ThreatDetectionEngine? = null,
+    cloudScannerOverride: com.dualboost.downloader.security.CloudThreatScanner? = null
 ) {
     val historyRepository: com.dualboost.downloader.data.DownloadHistoryRepository by lazy {
         historyRepositoryOverride ?: com.dualboost.downloader.data.DownloadHistoryRepository(context)
@@ -54,6 +63,12 @@ class DualDownloaderEngine(
     val thermalStatusProvider: com.dualboost.downloader.thermal.ThermalStatusProvider by lazy {
         thermalStatusProviderOverride ?: com.dualboost.downloader.thermal.SystemThermalStatusProvider(context)
     }
+
+    val threatEngine: com.dualboost.downloader.security.ThreatDetectionEngine by lazy {
+        threatEngineOverride ?: com.dualboost.downloader.security.ThreatDetectionEngine()
+    }
+
+    val cloudScanner: com.dualboost.downloader.security.CloudThreatScanner? = cloudScannerOverride
 
     private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
@@ -451,12 +466,13 @@ class DualDownloaderEngine(
     fun startDownload(
         url: String,
         targetDir: File = getDefaultDownloadDir(),
-        forceSequentialMode: Boolean? = null
+        forceSequentialMode: Boolean? = null,
+        allowDangerousBypass: Boolean = false
     ) {
         val rawTrimmed = url.trim()
         val parsedHttpUrl = runCatching { rawTrimmed.toHttpUrlOrNull() }.getOrNull()
         val host = parsedHttpUrl?.host?.lowercase(Locale.ROOT)
-        val isLoopbackOrLocal = host == "localhost" || host == "127.0.0.1" || host == "::1" || host?.endsWith(".local") == true
+        val isLoopbackOrLocal = host == "localhost" || host == "127.0.0.1" || host == "::1" || host?.endsWith(".local") == true || runCatching { java.net.InetAddress.getByName(host).isLoopbackAddress }.getOrDefault(false)
         val sanitizedUrl = if (rawTrimmed.startsWith("http://", ignoreCase = true) && !isLoopbackOrLocal) {
             rawTrimmed.replaceFirst("http://", "https://", ignoreCase = true)
         } else {
@@ -478,7 +494,11 @@ class DualDownloaderEngine(
             try {
                 networkManager.acquireCellularKeepAlive()
                 thermalStatusProvider.startListening()
-                executeDownload(sanitizedUrl, targetDir, forceSequentialMode)
+                executeDownload(sanitizedUrl, targetDir, forceSequentialMode, allowDangerousBypass)
+            } catch (e: ThreatDetectedException) {
+                Log.w(TAG, "Threat detected during download: ${e.threat.description}")
+                discardDownload(targetDir, e.fileName)
+                _downloadState.value = DownloadState.ThreatDetected(e.threat, e.url, e.fileName)
             } catch (e: CancellationException) {
                 if (!isDiscarding.get()) {
                     val lastState = _downloadState.value
@@ -646,13 +666,32 @@ class DualDownloaderEngine(
     private suspend fun executeDownload(
         url: String,
         targetDir: File,
-        forceSequentialMode: Boolean? = null
+        forceSequentialMode: Boolean? = null,
+        allowDangerousBypass: Boolean = false
     ) {
+        var fileName = extractFileName(url)
+        val shouldInspectThreats = !allowDangerousBypass && SecurityPreferences.isThreatGuardEnabled(context)
+
+        // Pre-flight Threat Assessment
+        if (shouldInspectThreats) {
+            val preFlightAssessment = threatEngine.inspectUrlAndHeaders(url, emptyMap(), userReportedName = fileName)
+            if (preFlightAssessment.isThreat) {
+                _downloadState.value = DownloadState.ThreatDetected(preFlightAssessment, url, fileName)
+                return
+            }
+            if (cloudScanner != null) {
+                val cloudAssessment = cloudScanner.checkUrlReputation(url)
+                if (cloudAssessment.isThreat) {
+                    _downloadState.value = DownloadState.ThreatDetected(cloudAssessment, url, fileName)
+                    return
+                }
+            }
+        }
+
         _downloadState.value = DownloadState.Probing("Connecting and probing server capabilities...")
 
         var contentLength: Long = -1L
         var supportsRanges = false
-        var fileName = extractFileName(url)
         var etag: String? = null
         var lastModified: String? = null
         var isDesktopSpoofed = false
@@ -703,6 +742,20 @@ class DualDownloaderEngine(
                     response.header("Content-Disposition")?.let { disposition ->
                         extractFileNameFromDisposition(disposition)?.let { fileName = it }
                     }
+
+                    if (shouldInspectThreats) {
+                        val probeHeaders = mutableMapOf<String, String>()
+                        for (i in 0 until response.headers.size) {
+                            probeHeaders[response.headers.name(i)] = response.headers.value(i)
+                        }
+                        response.header("Content-Type")?.let { probeHeaders["Content-Type"] = it }
+                        response.header("Content-Disposition")?.let { probeHeaders["Content-Disposition"] = it }
+                        val headerAssessment = threatEngine.inspectUrlAndHeaders(effectiveUrl, probeHeaders, userReportedName = fileName)
+                        if (headerAssessment.isThreat) {
+                            _downloadState.value = DownloadState.ThreatDetected(headerAssessment, url, fileName)
+                            return
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -741,6 +794,20 @@ class DualDownloaderEngine(
                         if (lastModified == null) response.header("Last-Modified")?.let { lastModified = it.trim() }
                         response.header("Content-Disposition")?.let { disposition ->
                             extractFileNameFromDisposition(disposition)?.let { fileName = it }
+                        }
+                    }
+
+                    if (shouldInspectThreats && (response.code == 200 || response.code == 206)) {
+                        val probeHeaders = mutableMapOf<String, String>()
+                        for (i in 0 until response.headers.size) {
+                            probeHeaders[response.headers.name(i)] = response.headers.value(i)
+                        }
+                        response.header("Content-Type")?.let { probeHeaders["Content-Type"] = it }
+                        response.header("Content-Disposition")?.let { probeHeaders["Content-Disposition"] = it }
+                        val headerAssessment = threatEngine.inspectUrlAndHeaders(effectiveUrl, probeHeaders, userReportedName = fileName)
+                        if (headerAssessment.isThreat) {
+                            _downloadState.value = DownloadState.ThreatDetected(headerAssessment, url, fileName)
+                            return
                         }
                     }
                 }
@@ -890,7 +957,7 @@ class DualDownloaderEngine(
 
         if (!supportsRanges || contentLength <= 0) {
             Log.w(TAG, "Server lacks range support or length is unknown. Falling back to single-stream download.")
-            executeSingleStreamDownload(url, outputFile, contentLength, isDesktopSpoofed, isCloudSlicerActive)
+            executeSingleStreamDownload(url, outputFile, contentLength, isDesktopSpoofed, isCloudSlicerActive, allowDangerousBypass)
             return
         }
 
@@ -1337,6 +1404,14 @@ class DualDownloaderEngine(
                                         bytesRead = inputStream.read(buffer, 0, toRead)
                                         if (bytesRead == -1) break
 
+                                        if (streamOffset == 0L && bytesRead >= 4 && !allowDangerousBypass && SecurityPreferences.isThreatGuardEnabled(context)) {
+                                            val ext = fileName.substringAfterLast('.', "")
+                                            val magicAssessment = threatEngine.inspectMagicBytes(buffer, ext)
+                                            if (magicAssessment.isThreat) {
+                                                throw ThreatDetectedException(magicAssessment, url, fileName)
+                                            }
+                                        }
+
                                         fileWriteMutex.withLock {
                                             sharedRandomAccessFile.seek(streamOffset)
                                             sharedRandomAccessFile.write(buffer, 0, bytesRead)
@@ -1386,6 +1461,7 @@ class DualDownloaderEngine(
                         }
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
+                        if (e is ThreatDetectedException) throw e
                         Log.w(TAG, "Batch ${firstChunk.index}-${lastChunk.index} failed on $interfaceType: ${sanitizeLogMessage(e.message)}")
                         if (interfaceType == NetworkInterfaceType.WIFI) {
                             wifiFailures.incrementAndGet()
@@ -1531,7 +1607,8 @@ class DualDownloaderEngine(
         outputFile: File,
         totalLength: Long,
         isDesktopSpoofed: Boolean = false,
-        isCloudSlicerActive: Boolean = false
+        isCloudSlicerActive: Boolean = false,
+        allowDangerousBypass: Boolean = false
     ) {
         if (totalLength > 0) {
             checkAvailableStorage(outputFile.parentFile ?: getDefaultDownloadDir(), totalLength, outputFile)
@@ -1573,6 +1650,14 @@ class DualDownloaderEngine(
                     val inputStream = body.byteStream()
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                         if (!currentCoroutineContext().isActive) throw CancellationException("Download cancelled")
+
+                        if (totalRead == 0L && bytesRead >= 4 && !allowDangerousBypass && SecurityPreferences.isThreatGuardEnabled(context)) {
+                            val ext = outputFile.name.substringAfterLast('.', "")
+                            val magicAssessment = threatEngine.inspectMagicBytes(buffer, ext)
+                            if (magicAssessment.isThreat) {
+                                throw ThreatDetectedException(magicAssessment, url, outputFile.name)
+                            }
+                        }
 
                         output.write(buffer, 0, bytesRead)
                         totalRead += bytesRead

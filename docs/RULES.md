@@ -148,5 +148,11 @@ To prevent inverted contrast regressions (e.g. black-on-dark in light mode, whit
 - **Universal Translucent Tint Pattern**: When designing colored accent badges or circular hero icons over surfaces, NEVER mix a container token with an accent tint. ALWAYS use `brandColor.copy(alpha = 0.14f)` for the background and `brandColor` for the foreground icon/text. This mathematically guarantees > 4.5:1 WCAG contrast across both Light and Dark themes.
 - **Theme-Aware Color Literals**: NEVER use static hex color literals without branching on `isSystemInDarkTheme()`.
 
+## Antivirus & Threat Guard Engineering Rules (`ADR-038`)
+- **Fail-Closed Inspection**: All threat detection checks (`inspectUrlAndHeaders`, `inspectMagicBytes`) must execute before byte streams are persisted to disk storage.
+- **Immediate Disk Scrubbing**: When a threat is flagged, the engine must immediately abort network calls, invoke `discardDownload()`, and delete any partial bytes or metadata sidecars.
+- **Zero Third-Party Antivirus Bloat**: Local threat detection must remain 100% pure Kotlin with zero external native C++ engines or tracking SDKs.
+- **Queue Non-Stalling Guarantee**: Overnight queues must never hang on a malicious file. When a threat is detected, update item status to `QueueItemStatus.THREAT_DETECTED` and auto-advance to the next queued file.
+
 
 

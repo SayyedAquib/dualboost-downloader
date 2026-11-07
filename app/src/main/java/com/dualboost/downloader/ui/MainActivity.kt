@@ -1696,6 +1696,61 @@ fun MainScreen(
                         }
                     }
 
+                    is DownloadState.ThreatDetected -> {
+                        Card(
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ),
+                            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.error)
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Security,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = "🛑 Threat Blocked",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = state.threat.description,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Button(
+                                        onClick = { viewModel.resetToIdle() },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.error
+                                        )
+                                    ) {
+                                        Text("Safe Discard")
+                                    }
+                                    OutlinedButton(
+                                        onClick = { viewModel.startDownloadWithBypass(state.url) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Override & Download")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     is DownloadState.Failed -> {
                         Card(
                             shape = RoundedCornerShape(24.dp),
@@ -2007,6 +2062,16 @@ fun MainScreen(
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             shape = RoundedCornerShape(24.dp)
+        )
+    }
+
+    val currentThreatState = downloadState as? DownloadState.ThreatDetected
+    if (currentThreatState != null) {
+        SecurityThreatDialog(
+            threatState = currentThreatState,
+            onSafeDiscard = { viewModel.resetToIdle() },
+            onOverrideDownload = { url -> viewModel.startDownloadWithBypass(url) },
+            onDismiss = { viewModel.resetToIdle() }
         )
     }
 
