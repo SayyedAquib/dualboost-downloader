@@ -229,13 +229,20 @@ open class MainViewModel(
         _selectedPreset.value = null
     }
 
+    private val _isSequentialStreamRequested = MutableStateFlow<Boolean?>(null)
+    val isSequentialStreamRequested: StateFlow<Boolean?> = _isSequentialStreamRequested.asStateFlow()
+
+    fun setSequentialStreamMode(enabled: Boolean?) {
+        _isSequentialStreamRequested.value = enabled
+    }
+
     open fun startDownload(customUrl: String? = null) {
         val targetUrl = (customUrl ?: _urlInput.value).trim()
         if (targetUrl.isNotBlank()) {
             if (_urlInput.value != targetUrl) {
                 _urlInput.value = targetUrl
             }
-            repository?.startDownload(targetUrl)
+            repository?.startDownload(targetUrl, forceSequentialMode = _isSequentialStreamRequested.value)
         }
     }
 

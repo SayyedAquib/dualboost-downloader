@@ -126,12 +126,19 @@ class DownloadRepository(
         }
     }
 
-    fun startDownload(url: String, targetDir: File = downloaderEngine.getDefaultDownloadDir()) {
+    fun startDownload(
+        url: String,
+        targetDir: File = downloaderEngine.getDefaultDownloadDir(),
+        forceSequentialMode: Boolean? = null
+    ) {
         if (isServiceEnabled) {
             try {
                 val intent = Intent(context, DownloadForegroundService::class.java).apply {
                     action = DownloadForegroundService.ACTION_START_DOWNLOAD
                     putExtra(DownloadForegroundService.EXTRA_URL, url)
+                    if (forceSequentialMode != null) {
+                        putExtra(DownloadForegroundService.EXTRA_FORCE_SEQUENTIAL, forceSequentialMode)
+                    }
                 }
                 ContextCompat.startForegroundService(context, intent)
                 return
@@ -139,7 +146,7 @@ class DownloadRepository(
                 // Safe fallback in test environments or if ForegroundServiceStartNotAllowedException is thrown
             }
         }
-        downloaderEngine.startDownload(url, targetDir)
+        downloaderEngine.startDownload(url, targetDir, forceSequentialMode)
     }
 
     fun pauseDownload() {

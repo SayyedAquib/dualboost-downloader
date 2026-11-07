@@ -99,29 +99,24 @@ class DualDownloaderEngine(
         }
     }
 
+    internal fun isVideoFile(fileName: String): Boolean = Companion.isVideoFile(fileName)
+    internal fun isMp4File(fileName: String): Boolean = Companion.isMp4File(fileName)
+    internal fun calculateContiguousPlayableBytes(chunks: List<DownloadChunk>): Long = Companion.calculateContiguousPlayableBytes(chunks)
+    internal fun isDownloadPlayable(chunks: List<DownloadChunk>, totalBytes: Long, isMp4: Boolean): Boolean = Companion.isDownloadPlayable(chunks, totalBytes, isMp4)
+
+    internal fun claimSequentialPendingChunks(
+        pendingChunks: List<DownloadChunk>,
+        maxBatchCount: Int,
+        interfaceType: NetworkInterfaceType,
+        isSequentialMode: Boolean,
+        isMp4: Boolean = false
+    ): List<DownloadChunk> = Companion.claimSequentialPendingChunks(pendingChunks, maxBatchCount, interfaceType, isSequentialMode, isMp4)
+
     internal fun claimContiguousPendingChunks(
         pendingChunks: List<DownloadChunk>,
         maxBatchCount: Int,
         interfaceType: NetworkInterfaceType
-    ): List<DownloadChunk> {
-        val firstPendingIndex = pendingChunks.indexOfFirst { it.status == ChunkStatus.PENDING }
-        if (firstPendingIndex == -1) return emptyList()
-
-        val batch = mutableListOf<DownloadChunk>()
-        var currentIndex = firstPendingIndex
-        while (currentIndex < pendingChunks.size && batch.size < maxBatchCount) {
-            val chunk = pendingChunks[currentIndex]
-            if (chunk.status == ChunkStatus.PENDING) {
-                chunk.status = ChunkStatus.DOWNLOADING
-                chunk.assignedNetwork = interfaceType
-                batch.add(chunk)
-                currentIndex++
-            } else {
-                break
-            }
-        }
-        return batch
-    }
+    ): List<DownloadChunk> = Companion.claimContiguousPendingChunks(pendingChunks, maxBatchCount, interfaceType)
 
     internal fun findStragglerCandidate(
         chunks: List<DownloadChunk>,
@@ -453,7 +448,11 @@ class DualDownloaderEngine(
         }
     }
 
-    fun startDownload(url: String, targetDir: File = getDefaultDownloadDir()) {
+    fun startDownload(
+        url: String,
+        targetDir: File = getDefaultDownloadDir(),
+        forceSequentialMode: Boolean? = null
+    ) {
         val rawTrimmed = url.trim()
         val parsedHttpUrl = runCatching { rawTrimmed.toHttpUrlOrNull() }.getOrNull()
         val host = parsedHttpUrl?.host?.lowercase(Locale.ROOT)
@@ -479,7 +478,7 @@ class DualDownloaderEngine(
             try {
                 networkManager.acquireCellularKeepAlive()
                 thermalStatusProvider.startListening()
-                executeDownload(sanitizedUrl, targetDir)
+                executeDownload(sanitizedUrl, targetDir, forceSequentialMode)
             } catch (e: CancellationException) {
                 if (!isDiscarding.get()) {
                     val lastState = _downloadState.value
@@ -644,7 +643,11 @@ class DualDownloaderEngine(
         }
     }
 
-    private suspend fun executeDownload(url: String, targetDir: File) {
+    private suspend fun executeDownload(
+        url: String,
+        targetDir: File,
+        forceSequentialMode: Boolean? = null
+    ) {
         _downloadState.value = DownloadState.Probing("Connecting and probing server capabilities...")
 
         var contentLength: Long = -1L
@@ -875,6 +878,13 @@ class DualDownloaderEngine(
         fileName = outputFile.name
         currentOutputFile = outputFile
         currentUrl = url
+
+        val isSequential = forceSequentialMode ?: isVideoFile(fileName)
+        val isMp4 = isMp4File(fileName)
+        if (isSequential) {
+            Log.i(TAG, "Sequential video streaming mode active for: $fileName (isMp4=$isMp4)")
+        }
+
         val metaFile = getMetaFile(actualTargetDir, fileName)
         val startTime = System.currentTimeMillis()
 
@@ -969,6 +979,9 @@ class DualDownloaderEngine(
         val cellularDownloadedBytes = AtomicLong(0L)
 
         // Immediate initial Downloading state transition
+        val initialContiguous = if (isSequential) calculateContiguousPlayableBytes(chunks) else 0L
+        val initialPlayable = if (isSequential) isDownloadPlayable(chunks, contentLength, isMp4) else false
+
         _downloadState.value = DownloadState.Downloading(
             fileName = fileName,
             totalBytes = contentLength,
@@ -991,7 +1004,12 @@ class DualDownloaderEngine(
                 )
             },
             estimatedSecondsRemaining = null,
-            resumedBytes = resumedBytes
+            resumedBytes = resumedBytes,
+            isSequentialMode = isSequential,
+            contiguousPlayableBytes = initialContiguous,
+            isPlayable = initialPlayable,
+            filePath = outputFile.absolutePath,
+            contentUriString = null
         )
 
 
@@ -1048,6 +1066,9 @@ class DualDownloaderEngine(
                         )
                     }
 
+                    val contiguous = if (isSequential) calculateContiguousPlayableBytes(chunks) else 0L
+                    val playable = if (isSequential) isDownloadPlayable(chunks, contentLength, isMp4) else false
+
                     _downloadState.value = DownloadState.Downloading(
                         fileName = fileName,
                         totalBytes = contentLength,
@@ -1063,7 +1084,12 @@ class DualDownloaderEngine(
                         isCloudSlicerActive = isCloudSlicerActive,
                         chunkSnapshots = snapshots,
                         estimatedSecondsRemaining = etaSeconds,
-                        resumedBytes = resumedBytes
+                        resumedBytes = resumedBytes,
+                        isSequentialMode = isSequential,
+                        contiguousPlayableBytes = contiguous,
+                        isPlayable = playable,
+                        filePath = outputFile.absolutePath,
+                        contentUriString = null
                     )
                 }
             }
@@ -1226,7 +1252,7 @@ class DualDownloaderEngine(
                     val batchCount = calculateBatchSize(speed)
 
                     val chunkBatch: List<DownloadChunk> = queueMutex.withLock {
-                        claimContiguousPendingChunks(pendingChunks, batchCount, interfaceType)
+                        claimSequentialPendingChunks(pendingChunks, batchCount, interfaceType, isSequential, isMp4)
                     }
 
                     if (chunkBatch.isEmpty()) {
@@ -1568,6 +1594,10 @@ class DualDownloaderEngine(
                                 null
                             }
 
+                            val singleSequential = isVideoFile(outputFile.name)
+                            val singleThreshold = minOf(PLAYABLE_BUFFER_THRESHOLD_BYTES, maxOf(1024 * 1024L, (totalLength * 0.02).toLong()))
+                            val singlePlayable = singleSequential && totalRead >= singleThreshold
+
                             _downloadState.value = DownloadState.Downloading(
                                 fileName = outputFile.name,
                                 totalBytes = totalLength,
@@ -1582,7 +1612,12 @@ class DualDownloaderEngine(
                                 isDesktopSpoofed = isDesktopSpoofed,
                                 isCloudSlicerActive = isCloudSlicerActive,
                                 chunkSnapshots = emptyList(),
-                                estimatedSecondsRemaining = eta
+                                estimatedSecondsRemaining = eta,
+                                isSequentialMode = singleSequential,
+                                contiguousPlayableBytes = totalRead,
+                                isPlayable = singlePlayable,
+                                filePath = outputFile.absolutePath,
+                                contentUriString = null
                             )
                         }
                     }
@@ -1852,5 +1887,96 @@ class DualDownloaderEngine(
         private const val TAG = "DualDownloaderEngine"
         const val MOBILE_USER_AGENT = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.107 Mobile Safari/537.36"
         const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        val VIDEO_EXTENSIONS = setOf(
+            "mp4", "mkv", "webm", "mov", "avi", "ts", "m4v", "flv", "3gp", "wmv"
+        )
+        const val PLAYABLE_BUFFER_THRESHOLD_BYTES = 24 * 1024 * 1024L // 24 MB lead buffer
+
+        fun isVideoFile(fileName: String): Boolean {
+            val cleanName = fileName.substringBefore("?").trim()
+            val ext = cleanName.substringAfterLast('.', "").lowercase()
+            return ext in VIDEO_EXTENSIONS
+        }
+
+        fun isMp4File(fileName: String): Boolean {
+            val cleanName = fileName.substringBefore("?").trim().lowercase()
+            return cleanName.endsWith(".mp4") || cleanName.endsWith(".mov") || cleanName.endsWith(".m4v")
+        }
+
+        fun calculateContiguousPlayableBytes(chunks: List<DownloadChunk>): Long {
+            var contiguousBytes = 0L
+            for (chunk in chunks.sortedBy { it.index }) {
+                if (chunk.status == ChunkStatus.COMPLETED) {
+                    contiguousBytes += chunk.totalBytes
+                } else {
+                    break
+                }
+            }
+            return contiguousBytes
+        }
+
+        fun isDownloadPlayable(chunks: List<DownloadChunk>, totalBytes: Long, isMp4: Boolean): Boolean {
+            if (chunks.isEmpty() || totalBytes <= 0) return false
+            val contiguousBytes = calculateContiguousPlayableBytes(chunks)
+            val threshold = if (totalBytes > PLAYABLE_BUFFER_THRESHOLD_BYTES) {
+                PLAYABLE_BUFFER_THRESHOLD_BYTES
+            } else {
+                maxOf(1024 * 1024L, (totalBytes * 0.5).toLong())
+            }
+            if (contiguousBytes < threshold) return false
+            if (isMp4 && chunks.size > 1 && chunks.last().status != ChunkStatus.COMPLETED) {
+                return false
+            }
+            return true
+        }
+
+        fun claimSequentialPendingChunks(
+            pendingChunks: List<DownloadChunk>,
+            maxBatchCount: Int,
+            interfaceType: NetworkInterfaceType,
+            isSequentialMode: Boolean,
+            isMp4: Boolean = false
+        ): List<DownloadChunk> {
+            if (!isSequentialMode) {
+                return claimContiguousPendingChunks(pendingChunks, maxBatchCount, interfaceType)
+            }
+
+            // 1. Trailer moov atom priority for MP4 / MOV containers:
+            if (isMp4 && pendingChunks.size > 1 && pendingChunks[0].status != ChunkStatus.PENDING) {
+                val lastChunk = pendingChunks.last()
+                if (lastChunk.status == ChunkStatus.PENDING) {
+                    lastChunk.status = ChunkStatus.DOWNLOADING
+                    lastChunk.assignedNetwork = interfaceType
+                    return listOf(lastChunk)
+                }
+            }
+
+            // 2. Sequential head progression:
+            return claimContiguousPendingChunks(pendingChunks, maxBatchCount, interfaceType)
+        }
+
+        fun claimContiguousPendingChunks(
+            pendingChunks: List<DownloadChunk>,
+            maxBatchCount: Int,
+            interfaceType: NetworkInterfaceType
+        ): List<DownloadChunk> {
+            val firstPendingIndex = pendingChunks.indexOfFirst { it.status == ChunkStatus.PENDING }
+            if (firstPendingIndex == -1) return emptyList()
+
+            val batch = mutableListOf<DownloadChunk>()
+            var currentIndex = firstPendingIndex
+            while (currentIndex < pendingChunks.size && batch.size < maxBatchCount) {
+                val chunk = pendingChunks[currentIndex]
+                if (chunk.status == ChunkStatus.PENDING) {
+                    chunk.status = ChunkStatus.DOWNLOADING
+                    chunk.assignedNetwork = interfaceType
+                    batch.add(chunk)
+                    currentIndex++
+                } else {
+                    break
+                }
+            }
+            return batch
+        }
     }
 }

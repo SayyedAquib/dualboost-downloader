@@ -186,6 +186,53 @@ class UIFlowAndViewModelComprehensiveTest {
         assertTrue("Dual-channel boost must be preserved in completed state", completed.isDualChannel)
         assertTrue("Average speed must be preserved", completed.averageSpeedMBps > 30.0)
     }
+
+    @Test
+    fun testSequentialStreamMode_ViewModelToggleAndLifecycle() {
+        val viewModel = MainViewModel()
+
+        // Default state is null (Auto-detect)
+        assertNull("Default sequential mode must be null (auto-detect)", viewModel.isSequentialStreamRequested.value)
+
+        // Force enable
+        viewModel.setSequentialStreamMode(true)
+        assertEquals(true, viewModel.isSequentialStreamRequested.value)
+
+        // Force disable
+        viewModel.setSequentialStreamMode(false)
+        assertEquals(false, viewModel.isSequentialStreamRequested.value)
+
+        // Reset to auto
+        viewModel.setSequentialStreamMode(null)
+        assertNull(viewModel.isSequentialStreamRequested.value)
+    }
+
+    @Test
+    fun testDownloadStateDownloading_SequentialAndPlayableProperties() {
+        val downloadingStream = DownloadState.Downloading(
+            fileName = "Avatar.4K.mkv",
+            totalBytes = 10_000_000_000L,
+            downloadedBytes = 50_000_000L,
+            wifiDownloadedBytes = 30_000_000L,
+            cellularDownloadedBytes = 20_000_000L,
+            wifiSpeedMBps = 15.0,
+            cellularSpeedMBps = 10.0,
+            totalSpeedMBps = 25.0,
+            progressPercentage = 0.005f,
+            supportsRanges = true,
+            isSequentialMode = true,
+            contiguousPlayableBytes = 25_165_824L,
+            isPlayable = true,
+            filePath = "/storage/emulated/0/Download/Avatar.4K.mkv",
+            contentUriString = "content://media/external/downloads/42"
+        )
+
+        assertTrue(downloadingStream.isSequentialMode)
+        assertTrue(downloadingStream.isPlayable)
+        assertEquals(25_165_824L, downloadingStream.contiguousPlayableBytes)
+        assertEquals("/storage/emulated/0/Download/Avatar.4K.mkv", downloadingStream.filePath)
+        assertEquals("content://media/external/downloads/42", downloadingStream.contentUriString)
+    }
 }
 
 

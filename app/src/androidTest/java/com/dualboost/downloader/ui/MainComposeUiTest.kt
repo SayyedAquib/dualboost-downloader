@@ -357,4 +357,72 @@ class MainComposeUiTest {
         composeTestRule.waitForIdle()
         org.junit.Assert.assertTrue("onShareFile must be invoked on Share click", shareFileCalled)
     }
+
+    @Test
+    fun testSequentialStreamToggle_RendersAndInteractsInDownloadCard() {
+        val viewModel = MainViewModel(repository = null)
+        composeTestRule.setContent {
+            DualBoostTheme {
+                MainScreen(
+                    viewModel = viewModel,
+                    onOpenFile = { _, _ -> },
+                    onShareFile = { _, _ -> }
+                )
+            }
+        }
+
+        // Verify Sequential Stream Mode toggle is visible
+        composeTestRule.onNodeWithText("Sequential Stream Mode").performScrollTo().assertIsDisplayed()
+
+        // Type a video URL and verify auto-detection text
+        viewModel.onUrlChanged("https://example.com/videos/movie.mkv")
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Auto-detected video • Ready to stream").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun testDownloadingState_DisplaysSequentialStreamBadgeAndHeroWatchPreviewButton() {
+        var openFileInvoked = false
+        val sequentialDownloadingState = kotlinx.coroutines.flow.MutableStateFlow<DownloadState>(
+            DownloadState.Downloading(
+                fileName = "Matrix.Resurrections.4K.mkv",
+                filePath = "/storage/emulated/0/Download/Matrix.Resurrections.4K.mkv",
+                totalBytes = 15_000_000_000L,
+                downloadedBytes = 100_000_000L,
+                wifiDownloadedBytes = 60_000_000L,
+                cellularDownloadedBytes = 40_000_000L,
+                wifiSpeedMBps = 18.0,
+                cellularSpeedMBps = 12.0,
+                totalSpeedMBps = 30.0,
+                progressPercentage = 0.01f,
+                supportsRanges = true,
+                isSequentialMode = true,
+                contiguousPlayableBytes = 25_165_824L,
+                isPlayable = true,
+                contentUriString = "content://downloads/42"
+            )
+        )
+        val viewModel = MainViewModel(repository = null, downloadStateOverride = sequentialDownloadingState)
+        composeTestRule.setContent {
+            DualBoostTheme {
+                MainScreen(
+                    viewModel = viewModel,
+                    onOpenFile = { path, uri ->
+                        if (path == "/storage/emulated/0/Download/Matrix.Resurrections.4K.mkv") {
+                            openFileInvoked = true
+                        }
+                    },
+                    onShareFile = { _, _ -> }
+                )
+            }
+        }
+
+        // Verify Stream Ready badge is displayed
+        composeTestRule.onNodeWithText("⚡ Stream Ready • 24.00 MB buffered").performScrollTo().assertIsDisplayed()
+
+        // Verify Hero "Watch Preview" CTA is displayed and triggers onOpenFile
+        composeTestRule.onNodeWithText("Watch Preview (24.00 MB buffered)").performScrollTo().assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+        org.junit.Assert.assertTrue("onOpenFile must be invoked on Watch Preview click", openFileInvoked)
+    }
 }

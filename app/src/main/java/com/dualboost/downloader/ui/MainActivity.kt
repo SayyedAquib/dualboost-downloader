@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -38,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -178,8 +180,13 @@ class MainActivity : ComponentActivity() {
                     file
                 )
             }
+            val ext = filePath.substringAfterLast('.', "").lowercase()
+            val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+                ?: if (ext in listOf("mkv", "mp4", "webm", "mov", "avi", "ts", "m4v", "flv")) "video/*"
+                else (contentResolver.getType(uri) ?: "*/*")
+
             val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, contentResolver.getType(uri) ?: "*/*")
+                setDataAndType(uri, mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
@@ -299,6 +306,7 @@ fun MainScreen(
     val selectedPreset by viewModel.selectedPreset.collectAsState()
     val hasClipboardContent by viewModel.hasClipboardContent.collectAsState()
     val detectedClipboardUrl by viewModel.detectedClipboardUrl.collectAsState()
+    val isSequentialRequested by viewModel.isSequentialStreamRequested.collectAsState()
 
     // Haptic feedback on completion
     LaunchedEffect(downloadState) {
@@ -1061,6 +1069,68 @@ fun MainScreen(
                         )
                     }
 
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Sequential Video Stream Toggle
+                    val isAutoVideoUrl = isSequentialRequested == null && com.dualboost.downloader.engine.DualDownloaderEngine.isVideoFile(urlInput)
+                    val isSequentialActive = isSequentialRequested == true || (isSequentialRequested == null && isAutoVideoUrl)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.setSequentialStreamMode(!isSequentialActive)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PlayCircleOutline,
+                                contentDescription = null,
+                                tint = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Sequential Stream Mode",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                )
+                                val statusText = when {
+                                    isSequentialRequested == true -> "Forced on • Play video while downloading"
+                                    isSequentialRequested == false -> "Disabled • High-speed random chunking"
+                                    isAutoVideoUrl -> "Auto-detected video • Ready to stream"
+                                    else -> "Auto • Stream videos sequentially"
+                                }
+                                Text(
+                                    text = statusText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = isSequentialActive,
+                            onCheckedChange = { isChecked ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.setSequentialStreamMode(isChecked)
+                            },
+                            modifier = Modifier.scale(0.85f),
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                            )
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // Action Button
@@ -1253,6 +1323,35 @@ fun MainScreen(
                                                 )
                                             }
                                         }
+
+                                        if (state.isSequentialMode) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            val isReady = state.isPlayable
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = if (isReady) Color(0xFF00E676).copy(alpha = 0.15f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
+                                                border = BorderStroke(1.dp, if (isReady) Color(0xFF00E676).copy(alpha = 0.6f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f))
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (isReady) Icons.Rounded.PlayCircle else Icons.Rounded.PlayArrow,
+                                                        contentDescription = null,
+                                                        tint = if (isReady) Color(0xFF00E676) else MaterialTheme.colorScheme.onSecondaryContainer,
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = if (isReady) "⚡ Stream Ready • ${formatBytes(state.contiguousPlayableBytes)} buffered"
+                                                               else "⚡ Buffering Stream • ${formatBytes(state.contiguousPlayableBytes)} / 24 MB",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                        color = if (isReady) Color(0xFF00E676) else MaterialTheme.colorScheme.onSecondaryContainer
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
@@ -1402,6 +1501,38 @@ fun MainScreen(
                                 )
 
                                 Spacer(modifier = Modifier.height(18.dp))
+
+                                // Stream Preview Hero Button
+                                if (state.isPlayable) {
+                                    Button(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onOpenFile(state.filePath, state.contentUriString)
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(52.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF00E676),
+                                            contentColor = Color(0xFF121212)
+                                        )
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.PlayArrow,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Watch Preview (${formatBytes(state.contiguousPlayableBytes)} buffered)",
+                                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                }
 
                                 // Controls (Separate Pause and Cancel Buttons)
                                 Row(

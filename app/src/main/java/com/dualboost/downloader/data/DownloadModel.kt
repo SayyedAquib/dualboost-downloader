@@ -65,7 +65,12 @@ sealed class DownloadState {
         val isCloudSlicerActive: Boolean = false,
         val chunkSnapshots: List<ChunkSnapshot> = emptyList(),
         val estimatedSecondsRemaining: Long? = null,
-        val resumedBytes: Long = 0L
+        val resumedBytes: Long = 0L,
+        val isSequentialMode: Boolean = false,
+        val contiguousPlayableBytes: Long = 0L,
+        val isPlayable: Boolean = false,
+        val filePath: String = "",
+        val contentUriString: String? = null
     ) : DownloadState() {
         val wifiSpeedMbps: Double get() = wifiSpeedMBps
         val cellularSpeedMbps: Double get() = cellularSpeedMBps

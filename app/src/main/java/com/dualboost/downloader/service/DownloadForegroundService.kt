@@ -55,13 +55,17 @@ class DownloadForegroundService : Service() {
         val action = intent?.action
         if (action == ACTION_START_DOWNLOAD || action == ACTION_RESUME_DOWNLOAD) {
             val url = intent?.getStringExtra(EXTRA_URL)
+            val forceSeq = if (intent?.hasExtra(EXTRA_FORCE_SEQUENTIAL) == true) {
+                intent.getBooleanExtra(EXTRA_FORCE_SEQUENTIAL, false)
+            } else null
+
             networkManager.acquireCellularKeepAlive()
             acquireWakeLock()
             startForegroundNotification("Initializing download...")
             val currentState = downloaderEngine.downloadState.value
             val targetUrl = url ?: (currentState as? DownloadState.Paused)?.url
             if (!targetUrl.isNullOrBlank() && currentState !is DownloadState.Downloading && currentState !is DownloadState.Probing) {
-                downloaderEngine.startDownload(targetUrl)
+                downloaderEngine.startDownload(targetUrl, forceSequentialMode = forceSeq)
             }
         } else if (action == ACTION_PAUSE_DOWNLOAD) {
             val currentState = downloaderEngine.downloadState.value
@@ -139,11 +143,22 @@ class DownloadForegroundService : Service() {
                     is DownloadState.Downloading -> {
                         if (now - lastNotificationTime >= 1000L) {
                             lastNotificationTime = now
+                            val previewPending = if (state.isPlayable && state.filePath.isNotBlank()) {
+                                createPreviewPendingIntent(state.filePath)
+                            } else null
+
+                            val notificationTitle = if (state.isPlayable) {
+                                "▶ Watch Preview: ${state.fileName}"
+                            } else {
+                                "Downloading: ${state.fileName}"
+                            }
+
                             updateNotification(
-                                title = "Downloading: ${state.fileName}",
+                                title = notificationTitle,
                                 content = "Wi-Fi: ${com.dualboost.downloader.data.formatSpeed(state.wifiSpeedMBps)} | 5G: ${com.dualboost.downloader.data.formatSpeed(state.cellularSpeedMBps)} (Total: ${com.dualboost.downloader.data.formatSpeed(state.totalSpeedMBps)})",
                                 progress = (state.progressPercentage * 100).toInt(),
-                                indeterminate = false
+                                indeterminate = false,
+                                previewIntent = previewPending
                             )
                         }
                     }
@@ -231,10 +246,45 @@ class DownloadForegroundService : Service() {
         progress: Int,
         indeterminate: Boolean,
         isPaused: Boolean = false,
-        canControl: Boolean = true
+        canControl: Boolean = true,
+        previewIntent: PendingIntent? = null
     ) {
-        val notification = buildNotification(title, content, progress, indeterminate, isPaused, canControl)
+        val notification = buildNotification(title, content, progress, indeterminate, isPaused, canControl, previewIntent)
         notificationManager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun createPreviewPendingIntent(filePath: String): PendingIntent? {
+        return try {
+            val file = java.io.File(filePath)
+            if (!file.exists()) return null
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.fileprovider",
+                file
+            )
+            val ext = filePath.substringAfterLast('.', "").lowercase()
+            val mimeType = when (ext) {
+                "mp4", "m4v" -> "video/mp4"
+                "mkv" -> "video/x-matroska"
+                "webm" -> "video/webm"
+                "mov" -> "video/quicktime"
+                "avi" -> "video/x-msvideo"
+                "ts" -> "video/mp2t"
+                else -> "video/*"
+            }
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            PendingIntent.getActivity(
+                this,
+                4,
+                Intent.createChooser(viewIntent, "Watch Video Stream"),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun buildNotification(
@@ -243,7 +293,8 @@ class DownloadForegroundService : Service() {
         progress: Int,
         indeterminate: Boolean,
         isPaused: Boolean = false,
-        canControl: Boolean = true
+        canControl: Boolean = true,
+        previewIntent: PendingIntent? = null
     ): android.app.Notification {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
@@ -263,6 +314,10 @@ class DownloadForegroundService : Service() {
             )
 
         if (canControl) {
+            if (previewIntent != null) {
+                builder.addAction(android.R.drawable.ic_media_play, "Watch", previewIntent)
+            }
+
             if (isPaused) {
                 val resumeIntent = Intent(this, DownloadForegroundService::class.java).apply {
                     action = ACTION_RESUME_DOWNLOAD
@@ -345,6 +400,7 @@ class DownloadForegroundService : Service() {
         const val ACTION_RESUME_DOWNLOAD = "com.dualboost.ACTION_RESUME_DOWNLOAD"
         const val ACTION_DISCARD_DOWNLOAD = "com.dualboost.ACTION_DISCARD_DOWNLOAD"
         const val EXTRA_URL = "extra_download_url"
+        const val EXTRA_FORCE_SEQUENTIAL = "extra_force_sequential"
     }
 }
 

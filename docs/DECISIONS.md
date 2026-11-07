@@ -1346,3 +1346,35 @@ Implement an adaptive hybrid work-stealing engine with three core architectural 
 - Maximizes aggregate throughput on asymmetric connections by keeping ultra-fast 5G pipelines continuously filled with 8-16 MB request spans.
 - Eliminates the tail straggler problem completely: fast workers rescue slow lagging chunks at the end of downloads.
 - Retains 100% backward compatibility with existing 4 MB metadata sidecars and pause/resume logic.
+
+
+---
+
+## ADR-036: Sequential Chunking & Video Stream Preview Architecture
+
+### Status
+Accepted
+
+### Context
+Users downloading large media files (such as 4K HDR movies, 10–25 GB `.mkv` and `.mp4` containers) on physical devices (Google Pixel 9) previously had to wait for 100% download completion before opening the media in video players. In previous iterations, DualBoost used dynamic work-stealing chunking that optimized purely for raw parallel throughput, leaving random unbuffered gaps throughout the file.
+
+### Decision
+Implement **Sequential Chunking & Instant Video Stream Preview**:
+1. **Automated & Manual Stream Activation**:
+   - `DualDownloaderEngine.isVideoFile(fileName)` automatically identifies common video containers (`.mkv`, `.mp4`, `.webm`, `.mov`, `.avi`, `.ts`, `.m4v`, `.flv`, `.3gp`, `.wmv`).
+   - The UI includes a reactive toggle in the New Download card ("Sequential Stream Mode") with real-time URL auto-detection badges.
+2. **Head/Tail Chunk Prioritization**:
+   - In sequential mode, workers claim contiguous chunks strictly from byte 0 forward (`calculateContiguousPlayableBytes(chunks)`).
+   - For MP4/MOV containers, `claimSequentialPendingChunks` prioritizes chunk 0 and the final EOF chunk (where the `moov` index atom resides if fast-start was not applied) before continuing linear progression.
+3. **Smart Buffer Readiness Threshold**:
+   - Destination files are pre-allocated upfront on disk via `RandomAccessFile.setLength(totalBytes)`.
+   - Once contiguous buffered bytes reach 24 MB (`PLAYABLE_BUFFER_THRESHOLD_BYTES`) (or 50% for files <= 24 MB), `DownloadState.Downloading` sets `isPlayable = true`.
+4. **Native Zero-Bloat Playback Affordance**:
+   - In-app hero CTA: `[ ▶ Watch Preview (X MB buffered) ]` appears directly in the active download card.
+   - Ongoing system notification: `DownloadForegroundService` adds an interactive `[ ▶ Watch ]` action.
+   - Triggers `Intent.ACTION_VIEW` via Android's native `FileProvider` with appropriate video MIME types, handing playback directly to hardware-accelerated external media players (VLC, MX Player, Google Photos/Files) with zero additional APK dependency bloat.
+
+### Consequences
+- Allows users to start playing 4K videos within 1–2 seconds of starting downloads on aggregated Wi-Fi + 5G connections.
+- Zero battery overhead from internal media decoding or ExoPlayer APK bloat; delegates directly to hardware decoders in external players.
+- Completely seamless fallback to pure max-throughput chunking for non-video files or when sequential streaming is explicitly disabled.
