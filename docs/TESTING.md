@@ -10,7 +10,38 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (300 active tests across 45 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (325 active tests across 55 test suites, 100% passing):
+
+- **StorageDestinationTest** (6 tests):
+  - `testDestination_PresetsArePopulated`: Verifies that `StorageDestination.PRESETS` contains all 3 built-in presets (Standard, DualBoost, Media) with accurate IDs and display names.
+  - `testDestination_DefaultResolvesBaseDirectory`: Validates public Downloads root resolution.
+  - `testDestination_SubfolderResolvesCorrectChildPath`: Tests subfolder resolution (`Downloads/DualBoost`) and automatic directory creation.
+  - `testDestination_CustomPathResolvesCorrectly`: Tests custom directory path resolution and `isCustom()` evaluation.
+  - `testDestination_UnwritableFolder_FallsBackSafely`: Tests fail-safe fallback to public Downloads or app-internal files when given an unwritable or inaccessible path.
+  - `testDestination_FindPresetById`: Tests ID resolution and safe fallback for unknown IDs.
+
+- **StoragePreferencesTest** (4 tests):
+  - `testPreferences_DefaultsToDefaultDownloads`: Tests preference initialization defaults to standard Downloads.
+  - `testPreferences_SavesAndRestoresPresetDestination`: Verifies persistence of preset destinations across reloads.
+  - `testPreferences_SavesAndRestoresCustomDestination`: Verifies persistence of custom folder paths and SAF tree URI strings.
+  - `testPreferences_ResetToDefault_RestoresStandardDownloads`: Tests one-tap reset restoring default standard Downloads.
+
+- **EngineDynamicStorageTest** (5 tests):
+  - `testEngine_DefaultsToDefaultStorageDestination`: Verifies `DualDownloaderEngine` initializes with `StorageDestination.PRESET_DEFAULT`.
+  - `testEngine_SetsAndUsesConfiguredSubfolderDestination`: Verifies that setting a subfolder preset updates `getDefaultDownloadDir()` to the child folder.
+  - `testEngine_SetsAndUsesCustomStorageDestination`: Tests engine target resolution when pointed to a custom directory.
+  - `testEngine_UnwritableCustomStorage_FallsBackToSafeDirectory`: Validates engine resilience when custom storage becomes unwritable, verifying automatic fallback without exceptions.
+  - `testRepository_ExposesStorageDestinationStateFlowAndUpdates`: Tests repository reactive `storageDestination` StateFlow and synchronization with the engine.
+
+- **MainViewModelStorageTest** (3 tests):
+  - `testViewModel_ExposesStorageDestinationStateFlow`: Verifies ViewModel exposes reactive destination stream.
+  - `testViewModel_UpdatesStorageDestination`: Verifies ViewModel dispatches and persists storage destination changes.
+  - `testViewModel_ResetsStorageDestinationToDefault`: Verifies ViewModel one-tap reset back to default.
+
+- **StorageDestinationUiTest** (3 tests):
+  - `testStorageUi_FormatsPathPreviewAndPresets`: Validates that presets format accurately for UI previews.
+  - `testStorageUi_CustomDestinationFormatting`: Tests custom path formatting and display name preservation.
+  - `testStorageUi_PresetMatching`: Verifies preset matching by ID.
 
 - **StreamPaletteModelTest** (6 tests):
   - `testStreamPalette_DefaultIsMaterialYou`: Verifies default palette is `DYNAMIC_MATERIAL_YOU`.

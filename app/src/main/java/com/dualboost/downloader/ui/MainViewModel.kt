@@ -224,6 +224,17 @@ open class MainViewModel(
         repository?.resetStreamPaletteToDefault()
     }
 
+    val storageDestination: StateFlow<com.dualboost.downloader.data.StorageDestination> =
+        repository?.storageDestination ?: MutableStateFlow(com.dualboost.downloader.data.StorageDestination.PRESET_DEFAULT)
+
+    fun updateStorageDestination(destination: com.dualboost.downloader.data.StorageDestination) {
+        repository?.setStorageDestination(destination)
+    }
+
+    fun resetStorageDestinationToDefault() {
+        repository?.resetStorageDestinationToDefault()
+    }
+
     val queueItems: StateFlow<List<com.dualboost.downloader.data.QueueItem>> =
         repository?.queueRepository?.queueItems ?: MutableStateFlow(emptyList())
 

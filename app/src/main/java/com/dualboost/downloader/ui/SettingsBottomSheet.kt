@@ -43,9 +43,15 @@ import com.dualboost.downloader.data.ConcurrencyConfig
 import com.dualboost.downloader.data.ConcurrencyPreferences
 import com.dualboost.downloader.data.StreamPalette
 import com.dualboost.downloader.data.StreamPalettePreferences
+import com.dualboost.downloader.data.StorageDestination
+import com.dualboost.downloader.data.StoragePreferences
 import com.dualboost.downloader.security.SecurityPreferences
 import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.data.WorkerTestStatus
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.text.style.TextOverflow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,6 +123,67 @@ fun SettingsBottomSheet(
         } else {
             ConcurrencyPreferences(context).resetToDefault()
             localConcurrencyConfig = ConcurrencyPreferences(context).getConcurrencyConfig()
+        }
+    }
+
+    var localStorageDestination by remember { mutableStateOf(StoragePreferences(context).getStorageDestination()) }
+    val storageDestinationState = viewModel?.storageDestination?.collectAsState()
+    val selectedDestination = storageDestinationState?.value ?: localStorageDestination
+
+    fun updateDestination(dest: StorageDestination) {
+        if (viewModel != null) {
+            viewModel.updateStorageDestination(dest)
+        } else {
+            StoragePreferences(context).setStorageDestination(dest)
+            localStorageDestination = StoragePreferences(context).getStorageDestination()
+        }
+    }
+
+    fun resetDestination() {
+        if (viewModel != null) {
+            viewModel.resetStorageDestinationToDefault()
+        } else {
+            StoragePreferences(context).resetToDefault()
+            localStorageDestination = StoragePreferences(context).getStorageDestination()
+        }
+    }
+
+    val directoryPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+            } catch (_: Exception) {}
+
+            val rawDocId = try {
+                android.provider.DocumentsContract.getTreeDocumentId(uri)
+            } catch (_: Throwable) {
+                null
+            }
+
+            val folderName = when {
+                rawDocId != null -> rawDocId.substringAfterLast(':').substringAfterLast('/')
+                else -> uri.lastPathSegment ?: "Custom Folder"
+            }
+
+            val physicalPath = when {
+                rawDocId != null && rawDocId.startsWith("primary:") -> {
+                    val rel = rawDocId.removePrefix("primary:")
+                    android.os.Environment.getExternalStorageDirectory().absolutePath + "/" + rel
+                }
+                else -> null
+            }
+
+            val customDest = StorageDestination(
+                id = StorageDestination.CUSTOM_ID,
+                displayName = folderName.ifBlank { "Custom Folder" },
+                relativePath = "",
+                customPath = physicalPath,
+                customUriString = uri.toString()
+            )
+            updateDestination(customDest)
         }
     }
 
@@ -906,6 +973,204 @@ fun SettingsBottomSheet(
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Download Storage & Destination Card (ADR-044)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Folder,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Download Storage",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Target directory & folder selection",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (selectedDestination.id != StorageDestination.DEFAULT_ID) {
+                            TextButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    resetDestination()
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Reset",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Active Path Preview Box
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (selectedDestination.isCustom()) Icons.Rounded.FolderSpecial else Icons.Rounded.FolderOpen,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = selectedDestination.displayName,
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                val pathPreview = when {
+                                    !selectedDestination.customPath.isNullOrBlank() -> selectedDestination.customPath
+                                    selectedDestination.relativePath.isNotBlank() -> "Downloads/${selectedDestination.relativePath}"
+                                    else -> "Downloads (Default)"
+                                }
+                                Text(
+                                    text = pathPreview,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Presets Row
+                    Text(
+                        text = "Quick Presets",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StorageDestination.PRESETS.forEach { preset ->
+                            val isSelected = selectedDestination.id == preset.id
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    updateDestination(preset)
+                                },
+                                label = {
+                                    Text(
+                                        text = preset.displayName,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    )
+                                },
+                                leadingIcon = if (isSelected) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                } else null,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Choose Custom Folder Button (SAF)
+                    OutlinedButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            try {
+                                directoryPickerLauncher.launch(null)
+                            } catch (_: Exception) {}
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.CreateNewFolder,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (selectedDestination.isCustom()) "Change Custom Folder..." else "Choose Custom Folder (SAF)...",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Safe Fallback Caption
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Auto-falls back to standard Downloads if storage is unmounted or unwritable.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
                     }
                 }
             }

@@ -1599,3 +1599,41 @@ Implement **Dynamic Stream Visualizer Palette & Material You Theming**:
 - Zero hardcoded stream visualizer colors remaining in the application.
 - Full Material You dynamic wallpaper theming on Android 12+ (Pixel 9 and modern devices).
 - 100% test coverage across models, preferences, viewmodel, and UI distinctness tests.
+
+---
+
+## ADR-044: Dynamic Download Storage Directory & SAF Integration
+
+### Status
+Accepted
+
+### Context
+`DualDownloaderEngine.kt` and `DownloadRepository.kt` hardcoded the destination directory for downloaded files to `Environment.DIRECTORY_DOWNLOADS` (`/storage/emulated/0/Download`). Users requested the ability to organize downloads into clean subfolders (e.g. `/Download/DualBoost`, `/Download/Media`), or choose custom destinations on removable SD cards or external USB-C drives via Android's Storage Access Framework (SAF). Furthermore, if a user-selected external storage location becomes unmounted, full, or unwritable, downloads must never crash or abort; they must safely fall back to standard public Downloads.
+
+### Decision
+Implement **Dynamic Download Storage Directory & SAF Integration**:
+1. **Domain Model (`StorageDestination` & `StoragePreferences`)**:
+   - `StorageDestination`: Model defining target storage locations:
+     - `PRESET_DEFAULT` (`"default"`): Standard public Downloads root (`/storage/emulated/0/Download`).
+     - `PRESET_DUALBOOST` (`"dualboost"`): Clean subfolder `Downloads/DualBoost`.
+     - `PRESET_MEDIA` (`"media"`): Clean subfolder `Downloads/Media`.
+     - `CUSTOM` (`"custom"`): Custom physical or SAF tree URI directory.
+   - Robust `resolveDirectory(context, basePublicDir)` method that validates directory existence and write permissions via ephemeral probe file test (`.dualboost_storage_test_*`), automatically falling back to public Downloads or app-internal files directory if unwritable.
+   - `StoragePreferences`: Persistent SharedPreferences storage with one-tap `resetToDefault()`.
+2. **Engine & Repository Integration**:
+   - `DualDownloaderEngine` stores `currentStorageDestination` and resolves `getDefaultDownloadDir()` dynamically.
+   - `DownloadRepository` exposes `storageDestination: StateFlow<StorageDestination>`, syncs with `StoragePreferences`, and configures the engine on startup.
+   - `restoreIncompleteDownload()` scans candidate directories (internal meta directory, active target folder, public root Downloads, and app files dir) ensuring in-progress downloads can always be resumed seamlessly even across directory changes.
+3. **Settings UI Integration (`SettingsBottomSheet.kt`)**:
+   - Added dedicated **Download Storage & Destination** card featuring:
+     - Active path preview box showing display name and physical path.
+     - Quick preset chips (`Standard`, `DualBoost`, `Media`) with active selection styling.
+     - "Choose Custom Folder..." button invoking Android SAF `ACTION_OPEN_DOCUMENT_TREE` (`rememberLauncherForActivityResult`) with persistable URI permission acquisition.
+     - Safe fallback caption explaining automatic recovery if storage is disconnected.
+     - One-tap "Reset" action to restore standard Downloads.
+
+### Consequences
+- Zero hardcoded download storage directories remaining in the application.
+- Full support for clean subfolder categorization and SAF-selected custom folders/removable media.
+- Non-negotiable fail-safe fallback guarantees zero download crashes or file loss if custom storage becomes unwritable.
+- Verified by unit tests across domain models, preferences, engine fallback, viewmodel, and UI components.

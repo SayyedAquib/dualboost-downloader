@@ -1,9 +1,32 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 (Multi-Download Queue & In-App Browser Media Sniffer), ADR-038 (Hybrid 3-Stage Antivirus & Threat Guard System), ADR-039 (Expanded Social Media Downloader), ADR-040 (Dynamic Cellular Generation Labeling), ADR-041 (Dynamic Wi-Fi Generation, Frequency Band & Link Speed Classification), ADR-042 (Dynamic Multi-Thread Concurrency Tuning & Auto-Scaling), and ADR-043 (Dynamic Stream Visualizer Palette & Material You Theming). The codebase is backed by **300 unit and integration tests across 45 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-044 (Dynamic Download Storage Directory & SAF Integration). The codebase is backed by **325 unit and integration tests across 55 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
 
 ## Recently Completed
+- **Dynamic Download Storage Directory & SAF Integration (ADR-044 / 325 Tests across 55 Suites - 100% Green)**:
+  - **Slice 1: StorageDestination Domain Model & Resolver**:
+    - Created `StorageDestination` domain model supporting standard public Downloads root, built-in subfolder presets (`DualBoost`, `Media`), and custom external directories.
+    - Implemented `resolveDirectory(context, basePublicDir)` with ephemeral file writability probe (`.dualboost_storage_test_*`), directory creation, and guaranteed safe fallback to public Downloads or app-internal files without crashing.
+    - Verified via `StorageDestinationTest.kt` (6 unit tests, 100% green).
+  - **Slice 2: StoragePreferences Persistence**:
+    - Created `StoragePreferences` persisting target destination IDs, custom folder paths, and SAF tree URI strings via Android `SharedPreferences`, complete with one-tap `resetToDefault()`.
+    - Verified via `StoragePreferencesTest.kt` (4 unit tests, 100% green).
+  - **Slice 3: DualDownloaderEngine & DownloadRepository Integration**:
+    - Wired `StorageDestination` into `DualDownloaderEngine.getDefaultDownloadDir()` dynamically.
+    - Enhanced `restoreIncompleteDownload()` to scan candidate directories (internal meta directory, active target folder, public root Downloads, and app files dir) ensuring in-progress downloads can always be resumed seamlessly even across directory changes.
+    - Exposed reactive `storageDestination: StateFlow<StorageDestination>` on `DownloadRepository` and `MainViewModel` with clean UI delegates.
+    - Verified via `EngineDynamicStorageTest.kt` (5 unit tests, 100% green) and `MainViewModelStorageTest.kt` (3 unit tests, 100% green).
+  - **Slice 4: SettingsBottomSheet UI Controls & Verification**:
+    - Added dedicated **Download Storage & Destination** card to `SettingsBottomSheet.kt` featuring:
+      - Active path preview box showing display name and physical path.
+      - Quick preset chips (`Standard`, `DualBoost`, `Media`) with active selection styling.
+      - "Choose Custom Folder..." button invoking Android SAF `ACTION_OPEN_DOCUMENT_TREE` (`rememberLauncherForActivityResult`) with persistable URI permission acquisition.
+      - Safe fallback caption explaining automatic recovery if storage is disconnected.
+      - One-tap "Reset" action to restore standard Downloads.
+    - Verified via `StorageDestinationUiTest.kt` (3 unit tests, 100% green).
+    - Full test suite passed 100% green (325 tests across 55 test suites).
+    - Production APK `app-release.apk` (1,695,492 bytes) assembled cleanly via `.\gradlew.bat assembleRelease`.
 - **Dynamic Stream Visualizer Palette & Material You Theming (ADR-043 / 300 Tests across 45 Suites - 100% Green)**:
   - **Slice 1: StreamPalette Domain Model & Color Resolvers**:
     - Created `StreamPalette` enum (`DYNAMIC_MATERIAL_YOU`, `CYBERPUNK_NEON`, `EMERALD_AMBER`, `SUNSET_CORAL`) with pure resolvers `resolveWifiColor(isDark, materialPrimary)` and `resolveCellularColor(isDark, materialTertiary)`.

@@ -59,6 +59,7 @@ Standard Android operating system behavior automatically deactivates or idles th
 25. **Dynamic Wi-Fi Generation, Frequency Band & Link Speed Classification (`ADR-041`)**: Real-time extraction of Wi-Fi 7 (be), 6E (6 GHz), 6 (ax), 5 (ac), and frequency bands with negotiated multi-gigabit link speeds (`X Mbps`), providing full transport transparency.
 26. **Dynamic Multi-Thread Concurrency Tuning & Auto-Scaling (`ADR-042`)**: Configurable independent per-interface worker streams (`1..8`), opportunistic Auto-Scale mode on high-bandwidth links (>25 MB/s), persistent SharedPreferences storage, and non-negotiable thermal fail-safe limits (`MODERATE` caps cellular to 1 stream, `SEVERE` offloads to Wi-Fi).
 27. **Dynamic Stream Visualizer Palette & Material You Theming (`ADR-043`)**: Material You wallpaper-adaptive stream colors on Android 12+ harmonizing with system primary and tertiary accents, alongside selectable curated dual-tone palettes (Cyberpunk Neon, Emerald & Amber, Sunset Coral) with dark/light mode contrast compliance.
+28. **Dynamic Download Storage Directory & SAF Integration (`ADR-044`)**: Customizable target download locations with built-in subfolder presets (`Standard`, `DualBoost`, `Media`), Storage Access Framework (SAF) folder picker (`ACTION_OPEN_DOCUMENT_TREE`) supporting external directories and removable media, automatic safe fallback to standard Downloads on unmounted/unwritable volumes, and cross-directory resumption scanning.
 
 ## User Flows
 1. **Direct URL Download Flow**:

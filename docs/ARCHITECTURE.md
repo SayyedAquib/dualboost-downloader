@@ -246,6 +246,14 @@ sequenceDiagram
   - Multi-Instance Failover Pool: Auto-retries across redundant public instances upon encountering HTTP 429 rate limits or timeouts.
   - Direct On-Device Instagram Fallback: Built-in HTML scraper extracting `og:video` and `og:image` from public post metadata if API instances are unreachable.
   - User Interface: `SocialMediaModalSheet` surfaces video title, platform hero badge, and quality picker (`MAX 4K/1080p`, `HD 720p`, `Audio MP3`), with 1-tap handoff to `DualDownloaderEngine` or `DownloadQueueRepository`.
+- **Dynamic Cellular & Wi-Fi Transport Telemetry (`ADR-040`, `ADR-041`)**: Real-time extraction of cellular generation (`5G`, `4G LTE`, `3G`) via telephony mapping and Wi-Fi generation (`Wi-Fi 7`, `Wi-Fi 6E`, `Wi-Fi 6`, `Wi-Fi 5`) with negotiated multi-gigabit link speeds, exposed dynamically across the UI and foreground notification shades.
+- **Dynamic Multi-Thread Concurrency Tuning & Auto-Scaling (`ADR-042`)**: Configurable independent per-interface worker streams (`1..8`), opportunistic Auto-Scale mode on high-bandwidth links (>25 MB/s), persistent SharedPreferences storage, and non-negotiable thermal fail-safe limits (`MODERATE` caps cellular to 1 stream, `SEVERE` offloads to Wi-Fi).
+- **Dynamic Stream Visualizer Palette & Material You Theming (`ADR-043`)**: Material You wallpaper-adaptive stream colors on Android 12+ dynamically resolving Wi-Fi to system primary and Cellular to system tertiary colors, with fallback to curated high-contrast dual-tone dark/light mode pairs (Cyberpunk Neon, Emerald & Amber, Sunset Coral) persisted via `StreamPalettePreferences`.
+- **Dynamic Download Storage Directory & SAF Integration (`ADR-044`)**:
+  - `StorageDestination`: Encapsulates target directory resolution (`DEFAULT_DOWNLOADS`, `DUALBOOST_SUBFOLDER`, `MEDIA_SUBFOLDER`, and `CUSTOM` SAF directory).
+  - Robust Directory Validation & Fallback: Verifies write permissions via ephemeral probe file test (`.dualboost_storage_test_*`). If a user-selected SD card, USB drive, or custom directory is disconnected, full, or unwritable, the engine automatically falls back to standard public Downloads or app-internal files without crashing.
+  - Cross-Directory Resumption: `restoreIncompleteDownload()` scans candidate directories (internal meta directory, active target folder, public root Downloads, and app files dir) guaranteeing paused transfers can always resume even if the user changed destinations.
+  - Settings UI: `SettingsBottomSheet.kt` provides active path preview, quick preset chips, and SAF `ACTION_OPEN_DOCUMENT_TREE` folder picker with persistable permission grants.
 
 ## Constraints
 - Server must support HTTP Range requests (either via standard mobile headers, desktop browser spoofing, or Personal Cloud Slicer) for dual-channel acceleration.

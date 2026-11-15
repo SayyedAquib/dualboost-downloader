@@ -29,8 +29,28 @@ class DownloadRepository(
     val queueRepositoryOverride: DownloadQueueRepository? = null,
     val queueCoordinatorOverride: com.dualboost.downloader.engine.QueueCoordinator? = null,
     val concurrencyPreferencesOverride: ConcurrencyPreferences? = null,
-    val streamPalettePreferencesOverride: StreamPalettePreferences? = null
+    val streamPalettePreferencesOverride: StreamPalettePreferences? = null,
+    val storagePreferencesOverride: StoragePreferences? = null
 ) : com.dualboost.downloader.engine.QueueDownloadDispatcher {
+
+    val storagePreferences: StoragePreferences by lazy {
+        storagePreferencesOverride ?: StoragePreferences(context)
+    }
+
+    private val _storageDestination = MutableStateFlow(storagePreferences.getStorageDestination())
+    val storageDestination: StateFlow<StorageDestination> = _storageDestination.asStateFlow()
+
+    fun setStorageDestination(destination: StorageDestination) {
+        storagePreferences.setStorageDestination(destination)
+        _storageDestination.value = storagePreferences.getStorageDestination()
+        downloaderEngine.setStorageDestination(destination)
+    }
+
+    fun resetStorageDestinationToDefault() {
+        storagePreferences.resetToDefault()
+        _storageDestination.value = storagePreferences.getStorageDestination()
+        downloaderEngine.setStorageDestination(StorageDestination.PRESET_DEFAULT)
+    }
 
     val streamPalettePreferences: StreamPalettePreferences by lazy {
         streamPalettePreferencesOverride ?: StreamPalettePreferences(context)
@@ -184,6 +204,9 @@ class DownloadRepository(
         } catch (e: Exception) {
             Log.w("DownloadRepository", "Could not start network listening: ${e.message}")
         }
+        try {
+            downloaderEngine.setStorageDestination(_storageDestination.value)
+        } catch (_: Exception) {}
         try {
             downloaderEngine.restoreIncompleteDownload()
         } catch (e: Exception) {

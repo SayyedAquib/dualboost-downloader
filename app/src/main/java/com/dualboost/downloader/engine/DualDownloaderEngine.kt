@@ -17,6 +17,7 @@ import com.dualboost.downloader.data.DownloadChunk
 import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.data.NetworkInterfaceType
 import com.dualboost.downloader.data.SlicerPreferences
+import com.dualboost.downloader.data.StorageDestination
 import com.dualboost.downloader.network.NetworkProvider
 import com.dualboost.downloader.security.SecurityPreferences
 import kotlinx.coroutines.*
@@ -166,19 +167,16 @@ class DualDownloaderEngine(
         }
     }
 
+    private var currentStorageDestination: StorageDestination = StorageDestination.PRESET_DEFAULT
+
+    fun setStorageDestination(destination: StorageDestination) {
+        currentStorageDestination = destination
+    }
+
+    fun getStorageDestination(): StorageDestination = currentStorageDestination
+
     fun getDefaultDownloadDir(): File {
-        val publicDir = try {
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        } catch (_: Throwable) {
-            null
-        }
-        return if (publicDir != null && (publicDir.exists() || publicDir.mkdirs()) && isDirWritable(publicDir)) {
-            publicDir
-        } else {
-            val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
-            if (!appDir.exists()) appDir.mkdirs()
-            appDir
-        }
+        return currentStorageDestination.resolveDirectory(context)
     }
 
     internal fun resolveWritableOutputFile(targetDir: File, initialFileName: String, url: String): File {
@@ -397,6 +395,14 @@ class DualDownloaderEngine(
             val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             if (appDir != null && appDir.exists() && appDir != targetDir) {
                 candidateDirs.add(appDir)
+            }
+            val publicDir = try {
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            } catch (_: Throwable) {
+                null
+            }
+            if (publicDir != null && publicDir.exists() && !candidateDirs.contains(publicDir)) {
+                candidateDirs.add(publicDir)
             }
             if (candidateDirs.isEmpty()) return false
 
