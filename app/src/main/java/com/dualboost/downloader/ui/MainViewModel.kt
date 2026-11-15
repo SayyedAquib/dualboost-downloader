@@ -189,6 +189,7 @@ open class MainViewModel(
     val wifiSignalLevel: StateFlow<Int> = repository?.wifiSignalLevel ?: MutableStateFlow(4)
     val cellularSignalLevel: StateFlow<Int> = repository?.cellularSignalLevel ?: MutableStateFlow(4)
     val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> = repository?.cellularGeneration ?: MutableStateFlow(com.dualboost.downloader.network.CellularGeneration.FIVE_G)
+    val wifiDetails: StateFlow<com.dualboost.downloader.network.WifiDetails> = repository?.wifiDetails ?: MutableStateFlow(com.dualboost.downloader.network.WifiDetails.DISCONNECTED)
     val isDeviceRooted: Boolean = com.dualboost.downloader.security.RootDetector.isDeviceRooted()
     val historyItems: StateFlow<List<DownloadHistoryItem>> = repository?.historyItems ?: MutableStateFlow(emptyList())
     val workerTestStatus: StateFlow<com.dualboost.downloader.data.WorkerTestStatus> = repository?.workerTestStatus ?: MutableStateFlow(com.dualboost.downloader.data.WorkerTestStatus.Idle)

@@ -91,6 +91,96 @@ enum class CellularGeneration(
     }
 }
 
+enum class WifiGeneration(
+    val shortLabel: String,
+    val standardName: String
+) {
+    WIFI_7("Wi-Fi 7", "802.11be"),
+    WIFI_6E("Wi-Fi 6E", "802.11ax (6 GHz)"),
+    WIFI_6("Wi-Fi 6", "802.11ax"),
+    WIFI_5("Wi-Fi 5", "802.11ac"),
+    WIFI_4("Wi-Fi 4", "802.11n"),
+    LEGACY("Wi-Fi", "802.11a/b/g"),
+    UNKNOWN("Wi-Fi", "Wi-Fi");
+
+    companion object {
+        fun fromStandard(standard: Int, frequencyMhz: Int = 0): WifiGeneration {
+            return when (standard) {
+                8 -> WIFI_7
+                6 -> if (frequencyMhz in 5925..7125) WIFI_6E else WIFI_6
+                5 -> WIFI_5
+                4 -> WIFI_4
+                1 -> LEGACY
+                else -> UNKNOWN
+            }
+        }
+    }
+}
+
+data class WifiDetails(
+    val generation: WifiGeneration = WifiGeneration.UNKNOWN,
+    val frequencyMhz: Int = 0,
+    val linkSpeedMbps: Int = 0
+) {
+    val frequencyBandLabel: String?
+        get() = when {
+            frequencyMhz in 5925..7125 -> "6 GHz"
+            frequencyMhz in 4900..5900 -> "5 GHz"
+            frequencyMhz in 2400..2500 -> "2.4 GHz"
+            else -> null
+        }
+
+    val shortLabel: String
+        get() = when {
+            generation != WifiGeneration.UNKNOWN && generation != WifiGeneration.LEGACY -> generation.shortLabel
+            frequencyBandLabel != null -> "Wi-Fi $frequencyBandLabel"
+            else -> "Wi-Fi"
+        }
+
+    val detailLabel: String
+        get() {
+            val band = frequencyBandLabel
+            return when {
+                generation != WifiGeneration.UNKNOWN && generation != WifiGeneration.LEGACY -> {
+                    if (band != null) "${generation.shortLabel} ($band)" else generation.shortLabel
+                }
+                band != null -> "Wi-Fi ($band)"
+                else -> "Wi-Fi"
+            }
+        }
+
+    val richHeroLabel: String
+        get() {
+            val band = frequencyBandLabel
+            val baseLabel = when {
+                generation != WifiGeneration.UNKNOWN && generation != WifiGeneration.LEGACY -> generation.shortLabel
+                else -> "Wi-Fi"
+            }
+            val details = mutableListOf<String>()
+            if (band != null) details.add(band)
+            if (linkSpeedMbps > 0) details.add("$linkSpeedMbps Mbps")
+
+            return if (details.isNotEmpty()) {
+                "$baseLabel (${details.joinToString(" • ")})"
+            } else {
+                baseLabel
+            }
+        }
+
+    companion object {
+        val DISCONNECTED = WifiDetails(WifiGeneration.UNKNOWN, 0, 0)
+
+        fun fromWifiInfo(standard: Int, frequencyMhz: Int, linkSpeedMbps: Int): WifiDetails {
+            val gen = WifiGeneration.fromStandard(standard, frequencyMhz)
+            return WifiDetails(
+                generation = gen,
+                frequencyMhz = maxOf(0, frequencyMhz),
+                linkSpeedMbps = maxOf(0, linkSpeedMbps)
+            )
+        }
+    }
+}
+
 interface NetworkProvider {
     val isWifiAvailable: StateFlow<Boolean>
     val isCellularAvailable: StateFlow<Boolean>
@@ -108,6 +198,8 @@ interface NetworkProvider {
         get() = MutableStateFlow(4)
     val cellularGeneration: StateFlow<CellularGeneration>
         get() = MutableStateFlow(CellularGeneration.FIVE_G)
+    val wifiDetails: StateFlow<WifiDetails>
+        get() = MutableStateFlow(WifiDetails.DISCONNECTED)
     val isCellularKeepAliveActive: StateFlow<Boolean>
         get() = MutableStateFlow(false)
     fun acquireCellularKeepAlive() {}
@@ -147,6 +239,9 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
 
     private val _wifiSignalLevel = MutableStateFlow(4)
     override val wifiSignalLevel: StateFlow<Int> = _wifiSignalLevel.asStateFlow()
+
+    private val _wifiDetails = MutableStateFlow(WifiDetails.DISCONNECTED)
+    override val wifiDetails: StateFlow<WifiDetails> = _wifiDetails.asStateFlow()
 
     private val _cellularSignalLevel = MutableStateFlow(4)
     override val cellularSignalLevel: StateFlow<Int> = _cellularSignalLevel.asStateFlow()
@@ -222,6 +317,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 wifiClient = baseOkHttpClient
                 _isWifiAvailable.value = false
                 _wifiSignalLevel.value = 0
+                _wifiDetails.value = WifiDetails.DISCONNECTED
             }
         }
     }
@@ -290,6 +386,28 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
             }
         }
         _wifiSignalLevel.value = level.coerceIn(1, 4)
+
+        val wifiInfo: android.net.wifi.WifiInfo? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            capabilities.transportInfo as? android.net.wifi.WifiInfo
+        } else {
+            null
+        } ?: try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            wifiManager?.connectionInfo
+        } catch (_: Exception) {
+            null
+        }
+
+        if (wifiInfo != null) {
+            val standard = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try { wifiInfo.wifiStandard } catch (_: Exception) { 0 }
+            } else {
+                0
+            }
+            val freq = try { wifiInfo.frequency } catch (_: Exception) { 0 }
+            val linkSpeed = try { wifiInfo.linkSpeed } catch (_: Exception) { 0 }
+            _wifiDetails.value = WifiDetails.fromWifiInfo(standard, freq, linkSpeed)
+        }
     }
 
     private fun updateCellularDetails(capabilities: NetworkCapabilities) {

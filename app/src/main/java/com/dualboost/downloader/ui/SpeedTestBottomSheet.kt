@@ -36,8 +36,10 @@ fun SpeedTestBottomSheet(
     val isWifiAvailable by viewModel.isWifiAvailable.collectAsState()
     val isCellularAvailable by viewModel.isCellularAvailable.collectAsState()
     val cellularGeneration by viewModel.cellularGeneration.collectAsState()
+    val wifiDetails by viewModel.wifiDetails.collectAsState()
     val cellShort = cellularGeneration.shortLabel
     val cellDetail = cellularGeneration.detailLabel
+    val wifiShort = wifiDetails.shortLabel
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isDark = isSystemInDarkTheme()
@@ -122,6 +124,7 @@ fun SpeedTestBottomSheet(
                         cellularColor = cellularColor,
                         cellShort = cellShort,
                         cellDetail = cellDetail,
+                        wifiShort = wifiShort,
                         onStartTest = { viewModel.startSpeedTest() }
                     )
                 }
@@ -132,6 +135,7 @@ fun SpeedTestBottomSheet(
                         wifiColor = wifiColor,
                         cellularColor = cellularColor,
                         cellDetail = cellDetail,
+                        wifiShort = wifiShort,
                         onCancel = { viewModel.stopSpeedTest() }
                     )
                 }
@@ -143,6 +147,7 @@ fun SpeedTestBottomSheet(
                         cellularColor = cellularColor,
                         cellShort = cellShort,
                         cellDetail = cellDetail,
+                        wifiShort = wifiShort,
                         onRunAgain = { viewModel.startSpeedTest() },
                         onDone = onDismiss
                     )
@@ -167,6 +172,7 @@ private fun SpeedTestIdleView(
     cellularColor: Color,
     cellShort: String,
     cellDetail: String,
+    wifiShort: String = "Wi-Fi",
     onStartTest: () -> Unit
 ) {
     Card(
@@ -182,7 +188,7 @@ private fun SpeedTestIdleView(
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Tests download throughput sequentially to reveal the exact speed boost gained when Wi-Fi and $cellShort aggregate simultaneously:",
+                text = "Tests download throughput sequentially to reveal the exact speed boost gained when $wifiShort and $cellShort aggregate simultaneously:",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -199,7 +205,7 @@ private fun SpeedTestIdleView(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "1. Wi-Fi alone (3 sec)",
+                    text = "1. $wifiShort alone (3 sec)",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
@@ -287,10 +293,11 @@ private fun SpeedTestRunningView(
     wifiColor: Color,
     cellularColor: Color,
     cellDetail: String,
+    wifiShort: String = "Wi-Fi",
     onCancel: () -> Unit
 ) {
     val phaseTitle = when (state.phase) {
-        SpeedTestPhase.TESTING_WIFI -> "Testing Wi-Fi Alone (1/3)"
+        SpeedTestPhase.TESTING_WIFI -> "Testing $wifiShort Alone (1/3)"
         SpeedTestPhase.TESTING_CELLULAR -> "Testing $cellDetail Alone (2/3)"
         SpeedTestPhase.TESTING_DUALBOOST -> "⚡ Testing DualBoost Combined (3/3)"
         else -> "Testing Speed..."
@@ -412,7 +419,7 @@ private fun SpeedTestRunningView(
             modifier = Modifier.weight(1f)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Text(text = "Wi-Fi", style = MaterialTheme.typography.labelSmall, color = wifiColor)
+                Text(text = wifiShort, style = MaterialTheme.typography.labelSmall, color = wifiColor)
                 Text(
                     text = if (state.wifiSpeedMBps > 0f) com.dualboost.downloader.data.formatSpeed(state.wifiSpeedMBps.toDouble()) else "Testing...",
                     style = MaterialTheme.typography.titleSmall,
@@ -459,6 +466,7 @@ private fun SpeedTestCompletedView(
     cellularColor: Color,
     cellShort: String,
     cellDetail: String,
+    wifiShort: String = "Wi-Fi",
     onRunAgain: () -> Unit,
     onDone: () -> Unit
 ) {
@@ -490,7 +498,7 @@ private fun SpeedTestCompletedView(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Aggregating Wi-Fi + $cellShort delivered ${com.dualboost.downloader.data.formatSpeed(state.dualBoostSpeedMBps.toDouble())} aggregate throughput.",
+                    text = "Aggregating $wifiShort + $cellShort delivered ${com.dualboost.downloader.data.formatSpeed(state.dualBoostSpeedMBps.toDouble())} aggregate throughput.",
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
@@ -514,7 +522,7 @@ private fun SpeedTestCompletedView(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Connect both Wi-Fi and $cellShort simultaneously to unleash maximum aggregate throughput.",
+                    text = "Connect both $wifiShort and $cellShort simultaneously to unleash maximum aggregate throughput.",
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -552,7 +560,7 @@ private fun SpeedTestCompletedView(
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = "Wi-Fi Only", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text(text = "$wifiShort Only", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 }
                 Text(
                     text = com.dualboost.downloader.data.formatSpeed(state.wifiSpeedMBps.toDouble()),

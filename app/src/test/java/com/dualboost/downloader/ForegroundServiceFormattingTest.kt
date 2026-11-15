@@ -6,7 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Unit verification for Foreground Service notification content formatting (ADR-040).
+ * Unit verification for Foreground Service notification content formatting (ADR-040, ADR-041).
  */
 class ForegroundServiceFormattingTest {
 
@@ -47,5 +47,28 @@ class ForegroundServiceFormattingTest {
             cellularGeneration = CellularGeneration.UNKNOWN
         )
         assertEquals("Wi-Fi: 12.0 MB/s | Cellular: 0.0 MB/s (Total: 12.0 MB/s)", contentUnknown)
+    }
+
+    @Test
+    fun testFormatNotificationSpeedContent_AdaptsToWifiGeneration() {
+        // Wi-Fi 7 + 5G
+        val contentWifi7 = DownloadForegroundService.formatNotificationSpeedContent(
+            wifiSpeedMBps = 55.0,
+            cellularSpeedMBps = 40.0,
+            totalSpeedMBps = 95.0,
+            cellularGeneration = CellularGeneration.FIVE_G,
+            wifiLabel = "Wi-Fi 7"
+        )
+        assertEquals("Wi-Fi 7: 55.0 MB/s | 5G: 40.0 MB/s (Total: 95.0 MB/s)", contentWifi7)
+
+        // Wi-Fi 6 + 4G
+        val contentWifi6 = DownloadForegroundService.formatNotificationSpeedContent(
+            wifiSpeedMBps = 25.0,
+            cellularSpeedMBps = 10.0,
+            totalSpeedMBps = 35.0,
+            cellularGeneration = CellularGeneration.FOUR_G,
+            wifiLabel = "Wi-Fi 6"
+        )
+        assertEquals("Wi-Fi 6: 25.0 MB/s | 4G: 10.0 MB/s (Total: 35.0 MB/s)", contentWifi6)
     }
 }

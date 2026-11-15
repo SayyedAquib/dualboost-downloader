@@ -154,13 +154,15 @@ class DownloadForegroundService : Service() {
                             }
 
                             val cellGen = networkManager.cellularGeneration.value
+                            val wifiLabel = networkManager.wifiDetails.value.shortLabel
                             updateNotification(
                                 title = notificationTitle,
                                 content = formatNotificationSpeedContent(
                                     wifiSpeedMBps = state.wifiSpeedMBps,
                                     cellularSpeedMBps = state.cellularSpeedMBps,
                                     totalSpeedMBps = state.totalSpeedMBps,
-                                    cellularGeneration = cellGen
+                                    cellularGeneration = cellGen,
+                                    wifiLabel = wifiLabel
                                 ),
                                 progress = (state.progressPercentage * 100).toInt(),
                                 indeterminate = false,
@@ -426,10 +428,11 @@ class DownloadForegroundService : Service() {
             wifiSpeedMBps: Double,
             cellularSpeedMBps: Double,
             totalSpeedMBps: Double,
-            cellularGeneration: com.dualboost.downloader.network.CellularGeneration
+            cellularGeneration: com.dualboost.downloader.network.CellularGeneration,
+            wifiLabel: String = "Wi-Fi"
         ): String {
             val cellLabel = cellularGeneration.shortLabel
-            return "Wi-Fi: ${com.dualboost.downloader.data.formatSpeed(wifiSpeedMBps)} | $cellLabel: ${com.dualboost.downloader.data.formatSpeed(cellularSpeedMBps)} (Total: ${com.dualboost.downloader.data.formatSpeed(totalSpeedMBps)})"
+            return "$wifiLabel: ${com.dualboost.downloader.data.formatSpeed(wifiSpeedMBps)} | $cellLabel: ${com.dualboost.downloader.data.formatSpeed(cellularSpeedMBps)} (Total: ${com.dualboost.downloader.data.formatSpeed(totalSpeedMBps)})"
         }
     }
 }

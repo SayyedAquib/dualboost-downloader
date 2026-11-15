@@ -10,7 +10,7 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (255 active tests across 34 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (270 active tests across 37 test suites, 100% passing):
 
 - **CrashVaultTest** (2 tests):
   - `testRecordCrash_WritesSanitizedCrashDump`: Verifies `CrashVault` writes structured, timestamped crash dumps to `noBackupFilesDir/crash_vault.log`, ensuring URL query parameters and auth tokens are completely redacted from stack traces.
@@ -307,6 +307,25 @@ End-to-end and component UI testing on Android devices is performed using Google
   - `testQuickPresetCard_FormatsDynamicCellularLabel`: Tests quick preset description strings.
   - `testChunkStripLegend_FormatsDynamicCellularLabel`: Tests segmented chunk visualizer legend text ("5G Chunk", "4G Chunk", etc.).
   - `testSingleStreamBanner_FormatsDynamicCellularLabel`: Tests single-stream fallback banner strings.
+
+### Dynamic Wi-Fi Generation & Telemetry Test Suite (`ADR-041`)
+- **WifiGenerationTest** (7 tests):
+  - `testFromStandard_Wifi7_ReturnsWifi7`: Verifies standard 8 maps to `WIFI_7` with 6 GHz and 2400 Mbps formatting.
+  - `testFromStandard_Wifi6E_When6GHz_ReturnsWifi6E`: Verifies standard 6 with 6 GHz frequency maps to `WIFI_6E`.
+  - `testFromStandard_Wifi6_When5GHzOr24GHz_ReturnsWifi6`: Verifies standard 6 with 5 GHz / 2.4 GHz maps to `WIFI_6`.
+  - `testFromStandard_Wifi5_ReturnsWifi5`: Verifies standard 5 maps to `WIFI_5`.
+  - `testFromStandard_Wifi4_ReturnsWifi4`: Verifies standard 4 maps to `WIFI_4`.
+  - `testProgressiveFallback_WhenStandardUnknown_UsesBandOrGeneric`: Verifies progressive fallback to frequency band or generic "Wi-Fi".
+  - `testRichHeroLabel_OmitsLinkSpeedWhenZero`: Verifies omitting link speed when non-positive.
+- **DualNetworkManagerWifiDetailsTest** (3 tests):
+  - `testWifiDetails_DefaultsToDisconnected`: Asserts disconnected defaults.
+  - `testWifiDetails_UpdatesOnConnect`: Asserts state updates on Wi-Fi connection.
+  - `testWifiDetails_ResetsOnDisconnect`: Asserts reset to `DISCONNECTED` on Wi-Fi loss.
+- **DynamicWifiLabelUiTest** (4 tests):
+  - `testHeroCard_FormatsDynamicWifiLabel`: Tests Hero card rich labels with link speed.
+  - `testContextualBanner_FormatsDynamicWifiAndCellular`: Tests dual-channel banner strings.
+  - `testChunkStripLegend_FormatsDynamicWifiAndCellular`: Tests chunk visualizer legends.
+  - `testCompletionBanner_FormatsDynamicWifiAndCellular`: Tests celebratory completion banners.
 
 ## API Testing
 - Verify HTTP 206 response validation.

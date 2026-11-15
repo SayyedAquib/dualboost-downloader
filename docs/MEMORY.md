@@ -1,9 +1,26 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 (Multi-Download Queue & In-App Browser Media Sniffer), ADR-038 (Hybrid 3-Stage Antivirus & Threat Guard System), ADR-039 (Expanded Social Media Downloader), and ADR-040 (Dynamic Cellular Generation Labeling & Telephony Classification). The codebase is backed by **255 unit and integration tests across 34 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 (Multi-Download Queue & In-App Browser Media Sniffer), ADR-038 (Hybrid 3-Stage Antivirus & Threat Guard System), ADR-039 (Expanded Social Media Downloader), ADR-040 (Dynamic Cellular Generation Labeling), and ADR-041 (Dynamic Wi-Fi Generation, Frequency Band & Link Speed Classification). The codebase is backed by **270 unit and integration tests across 37 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
 
 ## Recently Completed
+- **Dynamic Wi-Fi Generation, Frequency Band & Link Speed Classification (ADR-041 / 270 Tests across 37 Suites)**:
+  - **Slice 1: WifiGeneration & WifiDetails Domain Models**:
+    - Created `WifiGeneration` enum (`WIFI_7`, `WIFI_6E`, `WIFI_6`, `WIFI_5`, `WIFI_4`, `LEGACY`, `UNKNOWN`) with pure classifier `fromStandard(standard, frequencyMhz)`.
+    - Created `WifiDetails` data class with `frequencyBandLabel` ("6 GHz", "5 GHz", "2.4 GHz"), `shortLabel`, `detailLabel`, and `richHeroLabel` incorporating negotiated link speed (`X Mbps`).
+    - Verified via `WifiGenerationTest.kt` (7 unit tests, 100% green).
+  - **Slice 2: DualNetworkManager Telemetry & Transport Extraction**:
+    - Added `wifiDetails: StateFlow<WifiDetails>` to `NetworkProvider` and `DualNetworkManager`.
+    - Extracted `WifiInfo` via `capabilities.transportInfo as? WifiInfo` on Android 29+ (zero runtime permissions needed for standards and frequencies).
+    - Verified via `DualNetworkManagerWifiDetailsTest.kt` (3 unit tests, 100% green).
+  - **Slice 3: Dual-Dynamic Foreground Service Notification**:
+    - Enhanced `DownloadForegroundService.formatNotificationSpeedContent()` to dynamically interpolate `wifiLabel` alongside `cellularGeneration.shortLabel`.
+    - Verified via `ForegroundServiceFormattingTest.kt` (3 unit tests, 100% green).
+  - **Slice 4: UI & Modals Dynamic Binding**:
+    - `MainActivity.kt`: Bound `wifiDetails` to Hero Card title (`wifiDetails.richHeroLabel`), contextual dual-channel banner (`Aggregating ${wifiDetails.shortLabel} + $cellularName`), single-stream notices, quick presets, `SegmentedChunkStrip` legend, and completion celebration.
+    - `SocialMediaModalSheet.kt` & `SpeedTestBottomSheet.kt`: Dynamically updated Wi-Fi labels across Idle, Running, and Results views.
+    - Verified via `DynamicWifiLabelUiTest.kt` (4 unit tests, 100% green).
+    - Full test suite passed 100% green (270 tests across 37 suites).
 - **Dynamic Cellular Generation Labeling & Telephony Classification (ADR-040 / 255 Tests across 34 Suites)**:
   - **Slice 1: CellularGeneration Domain Model & Telephony Classifier**:
     - Enhanced `CellularGeneration` enum (`FIVE_G`, `FOUR_G`, `THREE_G_OR_LOWER`, `UNKNOWN`) with structured label properties: `shortLabel` ("5G", "4G", "3G", "Cellular"), `detailLabel` ("5G Cellular", "4G LTE Cellular", "3G Cellular", "Cellular"), and `fullDisplayName` ("5G Ultra-Capacity", "4G LTE", "3G Legacy", "Cellular").

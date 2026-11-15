@@ -299,6 +299,7 @@ fun MainScreen(
     val wifiSignalLevel by viewModel.wifiSignalLevel.collectAsState()
     val cellularSignalLevel by viewModel.cellularSignalLevel.collectAsState()
     val cellularGeneration by viewModel.cellularGeneration.collectAsState()
+    val wifiDetails by viewModel.wifiDetails.collectAsState()
     val showBatteryGuidance by viewModel.showBatteryGuidance.collectAsState()
     val isVpnActive by viewModel.isVpnActive.collectAsState()
     val isRoamingActive by viewModel.isRoamingActive.collectAsState()
@@ -676,6 +677,7 @@ fun MainScreen(
                 isModemStandbyDetected -> "Modem Standby"
                 else -> "Standby"
             }
+            val wifiTitle = if (wifiAvailable) wifiDetails.richHeroLabel else "Wi-Fi"
 
             Row(
                 modifier = Modifier
@@ -687,7 +689,7 @@ fun MainScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight(),
-                    title = "Wi-Fi",
+                    title = wifiTitle,
                     subtitle = if (wifiAvailable) viewModel.getSignalLabel(wifiSignalLevel) else "Disconnected",
                     icon = if (wifiAvailable) Icons.Rounded.Wifi else Icons.Rounded.WifiOff,
                     isActive = wifiAvailable,
@@ -727,7 +729,7 @@ fun MainScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Dual-Channel Active: Aggregating Wi-Fi + $cellularName",
+                            text = "Dual-Channel Active: Aggregating ${wifiDetails.shortLabel} + $cellularName",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -791,7 +793,7 @@ fun MainScreen(
                                 )
                             } else {
                                 Text(
-                                    text = "Using Wi-Fi only: Enable 'Mobile data always active' in Developer Options to aggregate $cellularName.",
+                                    text = "Using ${wifiDetails.detailLabel} only: Enable 'Mobile data always active' in Developer Options to aggregate $cellularName.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -818,7 +820,7 @@ fun MainScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Using $cellularName Cellular only: Connect Wi-Fi to activate DualBoost aggregation.",
+                            text = "Using $cellularName Cellular only: Connect ${wifiDetails.shortLabel} to activate DualBoost aggregation.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -867,7 +869,7 @@ fun MainScreen(
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                             )
                             Text(
-                                text = "Test combined Wi-Fi + $cellularName speed",
+                                text = "Test combined ${wifiDetails.shortLabel} + $cellularName speed",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1066,7 +1068,7 @@ fun MainScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         val cellShort = cellularGeneration.shortLabel
                         Text(
-                            text = "${preset.description} • ${if (preset.supportsRange) "Aggregates Wi-Fi + $cellShort concurrently" else "Single-stream fallback mode"}",
+                            text = "${preset.description} • ${if (preset.supportsRange) "Aggregates ${wifiDetails.shortLabel} + $cellShort concurrently" else "Single-stream fallback mode"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (preset.supportsRange) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
                         )
@@ -1390,7 +1392,7 @@ fun MainScreen(
                                             )
                                             Spacer(modifier = Modifier.width(10.dp))
                                             Text(
-                                                text = "Single-Stream Mode: Server does not support dual-channel splitting • Running on ${if (state.cellularDownloadedBytes > 0L && state.wifiDownloadedBytes == 0L) cellularGeneration.detailLabel else "Wi-Fi to preserve mobile data"}",
+                                                text = "Single-Stream Mode: Server does not support dual-channel splitting • Running on ${if (state.cellularDownloadedBytes > 0L && state.wifiDownloadedBytes == 0L) cellularGeneration.detailLabel else "${wifiDetails.detailLabel} to preserve mobile data"}",
                                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                                             )
@@ -1486,7 +1488,7 @@ fun MainScreen(
                                 val cellTypeLabel = cellularGeneration.fullDisplayName
 
                                 SpeedDetailRow(
-                                    label = if (isWifiInactiveInSingleStream) "Wi-Fi (Inactive)" else "Wi-Fi",
+                                    label = if (isWifiInactiveInSingleStream) "${wifiDetails.shortLabel} (Inactive)" else wifiDetails.shortLabel,
                                     speedMBps = state.wifiSpeedMBps,
                                     downloadedBytes = state.wifiDownloadedBytes,
                                     indicatorColor = rowWifiColor,
@@ -1653,7 +1655,7 @@ fun MainScreen(
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                         val avgSpeedText = if (state.averageSpeedMBps > 0.0) " at ${com.dualboost.downloader.data.formatSpeed(state.averageSpeedMBps)} avg" else ""
-                                        val dualChannelText = if (state.isDualChannel) " • Aggregated Wi-Fi + ${cellularGeneration.shortLabel} Boost ⚡" else ""
+                                        val dualChannelText = if (state.isDualChannel) " • Aggregated ${wifiDetails.shortLabel} + ${cellularGeneration.shortLabel} Boost ⚡" else ""
                                         Text(
                                             text = "${formatBytes(state.totalBytes)} completed in ${formatDuration(state.durationSeconds)}$avgSpeedText$dualChannelText",
                                             style = MaterialTheme.typography.bodySmall,
@@ -2161,6 +2163,7 @@ fun MainScreen(
         SocialMediaModalSheet(
             state = socialIntakeState,
             cellularGeneration = cellularGeneration,
+            wifiDetails = wifiDetails,
             onDismiss = { viewModel.dismissSocialIntake() },
             onDownload = { url, quality -> viewModel.startSocialDownload(url, quality) },
             onEnqueue = { url, quality -> viewModel.enqueueSocialDownload(url, quality) }
@@ -2350,6 +2353,7 @@ fun SegmentedChunkStrip(
     wifiColor: Color,
     cellularColor: Color,
     cellularGeneration: com.dualboost.downloader.network.CellularGeneration = com.dualboost.downloader.network.CellularGeneration.UNKNOWN,
+    wifiDetails: com.dualboost.downloader.network.WifiDetails = com.dualboost.downloader.network.WifiDetails.DISCONNECTED,
     modifier: Modifier = Modifier
 ) {
     if (chunkSnapshots.isEmpty()) return
@@ -2440,7 +2444,7 @@ fun SegmentedChunkStrip(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "Wi-Fi Chunk",
+                    text = "${wifiDetails.shortLabel} Chunk",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

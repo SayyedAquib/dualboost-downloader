@@ -1495,3 +1495,35 @@ Implement a **Centralized Dynamic Cellular Generation Model & Telephony Classifi
 - Zero hardcoded cellular generation text remaining in the codebase.
 - The UI, service notifications, and modal sheets dynamically reflect the user's active cellular generation (5G, 4G LTE, 3G, or generic Cellular).
 - Pure domain unit tests verify all telephony mapping edge cases without requiring mock Android frameworks.
+
+---
+
+## ADR-041: Dynamic Wi-Fi Generation, Frequency Band & Link Speed Classification
+
+### Status
+Accepted
+
+### Context
+While the Cellular interface was made dynamic with `CellularGeneration` (ADR-040), the Wi-Fi interface remained hardcoded to static `"Wi-Fi"` text across Hero cards, contextual aggregation banners, chunk visualizer legends, quick presets, and speed tests. Modern Android devices (such as Google Pixel 9) support Wi-Fi 7 (802.11be), Wi-Fi 6E (6 GHz), Wi-Fi 6 (802.11ax), Wi-Fi 5 (802.11ac), and tri-band frequencies (2.4 GHz, 5 GHz, 6 GHz) with multi-gigabit negotiated link speeds. Failing to display these details limits network transparency and fails to show whether the user is bottlenecked by a 2.4 GHz link or utilizing high-bandwidth 5/6 GHz channels.
+
+### Decision
+Implement a **First-Class Domain Model & Progressive Wi-Fi Telemetry Classification Architecture**:
+1. **Domain Model (`WifiGeneration` & `WifiDetails`)**:
+   - `WifiGeneration`: Enums for `WIFI_7`, `WIFI_6E`, `WIFI_6`, `WIFI_5`, `WIFI_4`, `LEGACY`, `UNKNOWN` mapping IEEE 802.11 standards (`ScanResult.WIFI_STANDARD_*`).
+   - `WifiDetails`: Encapsulates `generation`, `frequencyMhz`, and `linkSpeedMbps`:
+     - `frequencyBandLabel`: Resolves `"6 GHz"` (`5925..7125 MHz`), `"5 GHz"` (`4900..5900 MHz`), or `"2.4 GHz"` (`2400..2500 MHz`).
+     - `shortLabel`: Compact indicator (`"Wi-Fi 7"`, `"Wi-Fi 6E"`, `"Wi-Fi 6"`, `"Wi-Fi 5"`, or progressive fallback `"Wi-Fi 5 GHz"` / `"Wi-Fi"`) for legends, badges, and notification channels.
+     - `detailLabel`: Descriptive indicator (`"Wi-Fi 7 (6 GHz)"`, `"Wi-Fi 6 (5 GHz)"`, or `"Wi-Fi (5 GHz)"`) for diagnostic and fallback banners.
+     - `richHeroLabel`: Rich descriptor incorporating link speed (e.g. `"Wi-Fi 6 (5 GHz • 1200 Mbps)"`, `"Wi-Fi 7 (6 GHz • 2400 Mbps)"`) for Hero Network Cards.
+2. **Zero-Permission Transport Telemetry Extraction**:
+   - In `DualNetworkManager`, extracts `WifiInfo` via `capabilities.transportInfo as? WifiInfo` on Android 29+ (requiring zero runtime location permissions) and falls back to `WifiManager.connectionInfo`.
+   - Disconnection event immediately resets state to `WifiDetails.DISCONNECTED`.
+3. **Dual-Dynamic Foreground Service & UI Binding**:
+   - `DownloadForegroundService`: Formats ongoing notifications dynamically for both Wi-Fi and Cellular (e.g. `Wi-Fi 6: 25.0 MB/s | 5G: 30.0 MB/s`).
+   - `MainActivity.kt`: Wired to Hero Card (`title = if (wifiAvailable) wifiDetails.richHeroLabel else "Wi-Fi"`), contextual aggregation banner, single-stream notices, `SegmentedChunkStrip` legends, and completion banners.
+   - `SocialMediaModalSheet.kt` and `SpeedTestBottomSheet.kt`: Dynamically interpolate Wi-Fi generation.
+
+### Consequences
+- Full network transparency for both wireless physical interfaces: users see their active Wi-Fi standard, frequency band, and negotiated link speed alongside 5G/LTE cellular status.
+- Zero hardcoded Wi-Fi text across the active interface layers.
+- Verified by pure unit test suites and composable UI tests without mock framework overhead.
