@@ -1637,3 +1637,51 @@ Implement **Dynamic Download Storage Directory & SAF Integration**:
 - Full support for clean subfolder categorization and SAF-selected custom folders/removable media.
 - Non-negotiable fail-safe fallback guarantees zero download crashes or file loss if custom storage becomes unwritable.
 - Verified by unit tests across domain models, preferences, engine fallback, viewmodel, and UI components.
+
+---
+
+## ADR-045: Dynamic Chunk Segment Slicing & Auto-Adaptive Sizing
+
+### Status
+Accepted
+
+### Context
+`DualDownloaderEngine.kt` previously hardcoded the base chunk slicing size to a fixed 4 MB (`CHUNK_SIZE = 4 * 1024 * 1024L`). While 4 MB serves as a balanced baseline, different workloads and network conditions require vastly different segmentation strategies:
+- On small files (< 16 MB) or spotty connections, 4 MB chunks risk under-utilizing dual interfaces or wasting downloaded bytes upon packet loss.
+- On multi-gigabit Wi-Fi 7 and 5G connections downloading multi-gigabyte ISOs or ROMs, 4 MB chunks incur excessive HTTP request round-trips and socket setup overhead.
+- Users requested the ability to configure granular chunk sizing spanning 1 MB to 64 MB, backed by an intelligent Auto-Adaptive engine by default.
+- Crucially, resuming incomplete downloads with `.dualboost_meta` must strictly preserve the file's original chunk size to prevent byte alignment mismatches or file corruption.
+
+### Decision
+Implement **Dynamic Chunk Segment Slicing & Auto-Adaptive Sizing**:
+1. **Domain Model (`ChunkConfig` & `ChunkPreferences`)**:
+   - `ChunkConfig`: Represents slicing configuration supporting Auto-Adaptive sizing alongside manual overrides from 1 MB to 64 MB:
+     - `SUPPORTED_TIERS`: 1 MB, 2 MB, 4 MB (default), 8 MB, 16 MB, 32 MB, 64 MB.
+     - `resolveChunkSize(contentLength, isWifi7OrGigabit, isWeakOrSpotty)`: Dynamically computes optimal segment size via a Balanced Payload & Speed Matrix:
+       - Small files (< 8 MB): 1 MB (ensures both Wi-Fi and 5G obtain chunks).
+       - Moderate files (8 MB .. 16 MB): 2 MB.
+       - Standard files (16 MB .. 200 MB): 4 MB.
+       - Large files (200 MB .. 1000 MB): 8 MB (upgrades to 16 MB on Wi-Fi 7 / Gigabit).
+       - Very large files (1000 MB .. 4000 MB): 16 MB (upgrades to 64 MB on Wi-Fi 7 / Gigabit).
+       - Massive files (> 4000 MB): 32 MB (upgrades to 64 MB on Wi-Fi 7 / Gigabit).
+       - Spotty / weak connections: Clamped to at most 2 MB to prevent socket stalling and wasted data on packet loss.
+   - `ChunkPreferences`: SharedPreferences persistence for `isAutoAdaptive` and `manualChunkSizeBytes` with one-tap `resetToDefault()`.
+2. **Engine & Repository Integration**:
+   - `DualDownloaderEngine` stores `chunkConfig` and exposes `setChunkConfig()`, `getChunkConfig()`, and `resolveEffectiveChunkSize()`.
+   - **Resumption Invariance**: Incomplete downloads resuming from `.dualboost_meta` strictly preserve `existingMeta.chunkSize`, ensuring zero byte corruption across paused sessions.
+   - `DownloadRepository` exposes `chunkConfig: StateFlow<ChunkConfig>`, synchronizes preferences with the engine, and forwards configured sizes to foreground service and download dispatchers.
+   - `DownloadState.Downloading` exposes `chunkSize: Long` for live telemetry.
+3. **UI Integration (`SettingsBottomSheet.kt` & `MainActivity.kt`)**:
+   - `SettingsBottomSheet.kt`: Added **Chunk Slicing Strategy** card featuring:
+     - Header with live subtitle reflecting current strategy ("Auto-Adaptive (1 MB - 64 MB)" vs "Manual (X MB fixed)").
+     - One-tap "Reset" action restoring default Auto-Adaptive with 4 MB baseline.
+     - Auto-Adaptive toggle row with explanatory subtitle.
+     - Horizontally scrollable row of selectable filter chips for supported tiers (1 MB, 2 MB, 4 MB, 8 MB, 16 MB, 32 MB, 64 MB).
+     - Informational caption reinforcing resume invariance.
+   - `MainActivity.kt`: Active download card displays an adaptive badge: `⚡ ${chunkSizeMB} MB Chunks`.
+
+### Consequences
+- Zero hardcoded chunk slicing sizes in the engine.
+- Optimal network aggregation across all file sizes: small files avoid single-channel monopolization, while multi-gigabyte ISOs minimize HTTP overhead on multi-gigabit connections.
+- 100% resume integrity preserved through metadata invariance.
+- Verified across 59 test suites and 347 unit tests with 0 failures.

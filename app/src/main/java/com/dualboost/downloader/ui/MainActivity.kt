@@ -1332,6 +1332,23 @@ fun MainScreen(
                                             }
                                         }
 
+                                        if (state.supportsRanges && state.chunkSize > 0) {
+                                            val chunkMb = state.chunkSize / (1024 * 1024L)
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f))
+                                            ) {
+                                                Text(
+                                                    text = "⚡ $chunkMb MB Chunks",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+
                                         if (state.isSequentialMode) {
                                             Spacer(modifier = Modifier.height(4.dp))
                                             val isReady = state.isPlayable

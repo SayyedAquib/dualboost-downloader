@@ -38,7 +38,11 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.unit.sp
+import com.dualboost.downloader.data.ChunkConfig
+import com.dualboost.downloader.data.ChunkPreferences
 import com.dualboost.downloader.data.ConcurrencyConfig
 import com.dualboost.downloader.data.ConcurrencyPreferences
 import com.dualboost.downloader.data.StreamPalette
@@ -145,6 +149,37 @@ fun SettingsBottomSheet(
         } else {
             StoragePreferences(context).resetToDefault()
             localStorageDestination = StoragePreferences(context).getStorageDestination()
+        }
+    }
+
+    var localChunkConfig by remember { mutableStateOf(ChunkPreferences(context).getChunkConfig()) }
+    val chunkConfigState = viewModel?.chunkConfig?.collectAsState()
+    val currentChunkConfig = chunkConfigState?.value ?: localChunkConfig
+
+    fun updateManualChunk(sizeBytes: Long) {
+        if (viewModel != null) {
+            viewModel.updateManualChunkSize(sizeBytes)
+        } else {
+            ChunkPreferences(context).setManualChunkSizeBytes(sizeBytes)
+            localChunkConfig = ChunkPreferences(context).getChunkConfig()
+        }
+    }
+
+    fun toggleAutoAdaptiveChunk(enabled: Boolean) {
+        if (viewModel != null) {
+            viewModel.toggleAutoAdaptive(enabled)
+        } else {
+            ChunkPreferences(context).setAutoAdaptive(enabled)
+            localChunkConfig = ChunkPreferences(context).getChunkConfig()
+        }
+    }
+
+    fun resetChunkConfig() {
+        if (viewModel != null) {
+            viewModel.resetChunkConfigToDefault()
+        } else {
+            ChunkPreferences(context).resetToDefault()
+            localChunkConfig = ChunkPreferences(context).getChunkConfig()
         }
     }
 
@@ -1168,6 +1203,183 @@ fun SettingsBottomSheet(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Auto-falls back to standard Downloads if storage is unmounted or unwritable.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Chunk Slicing Strategy (ADR-045)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Tune,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Chunk Slicing Strategy",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (currentChunkConfig.isAutoAdaptive) {
+                                        "Auto-Adaptive (1 MB - 64 MB based on link & payload)"
+                                    } else {
+                                        val mb = currentChunkConfig.manualChunkSizeBytes / (1024 * 1024L)
+                                        "Manual ($mb MB fixed segments)"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (!currentChunkConfig.isAutoAdaptive || currentChunkConfig.manualChunkSizeBytes != ChunkConfig.DEFAULT_CHUNK_SIZE_BYTES) {
+                            TextButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    resetChunkConfig()
+                                }
+                            ) {
+                                Text(
+                                    text = "Reset",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Auto-Adaptive Toggle Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                toggleAutoAdaptiveChunk(!currentChunkConfig.isAutoAdaptive)
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Auto-Adaptive Sizing",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Scales dynamically (1 MB small/spotty, up to 64 MB Wi-Fi 7/Gigabit)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = currentChunkConfig.isAutoAdaptive,
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                toggleAutoAdaptiveChunk(it)
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Manual Chunk Size Chips
+                    Text(
+                        text = "Chunk Segment Size Tiers",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ChunkConfig.SUPPORTED_TIERS.forEach { tierBytes ->
+                            val mb = tierBytes / (1024 * 1024L)
+                            val isSelected = !currentChunkConfig.isAutoAdaptive && currentChunkConfig.manualChunkSizeBytes == tierBytes
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    toggleAutoAdaptiveChunk(false)
+                                    updateManualChunk(tierBytes)
+                                },
+                                label = {
+                                    Text(
+                                        text = "$mb MB",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    )
+                                },
+                                leadingIcon = if (isSelected) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                } else null
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Resumption Notice Caption
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Resumed downloads strictly preserve original segment size to prevent file corruption.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )

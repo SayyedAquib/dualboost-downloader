@@ -1,9 +1,30 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-044 (Dynamic Download Storage Directory & SAF Integration). The codebase is backed by **325 unit and integration tests across 55 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-045 (Dynamic Chunk Segment Slicing & Auto-Adaptive Sizing). The codebase is backed by **347 unit and integration tests across 59 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing, and installs and runs flawlessly on Google Pixel 9.
 
 ## Recently Completed
+- **Dynamic Chunk Segment Slicing & Auto-Adaptive Sizing (ADR-045 / 347 Tests across 59 Suites - 100% Green)**:
+  - **Slice 1: ChunkConfig Domain Model & Balanced Sizing Matrix**:
+    - Created `ChunkConfig` domain model supporting Auto-Adaptive sizing alongside manual overrides from 1 MB to 64 MB (1 MB, 2 MB, 4 MB, 8 MB, 16 MB, 32 MB, 64 MB).
+    - Implemented `resolveChunkSize(contentLength, isWifi7OrGigabit, isWeakOrSpotty)` resolving chunk sizes dynamically across small (< 8 MB), moderate (< 16 MB), standard (< 200 MB), large (< 1000 MB), and massive (> 1000 MB) payloads, with automatic upgrades to 16 MB and 64 MB on multi-gigabit Wi-Fi 7 / 5G, and clamp guards on spotty links.
+    - Verified via `ChunkConfigTest.kt` (6 unit tests, 100% green).
+  - **Slice 2: ChunkPreferences Persistence**:
+    - Created `ChunkPreferences` persisting `isAutoAdaptive` boolean and `manualChunkSizeBytes` via Android `SharedPreferences`, complete with one-tap `resetToDefault()`.
+    - Verified via `ChunkPreferencesTest.kt` (5 unit tests, 100% green).
+  - **Slice 3: DualDownloaderEngine & DownloadRepository Integration**:
+    - Wired `ChunkConfig` into `DualDownloaderEngine.startDownload()` and `resolveEffectiveChunkSize()`.
+    - **Non-Negotiable Resumption Invariance**: Incomplete downloads resuming from `.dualboost_meta` strictly preserve `existingMeta.chunkSize` to eliminate byte misalignment and prevent data corruption.
+    - Replaced remaining hardcoded chunk references with `effectiveChunkSize`.
+    - Exposed reactive `chunkConfig: StateFlow<ChunkConfig>` on `DownloadRepository` and `MainViewModel`.
+    - Exposed `chunkSize: Long` on `DownloadState.Downloading` for live telemetry.
+    - Verified via `EngineDynamicChunkTest.kt` (6 unit tests, 100% green).
+  - **Slice 4: SettingsBottomSheet & Active Download UI Controls**:
+    - Added dedicated **Chunk Slicing Strategy** card in `SettingsBottomSheet.kt` with live strategy subtitle, one-tap "Reset" action, Auto-Adaptive toggle row with dynamic capability descriptions, horizontally scrollable filter chip row for supported tiers (1 MB to 64 MB), and informational resume invariance caption.
+    - Added adaptive `⚡ X MB Chunks` badge on active download card in `MainActivity.kt`.
+    - Verified via `ChunkConfigUiTest.kt` (4 unit tests, 100% green).
+    - Full test suite passed 100% green (347 tests across 59 test suites).
+    - Production APK `app-release.apk` (1,695,492 bytes) assembled cleanly via `.\gradlew.bat assembleRelease`, installed via `adb install -r`, launched on Pixel 9, and verified with screenshot.
 - **Dynamic Download Storage Directory & SAF Integration (ADR-044 / 325 Tests across 55 Suites - 100% Green)**:
   - **Slice 1: StorageDestination Domain Model & Resolver**:
     - Created `StorageDestination` domain model supporting standard public Downloads root, built-in subfolder presets (`DualBoost`, `Media`), and custom external directories.

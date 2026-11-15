@@ -82,6 +82,12 @@ Standard Android operating system behavior automatically deactivates or idles th
    - Deploys it to Cloudflare Workers in 60 seconds (free tier, 100k requests/day).
    - Enters their worker URL into DualBoost and taps "Test Worker".
    - Any future file download on servers that reject byte ranges automatically routes through the Cloud Slicer, transforming the single stream into parallel HTTP 206 byte chunks and rendering the `⚡ Cloud Slicer Active` badge.
+5. **Dynamic Chunk Segment Slicing & Auto-Adaptive Sizing (ADR-045)**:
+   - User navigates to Settings > "Chunk Slicing Strategy".
+   - By default, Auto-Adaptive Sizing scales chunk segment sizes dynamically from 1 MB (small files or spotty links) up to 64 MB (multi-gigabit Wi-Fi 7 / 5G on multi-gigabyte payloads).
+   - User can manually select fixed chunk sizes spanning 1 MB, 2 MB, 4 MB, 8 MB, 16 MB, 32 MB, or 64 MB.
+   - Incomplete downloads resuming from `.dualboost_meta` strictly preserve their original chunk size to ensure 100% data integrity and zero corruption.
+   - Active download card displays an adaptive badge (`⚡ X MB Chunks`).
 
 ## Future Features
 - Multi-file batch download queue.

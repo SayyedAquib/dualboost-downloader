@@ -10,6 +10,7 @@ import android.os.StatFs
 import android.provider.MediaStore
 import android.util.Log
 import android.webkit.MimeTypeMap
+import com.dualboost.downloader.data.ChunkConfig
 import com.dualboost.downloader.data.ChunkSnapshot
 import com.dualboost.downloader.data.ChunkStatus
 import com.dualboost.downloader.data.ConcurrencyConfig
@@ -174,6 +175,36 @@ class DualDownloaderEngine(
     }
 
     fun getStorageDestination(): StorageDestination = currentStorageDestination
+
+    private var chunkConfig: ChunkConfig = ChunkConfig()
+
+    fun setChunkConfig(config: ChunkConfig) {
+        this.chunkConfig = config
+    }
+
+    fun getChunkConfig(): ChunkConfig = this.chunkConfig
+
+    internal fun resolveEffectiveChunkSize(
+        contentLength: Long,
+        canResume: Boolean,
+        existingMeta: MetaInfo?,
+        configOverride: ChunkConfig? = null
+    ): Long {
+        if (canResume && existingMeta != null) {
+            return existingMeta.chunkSize
+        }
+        val config = configOverride ?: this.chunkConfig
+        val isWifi7OrGigabit = networkManager.wifiDetails.value.generation == com.dualboost.downloader.network.WifiGeneration.WIFI_7 ||
+                networkManager.wifiDetails.value.linkSpeedMbps >= 1000
+        val isWeakOrSpotty = (networkManager.isWifiAvailable.value && networkManager.wifiSignalLevel.value <= 1) ||
+                (networkManager.isCellularAvailable.value && networkManager.cellularSignalLevel.value <= 1)
+
+        return config.resolveChunkSize(
+            contentLength = contentLength,
+            isWifi7OrGigabit = isWifi7OrGigabit,
+            isWeakOrSpotty = isWeakOrSpotty
+        )
+    }
 
     fun getDefaultDownloadDir(): File {
         return currentStorageDestination.resolveDirectory(context)
@@ -481,7 +512,8 @@ class DualDownloaderEngine(
         targetDir: File = getDefaultDownloadDir(),
         forceSequentialMode: Boolean? = null,
         allowDangerousBypass: Boolean = false,
-        concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT
+        concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT,
+        chunkConfig: ChunkConfig? = null
     ) {
         val rawTrimmed = url.trim()
         val parsedHttpUrl = runCatching { rawTrimmed.toHttpUrlOrNull() }.getOrNull()
@@ -509,7 +541,7 @@ class DualDownloaderEngine(
             try {
                 networkManager.acquireCellularKeepAlive()
                 thermalStatusProvider.startListening()
-                executeDownload(sanitizedUrl, targetDir, forceSequentialMode, allowDangerousBypass, concurrencyConfig)
+                executeDownload(sanitizedUrl, targetDir, forceSequentialMode, allowDangerousBypass, concurrencyConfig, chunkConfig)
             } catch (e: ThreatDetectedException) {
                 Log.w(TAG, "Threat detected during download: ${e.threat.description}")
                 discardDownload(targetDir, e.fileName)
@@ -683,7 +715,8 @@ class DualDownloaderEngine(
         targetDir: File,
         forceSequentialMode: Boolean? = null,
         allowDangerousBypass: Boolean = false,
-        concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT
+        concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT,
+        chunkConfigOverride: ChunkConfig? = null
     ) {
         var fileName = extractFileName(url)
         val shouldInspectThreats = !allowDangerousBypass && SecurityPreferences.isThreatGuardEnabled(context)
@@ -1025,7 +1058,7 @@ class DualDownloaderEngine(
             completedIndices.addAll(existingMeta.completedChunks)
         }
 
-        val effectiveChunkSize = if (canResume && existingMeta != null) existingMeta.chunkSize else CHUNK_SIZE
+        val effectiveChunkSize = resolveEffectiveChunkSize(contentLength, canResume, existingMeta, chunkConfigOverride)
 
         // Divide file into chunks
         val maxSupportedChunks = 1_000_000 // 2 TB at 2MB chunks - prevents OOM from corrupted Content-Length
@@ -1092,7 +1125,8 @@ class DualDownloaderEngine(
             contiguousPlayableBytes = initialContiguous,
             isPlayable = initialPlayable,
             filePath = outputFile.absolutePath,
-            contentUriString = null
+            contentUriString = null,
+            chunkSize = effectiveChunkSize
         )
 
 
@@ -1172,7 +1206,8 @@ class DualDownloaderEngine(
                         contiguousPlayableBytes = contiguous,
                         isPlayable = playable,
                         filePath = outputFile.absolutePath,
-                        contentUriString = null
+                        contentUriString = null,
+                        chunkSize = effectiveChunkSize
                     )
                 }
             }
@@ -1568,10 +1603,10 @@ class DualDownloaderEngine(
             monitorJob.cancel()
 
             if (isPausedDueToExhaustion.get()) {
-                saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive)
+                saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize)
                 val completedBytes = completedIndices.sumOf { chunkIndex ->
-                    val start = chunkIndex * CHUNK_SIZE
-                    val end = min(start + CHUNK_SIZE - 1, contentLength - 1)
+                    val start = chunkIndex * effectiveChunkSize
+                    val end = min(start + effectiveChunkSize - 1, contentLength - 1)
                     max(0L, (end - start) + 1)
                 }
                 val progress = if (contentLength > 0) completedBytes.toFloat() / contentLength.toFloat() else 0f

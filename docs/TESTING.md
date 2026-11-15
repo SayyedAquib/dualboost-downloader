@@ -10,7 +10,36 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (325 active tests across 55 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (347 active tests across 59 test suites, 100% passing):
+
+- **ChunkConfigTest** (6 tests):
+  - `testChunkConfig_DefaultsToAutoAdaptiveAnd4MB`: Verifies domain model defaults to Auto-Adaptive sizing with 4 MB manual baseline.
+  - `testChunkConfig_ClampsManualChunkSizeBetween1MBAnd64MB`: Tests boundary clamping ensuring manual chunk sizes stay strictly within 1 MB to 64 MB.
+  - `testChunkConfig_AutoAdaptive_ScalesByPayloadSize`: Validates Balanced Payload & Speed Matrix scaling across small (< 8 MB), moderate (< 16 MB), standard (< 200 MB), large (< 1000 MB), and massive (> 1000 MB) payloads.
+  - `testChunkConfig_AutoAdaptive_UpgradesOnGigabitWifi7`: Verifies chunk size upgrades to 16 MB and 64 MB on multi-gigabit / Wi-Fi 7 connections.
+  - `testChunkConfig_AutoAdaptive_ClampsOnSpottyNetwork`: Verifies spotty or weak connections clamp chunk sizes to at most 2 MB.
+  - `testChunkConfig_SupportedTiersList`: Verifies all 7 supported tiers (1 MB, 2 MB, 4 MB, 8 MB, 16 MB, 32 MB, 64 MB).
+
+- **ChunkPreferencesTest** (5 tests):
+  - `testPreferences_DefaultsToAutoAdaptiveAnd4MB`: Verifies SharedPreferences defaults to Auto-Adaptive with 4 MB baseline.
+  - `testPreferences_SavesAndRestoresManualSize`: Tests saving and reloading custom chunk sizes.
+  - `testPreferences_TogglesAutoAdaptive`: Verifies toggling Auto-Adaptive mode on and off.
+  - `testPreferences_ClampsManualSizeOnSave`: Verifies boundary clamping on save.
+  - `testPreferences_ResetToDefault_RestoresAutoAdaptive`: Tests one-tap reset restoring default Auto-Adaptive mode.
+
+- **EngineDynamicChunkTest** (6 tests):
+  - `testEngine_DefaultsToAutoAdaptiveChunkConfig`: Verifies engine initializes with Auto-Adaptive config.
+  - `testEngine_SetsAndRetrievesChunkConfig`: Verifies engine updates and retains chunk config.
+  - `testEngine_SaveAndReadMetadata_PreservesCustomChunkSize`: Verifies metadata serialization saves and loads custom chunk sizes.
+  - `testEngine_ResolveEffectiveChunkSize_PreservesMetadataOnResume`: Verifies non-negotiable resume invariance ensuring incomplete downloads strictly resume with `existingMeta.chunkSize` to prevent file corruption.
+  - `testRepository_ExposesChunkConfigStateFlowAndUpdates`: Tests repository StateFlow and engine synchronization.
+  - `testDownloadState_Downloading_IncludesChunkSize`: Verifies telemetry state exposes active chunk size.
+
+- **ChunkConfigUiTest** (4 tests):
+  - `testChunkUi_SupportedTiersList`: Verifies 7 supported tiers in UI model.
+  - `testChunkUi_TierLabelsAndFormatting`: Tests formatting tier chip labels ("1 MB", "4 MB", etc.).
+  - `testChunkUi_FormatsChunkBadgeText`: Tests active download badge formatting ("⚡ 4 MB Chunks (Auto)" vs "⚡ 16 MB Chunks").
+  - `testChunkUi_SummaryTextFormatting`: Tests strategy summary text in Settings card.
 
 - **StorageDestinationTest** (6 tests):
   - `testDestination_PresetsArePopulated`: Verifies that `StorageDestination.PRESETS` contains all 3 built-in presets (Standard, DualBoost, Media) with accurate IDs and display names.

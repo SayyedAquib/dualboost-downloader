@@ -70,7 +70,8 @@ sealed class DownloadState {
         val contiguousPlayableBytes: Long = 0L,
         val isPlayable: Boolean = false,
         val filePath: String = "",
-        val contentUriString: String? = null
+        val contentUriString: String? = null,
+        val chunkSize: Long = 4 * 1024 * 1024L
     ) : DownloadState() {
         val wifiSpeedMbps: Double get() = wifiSpeedMBps
         val cellularSpeedMbps: Double get() = cellularSpeedMBps

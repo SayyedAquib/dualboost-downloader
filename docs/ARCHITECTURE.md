@@ -254,6 +254,11 @@ sequenceDiagram
   - Robust Directory Validation & Fallback: Verifies write permissions via ephemeral probe file test (`.dualboost_storage_test_*`). If a user-selected SD card, USB drive, or custom directory is disconnected, full, or unwritable, the engine automatically falls back to standard public Downloads or app-internal files without crashing.
   - Cross-Directory Resumption: `restoreIncompleteDownload()` scans candidate directories (internal meta directory, active target folder, public root Downloads, and app files dir) guaranteeing paused transfers can always resume even if the user changed destinations.
   - Settings UI: `SettingsBottomSheet.kt` provides active path preview, quick preset chips, and SAF `ACTION_OPEN_DOCUMENT_TREE` folder picker with persistable permission grants.
+- **Dynamic Chunk Segment Slicing & Auto-Adaptive Sizing (`ADR-045`)**:
+  - Granular Sizing Architecture: Dynamic segment sizing spanning 1 MB, 2 MB, 4 MB (default), 8 MB, 16 MB, 32 MB, and 64 MB (`ChunkConfig`).
+  - Balanced Payload & Speed Matrix: Intelligent auto-sizing matrix that matches segment size to payload volume and real-time interface capabilities: smaller chunks (1 MB .. 2 MB) for small files (< 16 MB) or spotty links to ensure both Wi-Fi and Cellular stay saturated without one idling; standard 4 MB chunks for medium files; larger chunks (8 MB .. 16 MB) for multi-hundred megabyte payloads; and up to 64 MB chunks on multi-gigabit Wi-Fi 7 / 5G to minimize HTTP header overhead.
+  - Resumption Invariance Guarantee: Resuming paused or interrupted transfers strictly enforces `existingMeta.chunkSize` from `.dualboost_meta`, eliminating byte boundary shifts and guaranteeing 0% file corruption.
+  - UI Presentation: `SettingsBottomSheet.kt` provides a dedicated Chunk Slicing Strategy card with auto-adaptive toggle, tier chips, and reset action. Active transfers display a badge (`⚡ X MB Chunks`).
 
 ## Constraints
 - Server must support HTTP Range requests (either via standard mobile headers, desktop browser spoofing, or Personal Cloud Slicer) for dual-channel acceleration.

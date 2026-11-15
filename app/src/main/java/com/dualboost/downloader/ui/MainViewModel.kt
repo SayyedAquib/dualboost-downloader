@@ -235,6 +235,21 @@ open class MainViewModel(
         repository?.resetStorageDestinationToDefault()
     }
 
+    val chunkConfig: StateFlow<com.dualboost.downloader.data.ChunkConfig> =
+        repository?.chunkConfig ?: MutableStateFlow(com.dualboost.downloader.data.ChunkConfig())
+
+    fun updateManualChunkSize(sizeBytes: Long) {
+        repository?.updateManualChunkSize(sizeBytes)
+    }
+
+    fun toggleAutoAdaptive(enabled: Boolean) {
+        repository?.toggleAutoAdaptive(enabled)
+    }
+
+    fun resetChunkConfigToDefault() {
+        repository?.resetChunkConfigToDefault()
+    }
+
     val queueItems: StateFlow<List<com.dualboost.downloader.data.QueueItem>> =
         repository?.queueRepository?.queueItems ?: MutableStateFlow(emptyList())
 

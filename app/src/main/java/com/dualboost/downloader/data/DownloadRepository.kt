@@ -30,8 +30,34 @@ class DownloadRepository(
     val queueCoordinatorOverride: com.dualboost.downloader.engine.QueueCoordinator? = null,
     val concurrencyPreferencesOverride: ConcurrencyPreferences? = null,
     val streamPalettePreferencesOverride: StreamPalettePreferences? = null,
-    val storagePreferencesOverride: StoragePreferences? = null
+    val storagePreferencesOverride: StoragePreferences? = null,
+    val chunkPreferencesOverride: ChunkPreferences? = null
 ) : com.dualboost.downloader.engine.QueueDownloadDispatcher {
+
+    val chunkPreferences: ChunkPreferences by lazy {
+        chunkPreferencesOverride ?: ChunkPreferences(context)
+    }
+
+    private val _chunkConfig = MutableStateFlow(chunkPreferences.getChunkConfig())
+    val chunkConfig: StateFlow<ChunkConfig> = _chunkConfig.asStateFlow()
+
+    fun updateManualChunkSize(sizeBytes: Long) {
+        chunkPreferences.setManualChunkSizeBytes(sizeBytes)
+        _chunkConfig.value = chunkPreferences.getChunkConfig()
+        downloaderEngine.setChunkConfig(_chunkConfig.value)
+    }
+
+    fun toggleAutoAdaptive(enabled: Boolean) {
+        chunkPreferences.setAutoAdaptive(enabled)
+        _chunkConfig.value = chunkPreferences.getChunkConfig()
+        downloaderEngine.setChunkConfig(_chunkConfig.value)
+    }
+
+    fun resetChunkConfigToDefault() {
+        chunkPreferences.resetToDefault()
+        _chunkConfig.value = chunkPreferences.getChunkConfig()
+        downloaderEngine.setChunkConfig(_chunkConfig.value)
+    }
 
     val storagePreferences: StoragePreferences by lazy {
         storagePreferencesOverride ?: StoragePreferences(context)
@@ -208,6 +234,9 @@ class DownloadRepository(
             downloaderEngine.setStorageDestination(_storageDestination.value)
         } catch (_: Exception) {}
         try {
+            downloaderEngine.setChunkConfig(_chunkConfig.value)
+        } catch (_: Exception) {}
+        try {
             downloaderEngine.restoreIncompleteDownload()
         } catch (e: Exception) {
             Log.w("DownloadRepository", "Could not restore incomplete download: ${e.message}")
@@ -223,9 +252,11 @@ class DownloadRepository(
         targetDir: File = downloaderEngine.getDefaultDownloadDir(),
         forceSequentialMode: Boolean? = null,
         allowDangerousBypass: Boolean = false,
-        concurrencyConfigOverride: ConcurrencyConfig? = null
+        concurrencyConfigOverride: ConcurrencyConfig? = null,
+        chunkConfigOverride: ChunkConfig? = null
     ) {
         val effectiveConcurrency = concurrencyConfigOverride ?: _concurrencyConfig.value
+        val effectiveChunkConfig = chunkConfigOverride ?: _chunkConfig.value
         if (isServiceEnabled) {
             try {
                 val intent = Intent(context, DownloadForegroundService::class.java).apply {
@@ -242,7 +273,7 @@ class DownloadRepository(
                 // Safe fallback in test environments or if ForegroundServiceStartNotAllowedException is thrown
             }
         }
-        downloaderEngine.startDownload(url, targetDir, forceSequentialMode, allowDangerousBypass, effectiveConcurrency)
+        downloaderEngine.startDownload(url, targetDir, forceSequentialMode, allowDangerousBypass, effectiveConcurrency, effectiveChunkConfig)
     }
 
     override fun pauseDownload() {
