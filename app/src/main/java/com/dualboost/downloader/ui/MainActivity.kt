@@ -386,7 +386,7 @@ fun MainScreen(
 
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
-                    label = { Text("Cloud Slicer Settings", fontWeight = FontWeight.Medium) },
+                    label = { Text("Settings", fontWeight = FontWeight.Medium) },
                     selected = false,
                     onClick = {
                         drawerScope.launch { drawerState.close() }

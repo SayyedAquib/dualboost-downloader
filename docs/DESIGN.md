@@ -126,6 +126,12 @@ To ensure physical network transparency across any wallpaper palette:
 - **Data Roaming Guard Banner (`ADR-033`)**: High-contrast `errorContainer` warning banner with `Icons.Rounded.Warning` alerting users when cellular data is paused to prevent unexpected international or partner roaming fees.
 - **Cellular Carrier Transparency & Modem Standby Diagnostics (`ADR-033`)**: Hero cellular card dynamically displays carrier name (`5G Cellular (Verizon)`). Subtitle indicates `Roaming (Paused)` or `Modem Standby`. When Wi-Fi is active and cellular drops into standby, the context banner provides clear guidance to toggle "Mobile data always active" in Android Developer Options.
 
+### Top App Bar & Navigation
+- Material 3 `CenterAlignedTopAppBar` with dynamic surface tint.
+- Navigation icon: `Icons.Rounded.Menu` (hamburger ☰) on the top left opening the left navigation drawer.
+- Action icons: None on top bar (clean header maintaining visual focus).
+- Left Navigation Drawer: Displays app branding, Android 15 SDK 35 badge, "Settings" (`Icons.Rounded.Settings`), and "Speed Test Benchmark" items.
+
 ### Settings Modal Sheet (`SettingsBottomSheet`)
 - Material 3 `ModalBottomSheet` with `RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)`.
 - Header: Centered 58.dp circular hero badge (`CircleShape`) with 14% translucent brand tint, crisp `Icons.Rounded.CloudDone` (when configured) or `Icons.Rounded.CloudQueue` (when unconfigured) (30.dp), and a dedicated status pill directly below the subtitle ("Worker Active & Ready" with pulsing emerald dot vs. "Worker Not Configured" with muted dot). Title "Personal Cloud Slicer" and subtitle.

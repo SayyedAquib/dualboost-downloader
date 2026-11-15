@@ -25,6 +25,9 @@ DualBoost Downloader is 100% production-grade across all Android devices (Pixel,
     - Verified via `ChunkConfigUiTest.kt` (4 unit tests, 100% green).
     - Full test suite passed 100% green (347 tests across 59 test suites).
     - Production APK `app-release.apk` (1,695,492 bytes) assembled cleanly via `.\gradlew.bat assembleRelease`, installed via `adb install -r`, launched on Pixel 9, and verified with screenshot.
+  - **Side Drawer Navigation**:
+    - Kept Settings exclusively within the left navigation drawer under the clearly labeled `"Settings"` item (`Icons.Rounded.Settings`), preserving a clean top app bar.
+    - Verified on device via `screen_drawer_settings.png`.
 - **Dynamic Download Storage Directory & SAF Integration (ADR-044 / 325 Tests across 55 Suites - 100% Green)**:
   - **Slice 1: StorageDestination Domain Model & Resolver**:
     - Created `StorageDestination` domain model supporting standard public Downloads root, built-in subfolder presets (`DualBoost`, `Media`), and custom external directories.
