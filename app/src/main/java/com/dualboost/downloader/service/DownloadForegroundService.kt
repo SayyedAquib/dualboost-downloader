@@ -153,9 +153,15 @@ class DownloadForegroundService : Service() {
                                 "Downloading: ${state.fileName}"
                             }
 
+                            val cellGen = networkManager.cellularGeneration.value
                             updateNotification(
                                 title = notificationTitle,
-                                content = "Wi-Fi: ${com.dualboost.downloader.data.formatSpeed(state.wifiSpeedMBps)} | 5G: ${com.dualboost.downloader.data.formatSpeed(state.cellularSpeedMBps)} (Total: ${com.dualboost.downloader.data.formatSpeed(state.totalSpeedMBps)})",
+                                content = formatNotificationSpeedContent(
+                                    wifiSpeedMBps = state.wifiSpeedMBps,
+                                    cellularSpeedMBps = state.cellularSpeedMBps,
+                                    totalSpeedMBps = state.totalSpeedMBps,
+                                    cellularGeneration = cellGen
+                                ),
                                 progress = (state.progressPercentage * 100).toInt(),
                                 indeterminate = false,
                                 previewIntent = previewPending
@@ -369,7 +375,7 @@ class DownloadForegroundService : Service() {
                 "DualBoost Downloads",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows live download progress and dual Wi-Fi + 5G speeds"
+                description = "Shows live download progress and aggregated speeds across Wi-Fi and Cellular"
             }
             notificationManager.createNotificationChannel(channel)
         }
@@ -415,6 +421,16 @@ class DownloadForegroundService : Service() {
         const val ACTION_DISCARD_DOWNLOAD = "com.dualboost.ACTION_DISCARD_DOWNLOAD"
         const val EXTRA_URL = "extra_download_url"
         const val EXTRA_FORCE_SEQUENTIAL = "extra_force_sequential"
+
+        fun formatNotificationSpeedContent(
+            wifiSpeedMBps: Double,
+            cellularSpeedMBps: Double,
+            totalSpeedMBps: Double,
+            cellularGeneration: com.dualboost.downloader.network.CellularGeneration
+        ): String {
+            val cellLabel = cellularGeneration.shortLabel
+            return "Wi-Fi: ${com.dualboost.downloader.data.formatSpeed(wifiSpeedMBps)} | $cellLabel: ${com.dualboost.downloader.data.formatSpeed(cellularSpeedMBps)} (Total: ${com.dualboost.downloader.data.formatSpeed(totalSpeedMBps)})"
+        }
     }
 }
 

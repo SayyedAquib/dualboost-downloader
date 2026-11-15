@@ -35,6 +35,9 @@ fun SpeedTestBottomSheet(
     val speedTestState by viewModel.speedTestState.collectAsState()
     val isWifiAvailable by viewModel.isWifiAvailable.collectAsState()
     val isCellularAvailable by viewModel.isCellularAvailable.collectAsState()
+    val cellularGeneration by viewModel.cellularGeneration.collectAsState()
+    val cellShort = cellularGeneration.shortLabel
+    val cellDetail = cellularGeneration.detailLabel
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isDark = isSystemInDarkTheme()
@@ -117,6 +120,8 @@ fun SpeedTestBottomSheet(
                         isCellularAvailable = isCellularAvailable,
                         wifiColor = wifiColor,
                         cellularColor = cellularColor,
+                        cellShort = cellShort,
+                        cellDetail = cellDetail,
                         onStartTest = { viewModel.startSpeedTest() }
                     )
                 }
@@ -126,6 +131,7 @@ fun SpeedTestBottomSheet(
                         state = state,
                         wifiColor = wifiColor,
                         cellularColor = cellularColor,
+                        cellDetail = cellDetail,
                         onCancel = { viewModel.stopSpeedTest() }
                     )
                 }
@@ -135,6 +141,8 @@ fun SpeedTestBottomSheet(
                         state = state,
                         wifiColor = wifiColor,
                         cellularColor = cellularColor,
+                        cellShort = cellShort,
+                        cellDetail = cellDetail,
                         onRunAgain = { viewModel.startSpeedTest() },
                         onDone = onDismiss
                     )
@@ -157,6 +165,8 @@ private fun SpeedTestIdleView(
     isCellularAvailable: Boolean,
     wifiColor: Color,
     cellularColor: Color,
+    cellShort: String,
+    cellDetail: String,
     onStartTest: () -> Unit
 ) {
     Card(
@@ -172,7 +182,7 @@ private fun SpeedTestIdleView(
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Tests download throughput sequentially to reveal the exact speed boost gained when Wi-Fi and 5G aggregate simultaneously:",
+                text = "Tests download throughput sequentially to reveal the exact speed boost gained when Wi-Fi and $cellShort aggregate simultaneously:",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -203,7 +213,7 @@ private fun SpeedTestIdleView(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Step 2: 5G
+            // Step 2: Cellular
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Rounded.SignalCellularAlt,
@@ -213,7 +223,7 @@ private fun SpeedTestIdleView(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "2. 5G Cellular alone (3 sec)",
+                    text = "2. $cellDetail alone (3 sec)",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
@@ -276,11 +286,12 @@ private fun SpeedTestRunningView(
     state: SpeedTestState.Running,
     wifiColor: Color,
     cellularColor: Color,
+    cellDetail: String,
     onCancel: () -> Unit
 ) {
     val phaseTitle = when (state.phase) {
         SpeedTestPhase.TESTING_WIFI -> "Testing Wi-Fi Alone (1/3)"
-        SpeedTestPhase.TESTING_CELLULAR -> "Testing 5G Cellular Alone (2/3)"
+        SpeedTestPhase.TESTING_CELLULAR -> "Testing $cellDetail Alone (2/3)"
         SpeedTestPhase.TESTING_DUALBOOST -> "⚡ Testing DualBoost Combined (3/3)"
         else -> "Testing Speed..."
     }
@@ -416,7 +427,7 @@ private fun SpeedTestRunningView(
             modifier = Modifier.weight(1f)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Text(text = "5G Cellular", style = MaterialTheme.typography.labelSmall, color = cellularColor)
+                Text(text = cellDetail, style = MaterialTheme.typography.labelSmall, color = cellularColor)
                 Text(
                     text = if (state.cellularSpeedMBps > 0f) com.dualboost.downloader.data.formatSpeed(state.cellularSpeedMBps.toDouble()) else if (state.phase == SpeedTestPhase.TESTING_CELLULAR) "Testing..." else "Waiting...",
                     style = MaterialTheme.typography.titleSmall,
@@ -446,6 +457,8 @@ private fun SpeedTestCompletedView(
     state: SpeedTestState.Completed,
     wifiColor: Color,
     cellularColor: Color,
+    cellShort: String,
+    cellDetail: String,
     onRunAgain: () -> Unit,
     onDone: () -> Unit
 ) {
@@ -477,7 +490,7 @@ private fun SpeedTestCompletedView(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Aggregating Wi-Fi + 5G delivered ${com.dualboost.downloader.data.formatSpeed(state.dualBoostSpeedMBps.toDouble())} aggregate throughput.",
+                    text = "Aggregating Wi-Fi + $cellShort delivered ${com.dualboost.downloader.data.formatSpeed(state.dualBoostSpeedMBps.toDouble())} aggregate throughput.",
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
@@ -501,7 +514,7 @@ private fun SpeedTestCompletedView(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Connect both Wi-Fi and 5G simultaneously to unleash maximum aggregate throughput.",
+                    text = "Connect both Wi-Fi and $cellShort simultaneously to unleash maximum aggregate throughput.",
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -571,7 +584,7 @@ private fun SpeedTestCompletedView(
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = "5G Cellular Only", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text(text = "$cellDetail Only", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 }
                 Text(
                     text = com.dualboost.downloader.data.formatSpeed(state.cellularSpeedMBps.toDouble()),

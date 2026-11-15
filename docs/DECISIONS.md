@@ -1460,3 +1460,38 @@ Implement a **Zero-Bloat Social Media Extraction & Quality Resolution Pipeline**
 ### Consequences
 - Enables full-resolution 4K/1080p and audio downloading from major social networks with zero APK bloat (app size remains 1.6 MB).
 - Seamlessly hands off resolved stream URLs to `DualDownloaderEngine` with Wi-Fi + 5G bonding and Antivirus Threat Guard protection.
+
+---
+
+## ADR-040: Dynamic Cellular Generation Labeling & Telephony Classification
+
+### Status
+Accepted
+
+### Context
+The application originally hardcoded `"5G"` labels across several UI hero cards, contextual pill badges, quick test presets, download completion banners, chunk strip legends, speed test modal sheets, social media sheets, and foreground service notification descriptions. On devices connected to 4G LTE, 3G, or in areas without 5G NR reception, these static labels presented misleading information suggesting 5G bonding was active when the modem was operating on LTE.
+
+### Decision
+Implement a **Centralized Dynamic Cellular Generation Model & Telephony Classification Architecture**:
+1. **Domain Model & Adaptive Two-Tier Labels (`CellularGeneration`)**:
+   - Enhanced `CellularGeneration` enum with structured label properties:
+     - `shortLabel`: Compact indicator (`"5G"`, `"4G"`, `"3G"`, `"Cellular"`) for space-constrained UI elements (chunk strip legends, notifications, quick preset cards, modal quality badges).
+     - `detailLabel`: Descriptive indicator (`"5G Cellular"`, `"4G LTE Cellular"`, `"3G Cellular"`, `"Cellular"`) for hero cards and diagnostic banners.
+     - `fullDisplayName`: Technical descriptor (`"5G Ultra-Capacity"`, `"4G LTE"`, `"3G Legacy"`, `"Cellular"`) for telemetry badges.
+   - Centralized classification via `CellularGeneration.fromTelephony(networkType, overrideNetworkType)`:
+     - Classifies `FIVE_G` strictly for `TelephonyManager.NETWORK_TYPE_NR` (20), `OVERRIDE_NETWORK_TYPE_NR_NSA` (3), or `OVERRIDE_NETWORK_TYPE_NR_ADVANCED` (5).
+     - Classifies `FOUR_G` for LTE types and LTE Carrier Aggregation overrides.
+     - Classifies `THREE_G_OR_LOWER` for legacy UMTS, HSDPA, EVDO, GPRS, EDGE networks.
+     - Falls back to `UNKNOWN` (`"Cellular"`) when disconnected or indeterminate.
+2. **Foreground Service Dynamic Notifications**:
+   - `DownloadForegroundService` formats ongoing notification speed text via `formatNotificationSpeedContent(wifiSpeed, cellSpeed, cellLabel)` using `networkManager.cellularGeneration.value.shortLabel`.
+   - Updated notification channel description to dynamically represent aggregated Wi-Fi and Cellular bandwidth.
+3. **Comprehensive Dynamic UI Binding**:
+   - `MainActivity.kt`: Bound `cellularGeneration` StateFlow to hero connection cards, single-stream fallback notices, quick presets, speed gauges, segmented chunk legends, and completion banners.
+   - `SocialMediaModalSheet.kt`: Updated extraction subtitle to display `"Choose quality to accelerate download over Wi-Fi + ${cellularGeneration.shortLabel}"`.
+   - `SpeedTestBottomSheet.kt`: Wired `cellularGeneration` to display phase badges (e.g. `"Testing 4G LTE..."` / `"Testing 5G..."`) across Idle, Running, and Completed benchmark states.
+
+### Consequences
+- Zero hardcoded cellular generation text remaining in the codebase.
+- The UI, service notifications, and modal sheets dynamically reflect the user's active cellular generation (5G, 4G LTE, 3G, or generic Cellular).
+- Pure domain unit tests verify all telephony mapping edge cases without requiring mock Android frameworks.

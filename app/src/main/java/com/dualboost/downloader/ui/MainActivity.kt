@@ -667,10 +667,9 @@ fun MainScreen(
             }
 
             // Network Aggregation Hero Cards
-            val is4G = cellularGeneration == com.dualboost.downloader.network.CellularGeneration.FOUR_G
-            val cellularName = if (is4G) "4G LTE" else "5G"
+            val cellularName = cellularGeneration.fullDisplayName
             val cellularCarrierSuffix = cellularCarrierName?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
-            val cellularTitle = "$cellularName Cellular$cellularCarrierSuffix"
+            val cellularTitle = "${cellularGeneration.detailLabel}$cellularCarrierSuffix"
             val cellularSubtitle = when {
                 isRoamingActive -> "Roaming (Paused)"
                 cellularAvailable -> viewModel.getSignalLabel(cellularSignalLevel)
@@ -1065,8 +1064,9 @@ fun MainScreen(
 
                     selectedPreset?.let { preset ->
                         Spacer(modifier = Modifier.height(8.dp))
+                        val cellShort = cellularGeneration.shortLabel
                         Text(
-                            text = "${preset.description} • ${if (preset.supportsRange) "Aggregates Wi-Fi + 5G concurrently" else "Single-stream fallback mode"}",
+                            text = "${preset.description} • ${if (preset.supportsRange) "Aggregates Wi-Fi + $cellShort concurrently" else "Single-stream fallback mode"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (preset.supportsRange) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
                         )
@@ -1390,7 +1390,7 @@ fun MainScreen(
                                             )
                                             Spacer(modifier = Modifier.width(10.dp))
                                             Text(
-                                                text = "Single-Stream Mode: Server does not support dual-channel splitting • Running on ${if (state.cellularDownloadedBytes > 0L && state.wifiDownloadedBytes == 0L) "5G Cellular" else "Wi-Fi to preserve mobile data"}",
+                                                text = "Single-Stream Mode: Server does not support dual-channel splitting • Running on ${if (state.cellularDownloadedBytes > 0L && state.wifiDownloadedBytes == 0L) cellularGeneration.detailLabel else "Wi-Fi to preserve mobile data"}",
                                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                                             )
@@ -1483,7 +1483,7 @@ fun MainScreen(
                                 // Detailed Interface Speeds
                                 val isWifiInactiveInSingleStream = !state.supportsRanges && state.wifiDownloadedBytes == 0L && state.cellularDownloadedBytes > 0L
                                 val isCellularInactiveInSingleStream = !state.supportsRanges && state.cellularDownloadedBytes == 0L
-                                val cellTypeLabel = if (cellularGeneration == com.dualboost.downloader.network.CellularGeneration.FIVE_G) "5G" else "4G LTE"
+                                val cellTypeLabel = cellularGeneration.fullDisplayName
 
                                 SpeedDetailRow(
                                     label = if (isWifiInactiveInSingleStream) "Wi-Fi (Inactive)" else "Wi-Fi",
@@ -1653,7 +1653,7 @@ fun MainScreen(
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                         val avgSpeedText = if (state.averageSpeedMBps > 0.0) " at ${com.dualboost.downloader.data.formatSpeed(state.averageSpeedMBps)} avg" else ""
-                                        val dualChannelText = if (state.isDualChannel) " • Aggregated Wi-Fi + 5G Boost ⚡" else ""
+                                        val dualChannelText = if (state.isDualChannel) " • Aggregated Wi-Fi + ${cellularGeneration.shortLabel} Boost ⚡" else ""
                                         Text(
                                             text = "${formatBytes(state.totalBytes)} completed in ${formatDuration(state.durationSeconds)}$avgSpeedText$dualChannelText",
                                             style = MaterialTheme.typography.bodySmall,
@@ -2160,6 +2160,7 @@ fun MainScreen(
     if (socialIntakeState !is com.dualboost.downloader.social.SocialIntakeState.Idle) {
         SocialMediaModalSheet(
             state = socialIntakeState,
+            cellularGeneration = cellularGeneration,
             onDismiss = { viewModel.dismissSocialIntake() },
             onDownload = { url, quality -> viewModel.startSocialDownload(url, quality) },
             onEnqueue = { url, quality -> viewModel.enqueueSocialDownload(url, quality) }
@@ -2348,6 +2349,7 @@ fun SegmentedChunkStrip(
     chunkSnapshots: List<com.dualboost.downloader.data.ChunkSnapshot>,
     wifiColor: Color,
     cellularColor: Color,
+    cellularGeneration: com.dualboost.downloader.network.CellularGeneration = com.dualboost.downloader.network.CellularGeneration.UNKNOWN,
     modifier: Modifier = Modifier
 ) {
     if (chunkSnapshots.isEmpty()) return
@@ -2452,7 +2454,7 @@ fun SegmentedChunkStrip(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "5G Chunk",
+                    text = "${cellularGeneration.shortLabel} Chunk",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

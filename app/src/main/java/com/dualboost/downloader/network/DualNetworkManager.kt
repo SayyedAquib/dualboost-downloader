@@ -20,10 +20,75 @@ import okhttp3.Dns
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
-enum class CellularGeneration {
-    UNKNOWN,
-    FOUR_G,
-    FIVE_G
+enum class CellularGeneration(
+    val shortLabel: String,
+    val detailLabel: String,
+    val fullDisplayName: String
+) {
+    UNKNOWN(
+        shortLabel = "Cellular",
+        detailLabel = "Cellular",
+        fullDisplayName = "Cellular"
+    ),
+    THREE_G_OR_LOWER(
+        shortLabel = "3G",
+        detailLabel = "3G Cellular",
+        fullDisplayName = "3G"
+    ),
+    FOUR_G(
+        shortLabel = "4G",
+        detailLabel = "4G LTE Cellular",
+        fullDisplayName = "4G LTE"
+    ),
+    FIVE_G(
+        shortLabel = "5G",
+        detailLabel = "5G Cellular",
+        fullDisplayName = "5G"
+    );
+
+    companion object {
+        fun fromTelephony(
+            networkType: Int,
+            overrideNetworkType: Int = TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
+        ): CellularGeneration {
+            val is5GDetected = overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ||
+                    overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_ADVANCED ||
+                    networkType == TelephonyManager.NETWORK_TYPE_NR
+
+            if (is5GDetected) {
+                return FIVE_G
+            }
+
+            return when (networkType) {
+                TelephonyManager.NETWORK_TYPE_LTE -> FOUR_G
+                TelephonyManager.NETWORK_TYPE_UMTS,
+                TelephonyManager.NETWORK_TYPE_CDMA,
+                TelephonyManager.NETWORK_TYPE_EVDO_0,
+                TelephonyManager.NETWORK_TYPE_EVDO_A,
+                TelephonyManager.NETWORK_TYPE_EVDO_B,
+                TelephonyManager.NETWORK_TYPE_HSDPA,
+                TelephonyManager.NETWORK_TYPE_HSUPA,
+                TelephonyManager.NETWORK_TYPE_HSPA,
+                TelephonyManager.NETWORK_TYPE_EHRPD,
+                TelephonyManager.NETWORK_TYPE_HSPAP,
+                TelephonyManager.NETWORK_TYPE_TD_SCDMA,
+                TelephonyManager.NETWORK_TYPE_GPRS,
+                TelephonyManager.NETWORK_TYPE_EDGE,
+                TelephonyManager.NETWORK_TYPE_1xRTT,
+                TelephonyManager.NETWORK_TYPE_IDEN,
+                TelephonyManager.NETWORK_TYPE_GSM -> THREE_G_OR_LOWER
+                else -> {
+                    if (overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_CA ||
+                        overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_ADVANCED_PRO
+                    ) {
+                        FOUR_G
+                    } else {
+                        UNKNOWN
+                    }
+                }
+            }
+        }
+    }
 }
 
 interface NetworkProvider {
@@ -273,11 +338,9 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
             val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
             if (telephonyManager != null) {
                 val networkType = telephonyManager.dataNetworkType
-                if (networkType == TelephonyManager.NETWORK_TYPE_NR) {
-                    _cellularGeneration.value = CellularGeneration.FIVE_G
-                    return
-                } else if (networkType != TelephonyManager.NETWORK_TYPE_UNKNOWN) {
-                    _cellularGeneration.value = CellularGeneration.FOUR_G
+                val generation = CellularGeneration.fromTelephony(networkType)
+                if (generation != CellularGeneration.UNKNOWN) {
+                    _cellularGeneration.value = generation
                     return
                 }
             }
@@ -345,11 +408,8 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                     override fun onDisplayInfoChanged(telephonyDisplayInfo: TelephonyDisplayInfo) {
                         hasReceivedDisplayInfo = true
                         val override = telephonyDisplayInfo.overrideNetworkType
-                        val is5GDetected = override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ||
-                                override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_ADVANCED ||
-                                telephonyDisplayInfo.networkType == TelephonyManager.NETWORK_TYPE_NR
-
-                        _cellularGeneration.value = if (is5GDetected) CellularGeneration.FIVE_G else CellularGeneration.FOUR_G
+                        val networkType = telephonyDisplayInfo.networkType
+                        _cellularGeneration.value = CellularGeneration.fromTelephony(networkType, override)
                     }
                 }
                 telephonyManager?.registerTelephonyCallback(context.mainExecutor, callback)

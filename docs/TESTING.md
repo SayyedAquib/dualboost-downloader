@@ -10,7 +10,7 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (175 active tests across 22 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (255 active tests across 34 test suites, 100% passing):
 
 - **CrashVaultTest** (2 tests):
   - `testRecordCrash_WritesSanitizedCrashDump`: Verifies `CrashVault` writes structured, timestamped crash dumps to `noBackupFilesDir/crash_vault.log`, ensuring URL query parameters and auth tokens are completely redacted from stack traces.
@@ -291,6 +291,22 @@ End-to-end and component UI testing on Android devices is performed using Google
   - `checkAndPrepareSocialLink_detectsInstagramAndSetsReadyState`: Verifies ViewModel transitions to `SocialIntakeState.Ready`.
   - `startSocialDownload_resolvesHighestQualityAndStartsDownload`: Verifies resolution dispatch and handoff to `startDownload()`.
   - `dismissSocialIntake_resetsStateToIdle`: Tests dismissing modal and resetting state to `Idle`.
+
+### Dynamic Cellular Generation Labeling Test Suite (`ADR-040`)
+- **CellularGenerationTest** (5 tests):
+  - `testFromTelephony_FiveGTypes_ReturnFiveG`: Asserts `NETWORK_TYPE_NR`, `OVERRIDE_NETWORK_TYPE_NR_NSA`, and `OVERRIDE_NETWORK_TYPE_NR_ADVANCED` classify as `FIVE_G`.
+  - `testFromTelephony_FourGTypes_ReturnFourG`: Asserts `NETWORK_TYPE_LTE` and `OVERRIDE_NETWORK_TYPE_LTE_ADVANCED_PRO` classify as `FOUR_G`.
+  - `testFromTelephony_ThreeGTypes_ReturnThreeGOrLower`: Asserts legacy UMTS, HSDPA, EVDO, and EDGE classify as `THREE_G_OR_LOWER`.
+  - `testFromTelephony_UnknownAndZero_ReturnUnknown`: Asserts indeterminate types default to `UNKNOWN`.
+  - `testCellularGeneration_LabelFormatting_IsAccurate`: Verifies `shortLabel`, `detailLabel`, and `fullDisplayName` outputs across all generations.
+- **ForegroundServiceFormattingTest** (2 tests):
+  - `testFormatNotificationSpeedContent_DynamicCellularLabel`: Asserts notification title/body formatting accurately interpolates cellular generation short labels ("5G", "4G", "3G", "Cellular").
+  - `testFormatNotificationSpeedContent_ZeroOrIdle`: Verifies zero/idle speed formatting with dynamic labels.
+- **DynamicCellularLabelUiTest** (4 tests):
+  - `testHeroCard_FormatsDynamicCellularLabel`: Tests hero card connection titles and technical descriptors across 5G, 4G, 3G, and Unknown.
+  - `testQuickPresetCard_FormatsDynamicCellularLabel`: Tests quick preset description strings.
+  - `testChunkStripLegend_FormatsDynamicCellularLabel`: Tests segmented chunk visualizer legend text ("5G Chunk", "4G Chunk", etc.).
+  - `testSingleStreamBanner_FormatsDynamicCellularLabel`: Tests single-stream fallback banner strings.
 
 ## API Testing
 - Verify HTTP 206 response validation.

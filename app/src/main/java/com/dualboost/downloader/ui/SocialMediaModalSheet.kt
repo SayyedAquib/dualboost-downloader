@@ -30,6 +30,7 @@ import com.dualboost.downloader.social.SocialPlatform
 @Composable
 fun SocialMediaModalSheet(
     state: SocialIntakeState,
+    cellularGeneration: com.dualboost.downloader.network.CellularGeneration = com.dualboost.downloader.network.CellularGeneration.UNKNOWN,
     onDismiss: () -> Unit,
     onDownload: (url: String, quality: MediaQuality) -> Unit,
     onEnqueue: (url: String, quality: MediaQuality) -> Unit
@@ -86,7 +87,7 @@ fun SocialMediaModalSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Choose quality to accelerate download over Wi-Fi + 5G",
+                        text = "Choose quality to accelerate download over Wi-Fi + ${cellularGeneration.shortLabel}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

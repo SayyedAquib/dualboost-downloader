@@ -1,9 +1,24 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 (Multi-Download Queue & In-App Browser Media Sniffer), ADR-038 (Hybrid 3-Stage Antivirus & Threat Guard System), and ADR-039 (Expanded Social Media Downloader). The codebase is backed by **248 unit and integration tests across 32 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`, 1.66 MB) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 (Multi-Download Queue & In-App Browser Media Sniffer), ADR-038 (Hybrid 3-Stage Antivirus & Threat Guard System), ADR-039 (Expanded Social Media Downloader), and ADR-040 (Dynamic Cellular Generation Labeling & Telephony Classification). The codebase is backed by **255 unit and integration tests across 34 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
 
 ## Recently Completed
+- **Dynamic Cellular Generation Labeling & Telephony Classification (ADR-040 / 255 Tests across 34 Suites)**:
+  - **Slice 1: CellularGeneration Domain Model & Telephony Classifier**:
+    - Enhanced `CellularGeneration` enum (`FIVE_G`, `FOUR_G`, `THREE_G_OR_LOWER`, `UNKNOWN`) with structured label properties: `shortLabel` ("5G", "4G", "3G", "Cellular"), `detailLabel` ("5G Cellular", "4G LTE Cellular", "3G Cellular", "Cellular"), and `fullDisplayName` ("5G Ultra-Capacity", "4G LTE", "3G Legacy", "Cellular").
+    - Added pure domain classifier `CellularGeneration.fromTelephony(networkType, overrideNetworkType)` mapping `TelephonyManager` and `TelephonyDisplayInfo` constants (NR NSA, NR Advanced, LTE CA, etc.).
+    - Verified via `CellularGenerationTest.kt` (5 unit tests, 100% green).
+  - **Slice 2: Service Notification Dynamic Labeling**:
+    - Created `DownloadForegroundService.formatNotificationSpeedContent(wifiSpeed, cellSpeed, cellLabel)` dynamically resolving `networkManager.cellularGeneration.value.shortLabel`.
+    - Updated notification channel description to "Shows live download progress and aggregated speeds across Wi-Fi and Cellular".
+    - Verified via `ForegroundServiceFormattingTest.kt` (2 unit tests, 100% green).
+  - **Slice 3 & 4: UI & Modal Dynamic Label Binding**:
+    - `MainActivity.kt`: Replaced all static "5G" strings with dynamic labels derived from `cellularGeneration` (hero connection cards, quick test presets, single-stream fallback notices, speed badges, `SegmentedChunkStrip` legends, and celebratory completion banners).
+    - `SocialMediaModalSheet.kt`: Updated extraction quality subtitle to `Wi-Fi + ${cellularGeneration.shortLabel}`.
+    - `SpeedTestBottomSheet.kt`: Wired `cellularGeneration` into `SpeedTestIdleView`, `SpeedTestRunningView`, and `SpeedTestCompletedView`.
+    - Verified via `DynamicCellularLabelUiTest.kt` (4 unit tests, 100% green).
+    - Full test suite passed 100% green (255 tests across 34 test suites).
 - **Expanded Social Media Downloader (ADR-039 / 248 Tests across 32 Suites)**:
   - **Slice 1: Platform Detection & URL Classifier**:
     - Created `SocialMediaModel.kt` (`SocialPlatform`, `MediaQuality`, `SocialMediaAsset`, `SocialIntakeState`).
