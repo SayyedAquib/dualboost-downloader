@@ -12,6 +12,7 @@ import android.util.Log
 import android.webkit.MimeTypeMap
 import com.dualboost.downloader.data.ChunkSnapshot
 import com.dualboost.downloader.data.ChunkStatus
+import com.dualboost.downloader.data.ConcurrencyConfig
 import com.dualboost.downloader.data.DownloadChunk
 import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.data.NetworkInterfaceType
@@ -83,6 +84,12 @@ class DualDownloaderEngine(
     private val isExecuting = AtomicBoolean(false)
     internal val activeCallsCount: Int get() = activeCalls.size
     internal var initialSpeedMBps: Double = 0.0
+
+    internal val workerExecutionCounts = ConcurrentHashMap<String, AtomicInteger>()
+
+    fun getWorkerExecutionCount(interfaceType: NetworkInterfaceType, workerIndex: Int): Int {
+        return workerExecutionCounts["${interfaceType.name}_$workerIndex"]?.get() ?: 0
+    }
 
     // Active download tracking for seamless resume and discard
     @Volatile private var currentOutputFile: File? = null
@@ -467,7 +474,8 @@ class DualDownloaderEngine(
         url: String,
         targetDir: File = getDefaultDownloadDir(),
         forceSequentialMode: Boolean? = null,
-        allowDangerousBypass: Boolean = false
+        allowDangerousBypass: Boolean = false,
+        concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT
     ) {
         val rawTrimmed = url.trim()
         val parsedHttpUrl = runCatching { rawTrimmed.toHttpUrlOrNull() }.getOrNull()
@@ -482,6 +490,7 @@ class DualDownloaderEngine(
         val previousState = _downloadState.value
         if (previousState is DownloadState.Downloading && currentUrl == sanitizedUrl) return
 
+        workerExecutionCounts.clear()
         isDiscarding.set(false)
         isPaused.set(true)
         downloadJob?.cancel()
@@ -494,7 +503,7 @@ class DualDownloaderEngine(
             try {
                 networkManager.acquireCellularKeepAlive()
                 thermalStatusProvider.startListening()
-                executeDownload(sanitizedUrl, targetDir, forceSequentialMode, allowDangerousBypass)
+                executeDownload(sanitizedUrl, targetDir, forceSequentialMode, allowDangerousBypass, concurrencyConfig)
             } catch (e: ThreatDetectedException) {
                 Log.w(TAG, "Threat detected during download: ${e.threat.description}")
                 discardDownload(targetDir, e.fileName)
@@ -667,7 +676,8 @@ class DualDownloaderEngine(
         url: String,
         targetDir: File,
         forceSequentialMode: Boolean? = null,
-        allowDangerousBypass: Boolean = false
+        allowDangerousBypass: Boolean = false,
+        concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT
     ) {
         var fileName = extractFileName(url)
         val shouldInspectThreats = !allowDangerousBypass && SecurityPreferences.isThreatGuardEnabled(context)
@@ -1313,6 +1323,24 @@ class DualDownloaderEngine(
                         }
                     }
 
+                    // Auto-Scale Dynamic Expansion (ADR-042): bonus workers beyond base count activate under high throughput & cool thermals
+                    val isAutoScaleWorker = if (interfaceType == NetworkInterfaceType.WIFI) {
+                        workerIndex >= concurrencyConfig.wifiWorkers
+                    } else {
+                        workerIndex >= concurrencyConfig.cellularWorkers
+                    }
+
+                    if (isAutoScaleWorker) {
+                        val aggregateSpeed = wifiSpeedMBps + cellularSpeedMBps
+                        val isCool = thermalStatusProvider.thermalStatus.value <= com.dualboost.downloader.thermal.ThermalStatus.LIGHT
+                        if (!concurrencyConfig.isAutoScaleEnabled || aggregateSpeed < 25.0 || !isCool) {
+                            val allDone = queueMutex.withLock { pendingChunks.all { it.status == ChunkStatus.COMPLETED } }
+                            if (allDone) break
+                            delay(500)
+                            continue
+                        }
+                    }
+
                     // 3. Dynamic Contiguous Chunk Batching (Slice 2)
                     val currentSpeed = if (interfaceType == NetworkInterfaceType.WIFI) wifiSpeedMBps else cellularSpeedMBps
                     val speed = if (currentSpeed > 0.0) currentSpeed else initialSpeedMBps
@@ -1479,6 +1507,7 @@ class DualDownloaderEngine(
 
                     queueMutex.withLock {
                         if (success) {
+                            workerExecutionCounts.computeIfAbsent("${interfaceType.name}_$workerIndex") { AtomicInteger(0) }.incrementAndGet()
                             for (c in chunkBatch) {
                                 c.status = ChunkStatus.COMPLETED
                                 c.downloadedBytes = c.totalBytes
@@ -1504,12 +1533,25 @@ class DualDownloaderEngine(
             // Launch parallel coroutine workers as children of this coroutineScope using a single shared RAF
             val sharedRaf = RandomAccessFile(outputFile, "rw")
             try {
-                val workers = listOf(
-                    launch { runWorker(NetworkInterfaceType.WIFI, 0, { networkManager.getWifiClient() }, sharedRaf) },
-                    launch { runWorker(NetworkInterfaceType.WIFI, 1, { networkManager.getWifiClient() }, sharedRaf) },
-                    launch { runWorker(NetworkInterfaceType.CELLULAR, 0, { networkManager.getCellularClient() }, sharedRaf) },
-                    launch { runWorker(NetworkInterfaceType.CELLULAR, 1, { networkManager.getCellularClient() }, sharedRaf) }
-                )
+                val maxWifiWorkers = if (concurrencyConfig.isAutoScaleEnabled) {
+                    (concurrencyConfig.wifiWorkers + 2).coerceAtMost(8)
+                } else {
+                    concurrencyConfig.wifiWorkers
+                }
+
+                val maxCellularWorkers = if (concurrencyConfig.isAutoScaleEnabled) {
+                    (concurrencyConfig.cellularWorkers + 2).coerceAtMost(8)
+                } else {
+                    concurrencyConfig.cellularWorkers
+                }
+
+                val workers = mutableListOf<Job>()
+                for (i in 0 until maxWifiWorkers) {
+                    workers.add(launch { runWorker(NetworkInterfaceType.WIFI, i, { networkManager.getWifiClient() }, sharedRaf) })
+                }
+                for (i in 0 until maxCellularWorkers) {
+                    workers.add(launch { runWorker(NetworkInterfaceType.CELLULAR, i, { networkManager.getCellularClient() }, sharedRaf) })
+                }
 
                 workers.joinAll()
             } finally {

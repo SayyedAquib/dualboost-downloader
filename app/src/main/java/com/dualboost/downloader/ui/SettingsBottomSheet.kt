@@ -37,7 +37,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.sp
+import com.dualboost.downloader.data.ConcurrencyConfig
+import com.dualboost.downloader.data.ConcurrencyPreferences
+import com.dualboost.downloader.data.StreamPalette
+import com.dualboost.downloader.data.StreamPalettePreferences
 import com.dualboost.downloader.security.SecurityPreferences
 import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.data.WorkerTestStatus
@@ -52,6 +57,68 @@ fun SettingsBottomSheet(
     val haptic = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
+
+    var localStreamPalette by remember { mutableStateOf(StreamPalettePreferences(context).getStreamPalette()) }
+    val streamPaletteState = viewModel?.streamPalette?.collectAsState()
+    val selectedPalette = streamPaletteState?.value ?: localStreamPalette
+
+    fun updatePalette(palette: StreamPalette) {
+        if (viewModel != null) {
+            viewModel.updateStreamPalette(palette)
+        } else {
+            StreamPalettePreferences(context).setStreamPalette(palette)
+            localStreamPalette = StreamPalettePreferences(context).getStreamPalette()
+        }
+    }
+
+    fun resetPalette() {
+        if (viewModel != null) {
+            viewModel.resetStreamPaletteToDefault()
+        } else {
+            StreamPalettePreferences(context).resetToDefault()
+            localStreamPalette = StreamPalettePreferences(context).getStreamPalette()
+        }
+    }
+
+    var localConcurrencyConfig by remember { mutableStateOf(ConcurrencyPreferences(context).getConcurrencyConfig()) }
+    val concurrencyState = viewModel?.concurrencyConfig?.collectAsState()
+    val config = concurrencyState?.value ?: localConcurrencyConfig
+
+    fun updateWifi(count: Int) {
+        if (viewModel != null) {
+            viewModel.updateWifiWorkers(count)
+        } else {
+            ConcurrencyPreferences(context).setWifiWorkers(count)
+            localConcurrencyConfig = ConcurrencyPreferences(context).getConcurrencyConfig()
+        }
+    }
+
+    fun updateCellular(count: Int) {
+        if (viewModel != null) {
+            viewModel.updateCellularWorkers(count)
+        } else {
+            ConcurrencyPreferences(context).setCellularWorkers(count)
+            localConcurrencyConfig = ConcurrencyPreferences(context).getConcurrencyConfig()
+        }
+    }
+
+    fun toggleAutoScale(enabled: Boolean) {
+        if (viewModel != null) {
+            viewModel.toggleAutoScale(enabled)
+        } else {
+            ConcurrencyPreferences(context).setAutoScaleEnabled(enabled)
+            localConcurrencyConfig = ConcurrencyPreferences(context).getConcurrencyConfig()
+        }
+    }
+
+    fun resetConcurrency() {
+        if (viewModel != null) {
+            viewModel.resetConcurrencyToDefault()
+        } else {
+            ConcurrencyPreferences(context).resetToDefault()
+            localConcurrencyConfig = ConcurrencyPreferences(context).getConcurrencyConfig()
+        }
+    }
 
     var workerUrl by remember { mutableStateOf(SlicerPreferences.getSlicerUrl(context)) }
     var secretKey by remember { mutableStateOf(SlicerPreferences.getSlicerSecret(context)) }
@@ -560,6 +627,289 @@ fun SettingsBottomSheet(
                 }
             }
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Multi-Thread Concurrency Card (ADR-042)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Speed,
+                                        contentDescription = "Multi-Thread Concurrency",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Multi-Thread Concurrency",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "${config.totalWorkers} Streams (${config.wifiWorkers} Wi-Fi + ${config.cellularWorkers} Cellular)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        TextButton(
+                            onClick = {
+                                resetConcurrency()
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                        ) {
+                            Text("Reset", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Wi-Fi Stream Stepper
+                    ConcurrencyStepper(
+                        label = "Wi-Fi Streams",
+                        value = config.wifiWorkers,
+                        onValueChange = { updateWifi(it) }
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Cellular Stream Stepper
+                    ConcurrencyStepper(
+                        label = "Cellular Streams",
+                        value = config.cellularWorkers,
+                        onValueChange = { updateCellular(it) }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Auto-Scale Mode Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Auto-Scale High-Throughput",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (config.isAutoScaleEnabled) {
+                                    "Expands streams on >25 MB/s under cool thermals"
+                                } else {
+                                    "Keep fixed worker counts across all links"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Switch(
+                            checked = config.isAutoScaleEnabled,
+                            onCheckedChange = { toggleAutoScale(it) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Thermal Fail-Safe Notice
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Thermostat,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Fail-safe thermal rules take priority: MODERATE caps cellular to 1 stream; SEVERE offloads completely to Wi-Fi.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Appearance & Stream Visualizer Theme Card (ADR-043)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Palette,
+                                        contentDescription = "Stream Visualizer Theme",
+                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Stream Visualizer Theme",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = selectedPalette.displayName + " • " + selectedPalette.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        TextButton(
+                            onClick = {
+                                resetPalette()
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                        ) {
+                            Text("Reset", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StreamPalette.entries.forEach { palette ->
+                            val isSelected = palette == selectedPalette
+                            val wifiPreview = palette.resolveWifiColor(isDark, MaterialTheme.colorScheme.primary)
+                            val cellPreview = palette.resolveCellularColor(isDark, MaterialTheme.colorScheme.tertiary)
+
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                                else MaterialTheme.colorScheme.surfaceContainer,
+                                border = BorderStroke(
+                                    if (isSelected) 1.5.dp else 1.dp,
+                                    if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        updatePalette(palette)
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Row(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                                                .padding(3.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(width = 16.dp, height = 14.dp)
+                                                    .clip(RoundedCornerShape(3.dp))
+                                                    .background(wifiPreview)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(width = 16.dp, height = 14.dp)
+                                                    .clip(RoundedCornerShape(3.dp))
+                                                    .background(cellPreview)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        Column {
+                                            Text(
+                                                text = palette.displayName,
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = palette.description,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.CheckCircle,
+                                            contentDescription = "Selected",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
 
             // Save and Clear Buttons
@@ -652,6 +1002,62 @@ private fun SetupStepItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 16.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun ConcurrencyStepper(
+    label: String,
+    value: Int,
+    range: IntRange = ConcurrencyConfig.MIN_WORKERS..ConcurrencyConfig.MAX_WORKERS,
+    onValueChange: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "$value parallel streams",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilledTonalIconButton(
+                onClick = { if (value > range.first) onValueChange(value - 1) },
+                enabled = value > range.first,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(Icons.Rounded.Remove, contentDescription = "Decrease $label", modifier = Modifier.size(18.dp))
+            }
+
+            Text(
+                text = "$value",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.width(24.dp),
+                textAlign = TextAlign.Center
+            )
+
+            FilledTonalIconButton(
+                onClick = { if (value < range.last) onValueChange(value + 1) },
+                enabled = value < range.last,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = "Increase $label", modifier = Modifier.size(18.dp))
+            }
         }
     }
 }

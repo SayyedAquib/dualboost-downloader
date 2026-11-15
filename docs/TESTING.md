@@ -10,7 +10,53 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (270 active tests across 37 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (300 active tests across 45 test suites, 100% passing):
+
+- **StreamPaletteModelTest** (6 tests):
+  - `testStreamPalette_DefaultIsMaterialYou`: Verifies default palette is `DYNAMIC_MATERIAL_YOU`.
+  - `testStreamPalette_FromId_FallbackSafe`: Tests string ID mapping and safe fallback on unknown/null IDs.
+  - `testStreamPalette_CyberpunkNeon_ResolvesCorrectDarkAndLightPairs`: Validates dark and light mode color pairs for Cyberpunk Neon.
+  - `testStreamPalette_EmeraldAmber_ResolvesCorrectDarkAndLightPairs`: Validates dark and light mode color pairs for Emerald & Amber.
+  - `testStreamPalette_SunsetCoral_ResolvesCorrectDarkAndLightPairs`: Validates dark and light mode color pairs for Sunset Coral.
+  - `testStreamPalette_MaterialYou_DelegatesToMaterialThemeTokens`: Verifies dynamic delegation to MaterialTheme `primary` and `tertiary` tokens.
+
+- **StreamPalettePreferencesTest** (3 tests):
+  - `testPreferences_DefaultsToMaterialYou`: Tests preference initialization defaults to Material You.
+  - `testPreferences_SavesAndRestoresSelectedPalette`: Verifies persistence across reloads.
+  - `testPreferences_ResetToDefault_RestoresMaterialYou`: Tests one-tap reset restoring default Material You.
+
+- **MainViewModelPaletteTest** (3 tests):
+  - `testViewModel_ExposesStreamPaletteStateFlow`: Verifies ViewModel exposes reactive palette stream.
+  - `testViewModel_UpdateStreamPalette_PersistsAndEmits`: Verifies ViewModel dispatches and persists palette selections.
+  - `testViewModel_ResetStreamPalette_RestoresDefault`: Tests ViewModel reset restoring default.
+
+- **StreamPaletteUiTest** (2 tests):
+  - `testPaletteUi_FormatsDisplayNameAndSummary`: Tests display names and descriptions.
+  - `testPaletteUi_AllPalettesHaveDistinctWifiAndCellularColors`: Validates that Wi-Fi and Cellular colors are visually distinct in both dark and light modes across all presets.
+
+- **ConcurrencyPreferencesTest** (4 tests):
+  - `testConfig_ClampsWorkersBetweenOneAndEight`: Verifies constructor bounding logic clamps worker counts outside `1..8` down to 1 or up to 8.
+  - `testPreferences_DefaultsToTwoWifiAndTwoCellular`: Tests default stream allocation (2 Wi-Fi + 2 Cellular) and Auto-Scale disabled.
+  - `testPreferences_SavesAndRestoresWorkerCounts`: Verifies persistence of customized stream allocations across reloads.
+  - `testPreferences_ResetToDefault_RestoresTwoAndTwo`: Validates one-tap reset restoring 2 + 2 allocation.
+
+- **EngineDynamicConcurrencyTest** (3 tests):
+  - `testEngine_LaunchesConfiguredNumberOfWorkers`: Tests that `DualDownloaderEngine` launches exact configured worker counts (e.g. 3 Wi-Fi + 1 Cellular) and verifies unused worker slots do not execute.
+  - `testEngine_ThermalModerate_StrictlyCapsCellularToOneWorker`: Tests fail-safe thermal throttling under `ThermalStatus.MODERATE`, verifying cellular workers with `workerIndex > 0` are suppressed down to at most 1 active worker.
+  - `testEngine_ThermalSevere_CompletelySuppressesCellularWorkers`: Tests fail-safe thermal offload under `ThermalStatus.SEVERE`, verifying all cellular workers are completely suppressed (0 chunk transfers) and 100% offloaded to Wi-Fi.
+
+- **MainViewModelConcurrencyTest** (5 tests):
+  - `testViewModel_ExposesDefaultConcurrencyConfig`: Tests reactive `concurrencyConfig` StateFlow initialization.
+  - `testViewModel_UpdateWifiWorkers_PersistsAndEmits`: Verifies ViewModel dispatches and persists Wi-Fi stream updates with boundary clamping.
+  - `testViewModel_UpdateCellularWorkers_PersistsAndEmits`: Verifies ViewModel dispatches and persists Cellular stream updates with boundary clamping.
+  - `testViewModel_ToggleAutoScale_PersistsAndEmits`: Verifies ViewModel toggles and persists Auto-Scale mode.
+  - `testViewModel_ResetConcurrencyToDefault_RestoresDefaults`: Verifies ViewModel one-tap reset restores default 2 + 2 configuration.
+
+- **SettingsConcurrencyUiTest** (4 tests):
+  - `testConcurrencyCard_CalculatesTotalStreams`: Verifies UI summary label computes total parallel stream allocation.
+  - `testConcurrencyStepper_ClampsCorrectly`: Tests stepper delta increment/decrement logic bounded to `1..8`.
+  - `testConcurrencyCard_ResetActionRestoresDefaults`: Tests reset action restores default state.
+  - `testConcurrencyCard_AutoScaleSubtitleReflectsState`: Verifies assistive subtitle dynamically reflects active vs fixed stream states.
 
 - **CrashVaultTest** (2 tests):
   - `testRecordCrash_WritesSanitizedCrashDump`: Verifies `CrashVault` writes structured, timestamped crash dumps to `noBackupFilesDir/crash_vault.log`, ensuring URL query parameters and auth tokens are completely redacted from stack traces.

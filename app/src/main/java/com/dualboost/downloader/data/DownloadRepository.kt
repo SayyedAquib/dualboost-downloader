@@ -27,8 +27,54 @@ class DownloadRepository(
     val isServiceEnabled: Boolean = (engineOverride == null),
     val thermalStatusProviderOverride: com.dualboost.downloader.thermal.ThermalStatusProvider? = null,
     val queueRepositoryOverride: DownloadQueueRepository? = null,
-    val queueCoordinatorOverride: com.dualboost.downloader.engine.QueueCoordinator? = null
+    val queueCoordinatorOverride: com.dualboost.downloader.engine.QueueCoordinator? = null,
+    val concurrencyPreferencesOverride: ConcurrencyPreferences? = null,
+    val streamPalettePreferencesOverride: StreamPalettePreferences? = null
 ) : com.dualboost.downloader.engine.QueueDownloadDispatcher {
+
+    val streamPalettePreferences: StreamPalettePreferences by lazy {
+        streamPalettePreferencesOverride ?: StreamPalettePreferences(context)
+    }
+
+    private val _streamPalette = MutableStateFlow(streamPalettePreferences.getStreamPalette())
+    val streamPalette: StateFlow<StreamPalette> = _streamPalette.asStateFlow()
+
+    fun updateStreamPalette(palette: StreamPalette) {
+        streamPalettePreferences.setStreamPalette(palette)
+        _streamPalette.value = streamPalettePreferences.getStreamPalette()
+    }
+
+    fun resetStreamPaletteToDefault() {
+        streamPalettePreferences.resetToDefault()
+        _streamPalette.value = streamPalettePreferences.getStreamPalette()
+    }
+
+    val concurrencyPreferences: ConcurrencyPreferences by lazy {
+        concurrencyPreferencesOverride ?: ConcurrencyPreferences(context)
+    }
+
+    private val _concurrencyConfig = MutableStateFlow(concurrencyPreferences.getConcurrencyConfig())
+    val concurrencyConfig: StateFlow<ConcurrencyConfig> = _concurrencyConfig.asStateFlow()
+
+    fun updateWifiWorkers(count: Int) {
+        concurrencyPreferences.setWifiWorkers(count)
+        _concurrencyConfig.value = concurrencyPreferences.getConcurrencyConfig()
+    }
+
+    fun updateCellularWorkers(count: Int) {
+        concurrencyPreferences.setCellularWorkers(count)
+        _concurrencyConfig.value = concurrencyPreferences.getConcurrencyConfig()
+    }
+
+    fun toggleAutoScale(enabled: Boolean) {
+        concurrencyPreferences.setAutoScaleEnabled(enabled)
+        _concurrencyConfig.value = concurrencyPreferences.getConcurrencyConfig()
+    }
+
+    fun resetConcurrencyToDefault() {
+        concurrencyPreferences.resetToDefault()
+        _concurrencyConfig.value = concurrencyPreferences.getConcurrencyConfig()
+    }
 
     val historyRepository: DownloadHistoryRepository by lazy {
         historyRepositoryOverride ?: DownloadHistoryRepository(context)
@@ -153,8 +199,10 @@ class DownloadRepository(
         url: String,
         targetDir: File = downloaderEngine.getDefaultDownloadDir(),
         forceSequentialMode: Boolean? = null,
-        allowDangerousBypass: Boolean = false
+        allowDangerousBypass: Boolean = false,
+        concurrencyConfigOverride: ConcurrencyConfig? = null
     ) {
+        val effectiveConcurrency = concurrencyConfigOverride ?: _concurrencyConfig.value
         if (isServiceEnabled) {
             try {
                 val intent = Intent(context, DownloadForegroundService::class.java).apply {
@@ -171,7 +219,7 @@ class DownloadRepository(
                 // Safe fallback in test environments or if ForegroundServiceStartNotAllowedException is thrown
             }
         }
-        downloaderEngine.startDownload(url, targetDir, forceSequentialMode, allowDangerousBypass)
+        downloaderEngine.startDownload(url, targetDir, forceSequentialMode, allowDangerousBypass, effectiveConcurrency)
     }
 
     override fun pauseDownload() {

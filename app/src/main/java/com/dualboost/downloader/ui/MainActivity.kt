@@ -474,8 +474,11 @@ fun MainScreen(
         ) {
 
             val isDark = isSystemInDarkTheme()
-            val wifiColor = if (isDark) Color(0xFF00E5FF) else Color(0xFF00838F)
-            val cellularColor = if (isDark) Color(0xFFB388FF) else Color(0xFF651FFF)
+            val currentPalette by viewModel.streamPalette.collectAsState()
+            val materialPrimary = MaterialTheme.colorScheme.primary
+            val materialTertiary = MaterialTheme.colorScheme.tertiary
+            val wifiColor = currentPalette.resolveWifiColor(isDark, materialPrimary)
+            val cellularColor = currentPalette.resolveCellularColor(isDark, materialTertiary)
 
             // Advisory Root & Tamper Awareness Banner (SEC-AUDIT-11)
             if (viewModel.isDeviceRooted) {
@@ -1404,8 +1407,8 @@ fun MainScreen(
 
                                 // Dual-Color Contribution Progress Bar
                                 val isDarkState = isSystemInDarkTheme()
-                                val rowWifiColor = if (isDarkState) Color(0xFF00E5FF) else Color(0xFF00838F)
-                                val rowCellularColor = if (isDarkState) Color(0xFFB388FF) else Color(0xFF651FFF)
+                                val rowWifiColor = currentPalette.resolveWifiColor(isDarkState, materialPrimary)
+                                val rowCellularColor = currentPalette.resolveCellularColor(isDarkState, materialTertiary)
 
                                 val sessionBytes = (state.wifiDownloadedBytes + state.cellularDownloadedBytes).coerceAtLeast(1L).toFloat()
                                 val wifiRatio = (state.wifiDownloadedBytes / sessionBytes).coerceIn(0f, 1f)

@@ -26,6 +26,8 @@ class DownloadForegroundService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wakeLockRenewalJob: Job? = null
 
+    lateinit var repository: com.dualboost.downloader.data.DownloadRepository
+        private set
     lateinit var networkManager: DualNetworkManager
         private set
     lateinit var downloaderEngine: DualDownloaderEngine
@@ -45,7 +47,7 @@ class DownloadForegroundService : Service() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
 
-        val repository = com.dualboost.downloader.DualBoostApp.instance.repository
+        repository = com.dualboost.downloader.DualBoostApp.instance.repository
         networkManager = repository.networkManager
         downloaderEngine = repository.downloaderEngine
         observeDownloadState()
@@ -65,7 +67,11 @@ class DownloadForegroundService : Service() {
             val currentState = downloaderEngine.downloadState.value
             val targetUrl = url ?: (currentState as? DownloadState.Paused)?.url
             if (!targetUrl.isNullOrBlank() && currentState !is DownloadState.Downloading && currentState !is DownloadState.Probing) {
-                downloaderEngine.startDownload(targetUrl, forceSequentialMode = forceSeq)
+                downloaderEngine.startDownload(
+                    url = targetUrl,
+                    forceSequentialMode = forceSeq,
+                    concurrencyConfig = repository.concurrencyConfig.value
+                )
             }
         } else if (action == ACTION_PAUSE_DOWNLOAD) {
             val currentState = downloaderEngine.downloadState.value

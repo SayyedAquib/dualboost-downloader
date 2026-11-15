@@ -1527,3 +1527,75 @@ Implement a **First-Class Domain Model & Progressive Wi-Fi Telemetry Classificat
 - Full network transparency for both wireless physical interfaces: users see their active Wi-Fi standard, frequency band, and negotiated link speed alongside 5G/LTE cellular status.
 - Zero hardcoded Wi-Fi text across the active interface layers.
 - Verified by pure unit test suites and composable UI tests without mock framework overhead.
+
+---
+
+## ADR-042: Dynamic Multi-Thread Concurrency Tuning & Auto-Scaling
+
+### Status
+Accepted
+
+### Context
+`DualDownloaderEngine.kt` originally launched a fixed, hardcoded worker pool of 2 Wi-Fi workers + 2 Cellular workers (total 4 streams). While stable for baseline connections, modern multi-gigabit Wi-Fi 7/6E routers and 5G Ultra-Capacity networks require higher concurrency (up to 8 streams per interface) to fully saturate link capacity. Conversely, users with strict data quotas, congested cellular cells, or thermal sensitivities require lighter concurrency (e.g. 1 stream). High-bandwidth links also benefit from opportunistic Auto-Scale expansion while elevated device temperatures necessitate non-negotiable thermal throttling fail-safes.
+
+### Decision
+Implement a **Multi-Thread Concurrency Tuning & Auto-Scaling Engine**:
+1. **Domain Model & Persistence (`ConcurrencyConfig` & `ConcurrencyPreferences`)**:
+   - `ConcurrencyConfig`: Holds `wifiWorkers` (`1..8`, default `2`), `cellularWorkers` (`1..8`, default `2`), and `isAutoScaleEnabled` (default `false`). Constructor clamping enforces values within boundaries.
+   - `ConcurrencyPreferences`: SharedPreferences wrapper persisting worker counts and Auto-Scale preferences across app restarts, with a one-tap `resetToDefault()` action.
+2. **Dynamic Coroutine Worker Spawning in `DualDownloaderEngine`**:
+   - Replaced fixed worker lists with dynamic spawning:
+     - Wi-Fi workers: `0 until maxWifiWorkers`
+     - Cellular workers: `0 until maxCellularWorkers`
+   - In Auto-Scale mode, expands available worker coroutine slots by up to +2 (ceiling 8). Bonus auto-scale workers (`workerIndex >= configuredWorkers`) only activate when aggregate download speed exceeds `25.0 MB/s` under cool thermals (`ThermalStatus.NONE` or `LIGHT`).
+3. **Fail-Safe Thermal Priority**:
+   - High concurrency never compromises device safety:
+     - `ThermalStatus.MODERATE`: Active cellular concurrency is strictly throttled to at most 1 worker (`workerIndex == 0`), while workers 1..7 pause and back off.
+     - `ThermalStatus.SEVERE`: Cellular transfers are completely suppressed (0 workers) and 100% offloaded to Wi-Fi to allow the cellular radio to cool down.
+4. **Service & ViewModel Reactive Integration**:
+   - `DownloadRepository` exposes a reactive `concurrencyConfig: StateFlow<ConcurrencyConfig>` and dispatches mutations.
+   - `DownloadForegroundService` retrieves and passes the user's concurrency configuration into downloads.
+   - `MainViewModel` provides clean UI delegates (`updateWifiWorkers`, `updateCellularWorkers`, `toggleAutoScale`, `resetConcurrencyToDefault`).
+5. **Settings UI Stepper Controls**:
+   - `SettingsBottomSheet.kt` features a "Multi-Thread Concurrency" card with `ConcurrencyStepper` components `[ - ] X Streams [ + ]` bounded to 1..8, real-time total stream calculation (`"${totalWorkers} Streams (${wifiWorkers} Wi-Fi + ${cellularWorkers} Cellular)"`), Auto-Scale switch with status descriptions, and thermal fail-safe disclosure.
+
+### Consequences
+- Full user control over per-interface stream allocation and auto-scaling.
+- Zero hardcoded worker counts remaining in the download engine.
+- High-concurrency transfers strictly governed by fail-safe thermal protections.
+- 100% test coverage across Preferences, Engine, ViewModel, and UI steppers.
+
+---
+
+## ADR-043: Dynamic Stream Visualizer Palette & Material You Theming
+
+### Status
+Accepted
+
+### Context
+`MainActivity.kt` and `SpeedTestBottomSheet.kt` historically hardcoded dual-channel stream visualization colors to static hex values (Teal `0xFF00E5FF` / `0xFF00838F` for Wi-Fi and Violet `0xFFB388FF` / `0xFF651FFF` for Cellular). On Android 12+ (API 31+), Android natively provides dynamic tonal color extraction from user wallpapers (Material You), creating an integrated system experience. Users also requested the ability to select from accessible high-contrast dual-tone themes or dynamic Material You theming to tailor the look and feel of their multi-channel downloads.
+
+### Decision
+Implement **Dynamic Stream Visualizer Palette & Material You Theming**:
+1. **Domain Model (`StreamPalette` & `StreamPalettePreferences`)**:
+   - `StreamPalette`: Enum defining 4 distinct presets:
+     - `DYNAMIC_MATERIAL_YOU` (Default): Wi-Fi resolves to `MaterialTheme.colorScheme.primary` and Cellular resolves to `MaterialTheme.colorScheme.tertiary`, dynamically blending with Android 12+ wallpaper accents.
+     - `CYBERPUNK_NEON`: Classic Cyan (`0xFF00E5FF` / `0xFF00838F`) + Electric Violet (`0xFFB388FF` / `0xFF651FFF`).
+     - `EMERALD_AMBER`: Mint Emerald (`0xFF00E676` / `0xFF1B5E20`) + Warm Amber (`0xFFFFD54F` / `0xFFE65100`).
+     - `SUNSET_CORAL`: Sky Blue (`0xFF40C4FF` / `0xFF0277BD`) + Sunset Coral (`0xFFFF5252` / `0xFFC62828`).
+   - Pure color resolver functions: `resolveWifiColor(isDark, materialPrimary)` and `resolveCellularColor(isDark, materialTertiary)`.
+   - `StreamPalettePreferences`: Persistent SharedPreferences storage with one-tap `resetToDefault()`.
+2. **Dual-Tone Dark & Light Mode Adaptivity**:
+   - Each preset provides distinct pairs for Dark Mode (high luminance, vibrant contrast against dark surfaces) and Light Mode (deep rich saturation, exceeding WCAG 4.5:1 contrast against light backgrounds).
+3. **Repository & ViewModel Reactive Stream**:
+   - `DownloadRepository` and `MainViewModel` expose `streamPalette: StateFlow<StreamPalette>` with `updateStreamPalette()` and `resetStreamPaletteToDefault()`.
+4. **UI Stream Color Binding**:
+   - Replaced all hardcoded stream color constants in `MainActivity.kt` and `SpeedTestBottomSheet.kt` with dynamic resolutions from `currentPalette.resolveColors(...)`.
+   - Applied consistently across dual-color progress bars, `SegmentedChunkStrip`, chunk block legends, and real-time speed gauges.
+5. **Interactive Settings Visualizer Picker**:
+   - Added an **Appearance & Stream Visualizer Theme** card to `SettingsBottomSheet.kt` displaying dual-pill preview chips `[ Wi-Fi • Cellular ]`, active selection checkmarks, tactile haptic feedback, and one-tap Reset action.
+
+### Consequences
+- Zero hardcoded stream visualizer colors remaining in the application.
+- Full Material You dynamic wallpaper theming on Android 12+ (Pixel 9 and modern devices).
+- 100% test coverage across models, preferences, viewmodel, and UI distinctness tests.

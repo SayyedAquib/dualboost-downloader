@@ -194,6 +194,36 @@ open class MainViewModel(
     val historyItems: StateFlow<List<DownloadHistoryItem>> = repository?.historyItems ?: MutableStateFlow(emptyList())
     val workerTestStatus: StateFlow<com.dualboost.downloader.data.WorkerTestStatus> = repository?.workerTestStatus ?: MutableStateFlow(com.dualboost.downloader.data.WorkerTestStatus.Idle)
 
+    val concurrencyConfig: StateFlow<com.dualboost.downloader.data.ConcurrencyConfig> =
+        repository?.concurrencyConfig ?: MutableStateFlow(com.dualboost.downloader.data.ConcurrencyConfig.DEFAULT)
+
+    fun updateWifiWorkers(count: Int) {
+        repository?.updateWifiWorkers(count)
+    }
+
+    fun updateCellularWorkers(count: Int) {
+        repository?.updateCellularWorkers(count)
+    }
+
+    fun toggleAutoScale(enabled: Boolean) {
+        repository?.toggleAutoScale(enabled)
+    }
+
+    fun resetConcurrencyToDefault() {
+        repository?.resetConcurrencyToDefault()
+    }
+
+    val streamPalette: StateFlow<com.dualboost.downloader.data.StreamPalette> =
+        repository?.streamPalette ?: MutableStateFlow(com.dualboost.downloader.data.StreamPalette.DEFAULT)
+
+    fun updateStreamPalette(palette: com.dualboost.downloader.data.StreamPalette) {
+        repository?.updateStreamPalette(palette)
+    }
+
+    fun resetStreamPaletteToDefault() {
+        repository?.resetStreamPaletteToDefault()
+    }
+
     val queueItems: StateFlow<List<com.dualboost.downloader.data.QueueItem>> =
         repository?.queueRepository?.queueItems ?: MutableStateFlow(emptyList())
 

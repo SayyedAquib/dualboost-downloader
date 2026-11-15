@@ -43,8 +43,11 @@ fun SpeedTestBottomSheet(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isDark = isSystemInDarkTheme()
-    val wifiColor = if (isDark) Color(0xFF00E5FF) else Color(0xFF00838F)
-    val cellularColor = if (isDark) Color(0xFFB388FF) else Color(0xFF651FFF)
+    val currentPalette = viewModel.streamPalette.collectAsState().value
+    val materialPrimary = MaterialTheme.colorScheme.primary
+    val materialTertiary = MaterialTheme.colorScheme.tertiary
+    val wifiColor = currentPalette.resolveWifiColor(isDark, materialPrimary)
+    val cellularColor = currentPalette.resolveCellularColor(isDark, materialTertiary)
 
     ModalBottomSheet(
         onDismissRequest = {

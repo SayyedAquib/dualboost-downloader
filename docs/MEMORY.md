@@ -1,9 +1,48 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 (Multi-Download Queue & In-App Browser Media Sniffer), ADR-038 (Hybrid 3-Stage Antivirus & Threat Guard System), ADR-039 (Expanded Social Media Downloader), ADR-040 (Dynamic Cellular Generation Labeling), and ADR-041 (Dynamic Wi-Fi Generation, Frequency Band & Link Speed Classification). The codebase is backed by **270 unit and integration tests across 37 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 (Multi-Download Queue & In-App Browser Media Sniffer), ADR-038 (Hybrid 3-Stage Antivirus & Threat Guard System), ADR-039 (Expanded Social Media Downloader), ADR-040 (Dynamic Cellular Generation Labeling), ADR-041 (Dynamic Wi-Fi Generation, Frequency Band & Link Speed Classification), ADR-042 (Dynamic Multi-Thread Concurrency Tuning & Auto-Scaling), and ADR-043 (Dynamic Stream Visualizer Palette & Material You Theming). The codebase is backed by **300 unit and integration tests across 45 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
 
 ## Recently Completed
+- **Dynamic Stream Visualizer Palette & Material You Theming (ADR-043 / 300 Tests across 45 Suites - 100% Green)**:
+  - **Slice 1: StreamPalette Domain Model & Color Resolvers**:
+    - Created `StreamPalette` enum (`DYNAMIC_MATERIAL_YOU`, `CYBERPUNK_NEON`, `EMERALD_AMBER`, `SUNSET_CORAL`) with pure resolvers `resolveWifiColor(isDark, materialPrimary)` and `resolveCellularColor(isDark, materialTertiary)`.
+    - Implemented dual-tone dark and light mode color pairs ensuring WCAG contrast compliance.
+    - Verified via `StreamPaletteModelTest.kt` (6 unit tests, 100% green).
+  - **Slice 2: StreamPalettePreferences Persistence**:
+    - Created `StreamPalettePreferences` wrapping `SharedPreferences` with default `DYNAMIC_MATERIAL_YOU` and one-tap `resetToDefault()`.
+    - Verified via `StreamPalettePreferencesTest.kt` (3 unit tests, 100% green).
+  - **Slice 3: Repository & ViewModel Reactive State**:
+    - Added reactive `streamPalette: StateFlow<StreamPalette>` to `DownloadRepository` and `MainViewModel`.
+    - Added delegation methods (`updateStreamPalette`, `resetStreamPaletteToDefault`).
+    - Verified via `MainViewModelPaletteTest.kt` (3 unit tests, 100% green).
+  - **Slice 4: UI Binding & Settings Visualizer Theme Picker**:
+    - Wired `MainActivity.kt` dual-color progress bar, `SegmentedChunkStrip`, and legends to dynamic stream colors.
+    - Wired `SpeedTestBottomSheet.kt` gauges to dynamic stream colors.
+    - Added "Appearance & Stream Visualizer Theme" card to `SettingsBottomSheet.kt` with interactive dual-pill color chips (`[ Wi-Fi • Cellular ]`), active selection checkmarks, tactile haptic feedback, and one-tap Reset action.
+    - Verified via `StreamPaletteUiTest.kt` (2 unit tests, 100% green).
+    - Full test suite passed 100% green (300 tests across 45 test suites).
+- **Dynamic Multi-Thread Concurrency Tuning & Auto-Scaling (ADR-042 / 286 Tests across 41 Suites - 100% Green)**:
+  - **Slice 1: ConcurrencyConfig & ConcurrencyPreferences Domain Models**:
+    - Created `ConcurrencyConfig` domain model with constructor boundary clamping (`coerceIn(1, 8)`), `wifiWorkers` (default 2), `cellularWorkers` (default 2), `isAutoScaleEnabled` (default false), and `totalWorkers` calculation.
+    - Created `ConcurrencyPreferences` persisting custom worker configurations via Android `SharedPreferences`, complete with one-tap `resetToDefault()`.
+    - Verified via `ConcurrencyPreferencesTest.kt` (4 unit tests, 100% green).
+  - **Slice 2: DualDownloaderEngine Dynamic Worker Execution**:
+    - Replaced hardcoded worker pool with dynamic range loops: `0 until maxWifiWorkers` and `0 until maxCellularWorkers`.
+    - Integrated Auto-Scale bonus worker slots (up to +2, ceiling 8) that activate only when aggregate download throughput exceeds `25.0 MB/s` under cool thermals (`ThermalStatus.NONE` or `LIGHT`).
+    - Enforced non-negotiable thermal overrides: `ThermalStatus.MODERATE` strictly caps active cellular workers to at most 1, and `ThermalStatus.SEVERE` completely suppresses all cellular workers (100% offload to Wi-Fi).
+    - Verified via `EngineDynamicConcurrencyTest.kt` (3 unit tests, 100% green).
+  - **Slice 3: DownloadRepository & MainViewModel Integration**:
+    - Added reactive `concurrencyConfig: StateFlow<ConcurrencyConfig>` to `DownloadRepository` and `MainViewModel`.
+    - Wired delegation methods (`updateWifiWorkers`, `updateCellularWorkers`, `toggleAutoScale`, `resetConcurrencyToDefault`).
+    - Wired `concurrencyConfig` into `downloaderEngine.startDownload()` and `DownloadForegroundService` to ensure background transfers execute on user-configured stream allocations.
+    - Verified via `MainViewModelConcurrencyTest.kt` (5 unit tests, 100% green).
+  - **Slice 4: SettingsBottomSheet UI Controls & Persistence**:
+    - Added "Multi-Thread Concurrency" card in `SettingsBottomSheet.kt` with live total stream calculation (`"${totalWorkers} Streams (${wifiWorkers} Wi-Fi + ${cellularWorkers} Cellular)"`).
+    - Created `ConcurrencyStepper` composable with accessible 36dp tonal icon buttons `[ - ] X Streams [ + ]` bounded to 1..8.
+    - Added Auto-Scale toggle with status subtitle and fail-safe thermal priority disclosure.
+    - Verified via `SettingsConcurrencyUiTest.kt` (4 unit tests, 100% green).
+    - Full test suite passed 100% green (286 tests across 41 test suites).
 - **Dynamic Wi-Fi Generation, Frequency Band & Link Speed Classification (ADR-041 / 270 Tests across 37 Suites)**:
   - **Slice 1: WifiGeneration & WifiDetails Domain Models**:
     - Created `WifiGeneration` enum (`WIFI_7`, `WIFI_6E`, `WIFI_6`, `WIFI_5`, `WIFI_4`, `LEGACY`, `UNKNOWN`) with pure classifier `fromStandard(standard, frequencyMhz)`.
