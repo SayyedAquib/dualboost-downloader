@@ -19,6 +19,8 @@ import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.data.NetworkInterfaceType
 import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.data.StorageDestination
+import com.dualboost.downloader.data.UserAgentConfig
+import com.dualboost.downloader.data.UserAgentPreset
 import com.dualboost.downloader.network.NetworkProvider
 import com.dualboost.downloader.security.SecurityPreferences
 import kotlinx.coroutines.*
@@ -184,6 +186,50 @@ class DualDownloaderEngine(
 
     fun getChunkConfig(): ChunkConfig = this.chunkConfig
 
+    private var userAgentConfig: UserAgentConfig = UserAgentConfig.DEFAULT
+
+    fun setUserAgentConfig(config: UserAgentConfig) {
+        this.userAgentConfig = config
+    }
+
+    fun getUserAgentConfig(): UserAgentConfig = this.userAgentConfig
+
+    internal fun resolveEffectiveUserAgent(
+        canResume: Boolean,
+        existingMeta: MetaInfo?,
+        configOverride: UserAgentConfig? = null
+    ): String {
+        if (canResume && existingMeta != null && !existingMeta.userAgent.isNullOrBlank()) {
+            return existingMeta.userAgent
+        }
+        val config = configOverride ?: this.userAgentConfig
+        return config.resolveUserAgentString()
+    }
+
+    fun applyConfiguredUserAgentHeaders(
+        builder: Request.Builder,
+        isDesktop: Boolean = false,
+        configOverride: UserAgentConfig? = null,
+        explicitUserAgent: String? = null
+    ) {
+        val config = configOverride ?: this.userAgentConfig
+        if (isDesktop || config.isDesktopFastTrack()) {
+            builder
+                .header("User-Agent", UserAgentConfig.DESKTOP_UA)
+                .header("Sec-CH-UA", "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"")
+                .header("Sec-CH-UA-Mobile", "?0")
+                .header("Sec-CH-UA-Platform", "\"Windows\"")
+                .header("Sec-CH-UA-Platform-Version", "\"15.0.0\"")
+                .header("Sec-Fetch-Dest", "empty")
+                .header("Sec-Fetch-Mode", "cors")
+                .header("Sec-Fetch-Site", "same-origin")
+                .header("Upgrade-Insecure-Requests", "1")
+        } else {
+            val ua = explicitUserAgent ?: config.resolveUserAgentString()
+            builder.header("User-Agent", ua)
+        }
+    }
+
     internal fun resolveEffectiveChunkSize(
         contentLength: Long,
         canResume: Boolean,
@@ -334,7 +380,8 @@ class DualDownloaderEngine(
         val lastModified: String? = null,
         val isDesktopSpoofed: Boolean = false,
         val isCloudSlicerActive: Boolean = false,
-        val chunkSize: Long = 4 * 1024 * 1024L
+        val chunkSize: Long = 4 * 1024 * 1024L,
+        val userAgent: String? = null
     )
 
     internal fun readMetaInfo(metaFile: File): MetaInfo? {
@@ -356,6 +403,7 @@ class DualDownloaderEngine(
             val isDesktop = metaMap["isDesktopSpoofed"]?.toBoolean() ?: false
             val isSlicer = metaMap["isCloudSlicerActive"]?.toBoolean() ?: false
             val savedChunkSize = metaMap["chunkSize"]?.toLongOrNull() ?: (4 * 1024 * 1024L)
+            val savedUserAgent = metaMap["userAgent"]
 
             MetaInfo(
                 url = savedUrl,
@@ -365,7 +413,8 @@ class DualDownloaderEngine(
                 lastModified = metaMap["lastModified"],
                 isDesktopSpoofed = isDesktop,
                 isCloudSlicerActive = isSlicer,
-                chunkSize = savedChunkSize
+                chunkSize = savedChunkSize,
+                userAgent = savedUserAgent
             )
         } catch (_: Exception) {
             null
@@ -386,7 +435,8 @@ class DualDownloaderEngine(
         lastModified: String? = null,
         isDesktopSpoofed: Boolean = false,
         isCloudSlicerActive: Boolean = false,
-        chunkSize: Long = CHUNK_SIZE
+        chunkSize: Long = CHUNK_SIZE,
+        userAgent: String? = null
     ) {
         try {
             val content = buildString {
@@ -397,6 +447,7 @@ class DualDownloaderEngine(
                 if (!lastModified.isNullOrBlank()) appendLine("lastModified=$lastModified")
                 appendLine("isDesktopSpoofed=$isDesktopSpoofed")
                 appendLine("isCloudSlicerActive=$isCloudSlicerActive")
+                if (!userAgent.isNullOrBlank()) appendLine("userAgent=$userAgent")
                 appendLine("completedChunks=${completedIndices.sorted().joinToString(",")}")
                 appendLine("updatedAt=${System.currentTimeMillis()}")
             }
@@ -476,7 +527,8 @@ class DualDownloaderEngine(
                 progressPercentage = progress,
                 url = metaInfo.url,
                 isDesktopSpoofed = metaInfo.isDesktopSpoofed,
-                isCloudSlicerActive = metaInfo.isCloudSlicerActive
+                isCloudSlicerActive = metaInfo.isCloudSlicerActive,
+                isCustomUserAgent = (!metaInfo.userAgent.isNullOrBlank() && metaInfo.userAgent != UserAgentConfig.buildNativeUserAgent(Build.MODEL ?: "Pixel 9", Build.VERSION.RELEASE ?: "15"))
             )
             return true
         } catch (_: Exception) {
@@ -513,7 +565,8 @@ class DualDownloaderEngine(
         forceSequentialMode: Boolean? = null,
         allowDangerousBypass: Boolean = false,
         concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT,
-        chunkConfig: ChunkConfig? = null
+        chunkConfig: ChunkConfig? = null,
+        userAgentConfig: UserAgentConfig? = null
     ) {
         val rawTrimmed = url.trim()
         val parsedHttpUrl = runCatching { rawTrimmed.toHttpUrlOrNull() }.getOrNull()
@@ -541,7 +594,7 @@ class DualDownloaderEngine(
             try {
                 networkManager.acquireCellularKeepAlive()
                 thermalStatusProvider.startListening()
-                executeDownload(sanitizedUrl, targetDir, forceSequentialMode, allowDangerousBypass, concurrencyConfig, chunkConfig)
+                executeDownload(sanitizedUrl, targetDir, forceSequentialMode, allowDangerousBypass, concurrencyConfig, chunkConfig, userAgentConfig)
             } catch (e: ThreatDetectedException) {
                 Log.w(TAG, "Threat detected during download: ${e.threat.description}")
                 discardDownload(targetDir, e.fileName)
@@ -558,7 +611,8 @@ class DualDownloaderEngine(
                             progressPercentage = lastState.progressPercentage,
                             url = currentUrl ?: sanitizedUrl,
                             isDesktopSpoofed = lastState.isDesktopSpoofed,
-                            isCloudSlicerActive = lastState.isCloudSlicerActive
+                            isCloudSlicerActive = lastState.isCloudSlicerActive,
+                            isCustomUserAgent = lastState.isCustomUserAgent
                         )
                     } else if (lastState !is DownloadState.Paused && lastState !is DownloadState.Idle) {
                         _downloadState.value = DownloadState.Paused(url = currentUrl ?: sanitizedUrl)
@@ -610,7 +664,8 @@ class DualDownloaderEngine(
                 progressPercentage = lastState.progressPercentage,
                 url = currentUrl ?: "",
                 isDesktopSpoofed = lastState.isDesktopSpoofed,
-                isCloudSlicerActive = lastState.isCloudSlicerActive
+                isCloudSlicerActive = lastState.isCloudSlicerActive,
+                isCustomUserAgent = lastState.isCustomUserAgent
             )
         } else if (lastState !is DownloadState.Paused && lastState !is DownloadState.Idle) {
             _downloadState.value = DownloadState.Paused(url = currentUrl ?: "")
@@ -716,8 +771,11 @@ class DualDownloaderEngine(
         forceSequentialMode: Boolean? = null,
         allowDangerousBypass: Boolean = false,
         concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT,
-        chunkConfigOverride: ChunkConfig? = null
+        chunkConfigOverride: ChunkConfig? = null,
+        userAgentConfigOverride: UserAgentConfig? = null
     ) {
+        val activeUserAgentConfig = userAgentConfigOverride ?: this.userAgentConfig
+        var effectiveUserAgent = activeUserAgentConfig.resolveUserAgentString()
         var fileName = extractFileName(url)
         val shouldInspectThreats = !allowDangerousBypass && SecurityPreferences.isThreatGuardEnabled(context)
 
@@ -756,9 +814,10 @@ class DualDownloaderEngine(
                 existingInitialMeta = readMetaInfo(getMetaFile(appDir, fileName))
             }
         }
-        val forceDesktop = existingInitialMeta?.isDesktopSpoofed == true
+        val forceDesktop = existingInitialMeta?.isDesktopSpoofed == true || activeUserAgentConfig.isDesktopFastTrack()
         if (forceDesktop) {
             isDesktopSpoofed = true
+            effectiveUserAgent = UserAgentConfig.DESKTOP_UA
         }
         val forceCloudSlicer = existingInitialMeta?.isCloudSlicerActive == true
         if (forceCloudSlicer) {
@@ -929,6 +988,7 @@ class DualDownloaderEngine(
                 supportsRanges = true
                 contentLength = desktopLength
                 isDesktopSpoofed = true
+                effectiveUserAgent = UserAgentConfig.DESKTOP_UA
             }
         }
 
@@ -1006,7 +1066,7 @@ class DualDownloaderEngine(
 
         if (!supportsRanges || contentLength <= 0) {
             Log.w(TAG, "Server lacks range support or length is unknown. Falling back to single-stream download.")
-            executeSingleStreamDownload(url, outputFile, contentLength, isDesktopSpoofed, isCloudSlicerActive, allowDangerousBypass)
+            executeSingleStreamDownload(url, outputFile, contentLength, isDesktopSpoofed, isCloudSlicerActive, allowDangerousBypass, activeUserAgentConfig, effectiveUserAgent)
             return
         }
 
@@ -1056,6 +1116,7 @@ class DualDownloaderEngine(
 
         if (canResume && existingMeta != null) {
             completedIndices.addAll(existingMeta.completedChunks)
+            effectiveUserAgent = resolveEffectiveUserAgent(canResume, existingMeta, activeUserAgentConfig)
         }
 
         val effectiveChunkSize = resolveEffectiveChunkSize(contentLength, canResume, existingMeta, chunkConfigOverride)
@@ -1126,7 +1187,8 @@ class DualDownloaderEngine(
             isPlayable = initialPlayable,
             filePath = outputFile.absolutePath,
             contentUriString = null,
-            chunkSize = effectiveChunkSize
+            chunkSize = effectiveChunkSize,
+            isCustomUserAgent = (activeUserAgentConfig.preset != UserAgentPreset.NATIVE && !isDesktopSpoofed)
         )
 
 
@@ -1207,7 +1269,8 @@ class DualDownloaderEngine(
                         isPlayable = playable,
                         filePath = outputFile.absolutePath,
                         contentUriString = null,
-                        chunkSize = effectiveChunkSize
+                        chunkSize = effectiveChunkSize,
+                        isCustomUserAgent = (activeUserAgentConfig.preset != UserAgentPreset.NATIVE && !isDesktopSpoofed)
                     )
                 }
             }
@@ -1226,7 +1289,7 @@ class DualDownloaderEngine(
                 if (expectedTailBytes <= 0 || straggler.status != ChunkStatus.DOWNLOADING) return
 
                 try {
-                    val request = buildRequest(url, isDesktop = isDesktopSpoofed)
+                    val request = buildRequest(url, isDesktop = isDesktopSpoofed, explicitUserAgent = if (!isDesktopSpoofed) effectiveUserAgent else null)
                         .addHeader("Range", "bytes=$tailStart-$tailEnd")
                         .build()
 
@@ -1270,7 +1333,7 @@ class DualDownloaderEngine(
                                         straggler.status = ChunkStatus.COMPLETED
                                         straggler.downloadedBytes = straggler.totalBytes
                                         completedIndices.add(straggler.index)
-                                        saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize)
+                                        saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize, userAgent = effectiveUserAgent)
                                     }
                                     Log.d(TAG, "Straggler chunk ${straggler.index} rescued via speculative tail hedging on $interfaceType")
                                 }
@@ -1445,7 +1508,7 @@ class DualDownloaderEngine(
                                 }
                                 .build()
                         } else {
-                            buildRequest(url, isDesktop = isDesktopSpoofed)
+                            buildRequest(url, isDesktop = isDesktopSpoofed, explicitUserAgent = if (!isDesktopSpoofed) effectiveUserAgent else null)
                                 .addHeader("Range", "bytes=$batchStart-$batchEnd")
                                 .build()
                         }
@@ -1554,7 +1617,7 @@ class DualDownloaderEngine(
                                 c.downloadedBytes = c.totalBytes
                                 completedIndices.add(c.index)
                             }
-                            saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize)
+                            saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize, userAgent = effectiveUserAgent)
                         } else {
                             // Return all chunks in the batch to pending queue for immediate re-dispatch
                             for (c in chunkBatch) {
@@ -1603,7 +1666,7 @@ class DualDownloaderEngine(
             monitorJob.cancel()
 
             if (isPausedDueToExhaustion.get()) {
-                saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize)
+                saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize, userAgent = effectiveUserAgent)
                 val completedBytes = completedIndices.sumOf { chunkIndex ->
                     val start = chunkIndex * effectiveChunkSize
                     val end = min(start + effectiveChunkSize - 1, contentLength - 1)
@@ -1618,7 +1681,8 @@ class DualDownloaderEngine(
                     progressPercentage = progress,
                     url = url,
                     isDesktopSpoofed = isDesktopSpoofed,
-                    isCloudSlicerActive = isCloudSlicerActive
+                    isCloudSlicerActive = isCloudSlicerActive,
+                    isCustomUserAgent = (activeUserAgentConfig.preset != UserAgentPreset.NATIVE && !isDesktopSpoofed)
                 )
                 return@coroutineScope
             }
@@ -1691,8 +1755,13 @@ class DualDownloaderEngine(
         totalLength: Long,
         isDesktopSpoofed: Boolean = false,
         isCloudSlicerActive: Boolean = false,
-        allowDangerousBypass: Boolean = false
+        allowDangerousBypass: Boolean = false,
+        userAgentConfigOverride: UserAgentConfig? = null,
+        effectiveUserAgent: String? = null
     ) {
+        val activeUserAgentConfig = userAgentConfigOverride ?: this.userAgentConfig
+        val resolvedUa = effectiveUserAgent ?: if (!isDesktopSpoofed) activeUserAgentConfig.resolveUserAgentString() else null
+
         if (totalLength > 0) {
             checkAvailableStorage(outputFile.parentFile ?: getDefaultDownloadDir(), totalLength, outputFile)
         }
@@ -1709,7 +1778,7 @@ class DualDownloaderEngine(
                 }
                 .build()
         } else {
-            buildRequest(url, isDesktop = isDesktopSpoofed).build()
+            buildRequest(url, isDesktop = isDesktopSpoofed, explicitUserAgent = resolvedUa).build()
         }
         val call = client.newCall(request)
         if (!registerActiveCall(call)) throw CancellationException("Download paused")
@@ -1785,7 +1854,8 @@ class DualDownloaderEngine(
                                 contiguousPlayableBytes = totalRead,
                                 isPlayable = singlePlayable,
                                 filePath = outputFile.absolutePath,
-                                contentUriString = null
+                                contentUriString = null,
+                                isCustomUserAgent = (activeUserAgentConfig.preset != UserAgentPreset.NATIVE && !isDesktopSpoofed)
                             )
                         }
                     }
@@ -1855,24 +1925,11 @@ class DualDownloaderEngine(
         }
     }
 
-    internal fun buildRequest(url: String, isDesktop: Boolean = false): Request.Builder {
+    internal fun buildRequest(url: String, isDesktop: Boolean = false, explicitUserAgent: String? = null): Request.Builder {
         val builder = Request.Builder()
             .url(url)
 
-        if (isDesktop) {
-            builder
-                .header("User-Agent", DESKTOP_USER_AGENT)
-                .header("Sec-CH-UA", "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"")
-                .header("Sec-CH-UA-Mobile", "?0")
-                .header("Sec-CH-UA-Platform", "\"Windows\"")
-                .header("Sec-CH-UA-Platform-Version", "\"15.0.0\"")
-                .header("Sec-Fetch-Dest", "empty")
-                .header("Sec-Fetch-Mode", "cors")
-                .header("Sec-Fetch-Site", "same-origin")
-                .header("Upgrade-Insecure-Requests", "1")
-        } else {
-            builder.header("User-Agent", MOBILE_USER_AGENT)
-        }
+        applyConfiguredUserAgentHeaders(builder, isDesktop = isDesktop, explicitUserAgent = explicitUserAgent)
 
         builder
             .header("Accept", "*/*")

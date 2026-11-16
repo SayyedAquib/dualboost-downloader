@@ -250,6 +250,21 @@ open class MainViewModel(
         repository?.resetChunkConfigToDefault()
     }
 
+    val userAgentConfig: StateFlow<com.dualboost.downloader.data.UserAgentConfig> =
+        repository?.userAgentConfig ?: MutableStateFlow(com.dualboost.downloader.data.UserAgentConfig.DEFAULT)
+
+    fun updateUserAgentPreset(preset: com.dualboost.downloader.data.UserAgentPreset) {
+        repository?.updateUserAgentPreset(preset)
+    }
+
+    fun setCustomUserAgent(customUa: String) {
+        repository?.setCustomUserAgent(customUa)
+    }
+
+    fun resetUserAgentToDefault() {
+        repository?.resetUserAgentToDefault()
+    }
+
     val queueItems: StateFlow<List<com.dualboost.downloader.data.QueueItem>> =
         repository?.queueRepository?.queueItems ?: MutableStateFlow(emptyList())
 

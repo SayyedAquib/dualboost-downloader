@@ -1,9 +1,39 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-045 (Dynamic Chunk Segment Slicing & Auto-Adaptive Sizing). The codebase is backed by **347 unit and integration tests across 59 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing, and installs and runs flawlessly on Google Pixel 9.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-046 (Dynamic User-Agent Strings & Phone Model Identity). The codebase is backed by **367 unit and integration tests across 62 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing, and is installed and running on Google Pixel 9 (`53201VDAQ00067`).
 
 ## Recently Completed
+- **Dynamic User-Agent Strings & Phone Model Identity (ADR-046 / 367 Tests across 62 Suites - 100% Green)**:
+  - **Slice 1: UserAgentConfig Domain Model & Device Resolver**:
+    - Created `UserAgentPreset` enum featuring 5 distinct profiles (`NATIVE`, `PIXEL_9`, `GALAXY_S24`, `DESKTOP_CHROME`, `CUSTOM`).
+    - Implemented `buildNativeUserAgent()` dynamically discovering phone model and Android OS version from hardware properties (`Build.MODEL` and `Build.VERSION.RELEASE`), establishing parity with real device identity.
+    - Implemented `resolveUserAgentString()` and `isDesktopFastTrack()` automatically detecting desktop profiles (`DESKTOP_CHROME` or custom strings containing "Windows NT").
+    - Verified via `UserAgentConfigTest.kt` (7 unit tests, 100% green).
+  - **Slice 2: UserAgentPreferences Persistence**:
+    - Created `UserAgentPreferences` persisting preset ID and raw custom User-Agent strings via Android `SharedPreferences`, with one-tap `resetToDefault()`.
+    - Verified via `UserAgentPreferencesTest.kt` (4 unit tests, 100% green).
+  - **Slice 3: DualDownloaderEngine & DownloadRepository Integration**:
+    - Wired `UserAgentConfig` into `DualDownloaderEngine.startDownload()`, `executeDownload()`, and `executeSingleStreamDownload()`.
+    - Implemented `applyConfiguredUserAgentHeaders()` applying exact `User-Agent` and `Sec-CH-UA` client hints.
+    - **Smart Probing & Desktop Fast-Track**: Desktop Chrome fast-tracks directly to Stage 2 desktop headers; mobile presets probe with configured mobile headers and automatically escalate to desktop mode if remote servers reject mobile byte ranges.
+    - **Non-Negotiable Session Resumption Invariance**: Incomplete downloads record active User-Agent into `.dualboost_meta`; on resumption, `resolveEffectiveUserAgent(canResume = true, existingMeta)` strictly enforces `existingMeta.userAgent`, preventing mid-stream identity mutations and CDN/Cloudflare 403 Forbidden errors.
+    - Exposed reactive `userAgentConfig: StateFlow<UserAgentConfig>` on `DownloadRepository` and `MainViewModel` with UI delegates (`updateUserAgentPreset`, `setCustomUserAgent`, `resetUserAgentToDefault`).
+    - Added `isCustomUserAgent: Boolean` to both `DownloadState.Downloading` and `DownloadState.Paused` for live UI telemetry.
+    - Verified via `EngineDynamicUserAgentTest.kt` (6 unit tests, 100% green).
+  - **Slice 4: SettingsBottomSheet & Active Download UI Controls**:
+    - Implemented `getSubtitleText()` and `getBadgeLabel()` on `UserAgentConfig`.
+    - Added dedicated **Browser Identity (User-Agent)** card in `SettingsBottomSheet.kt`:
+      - Header with live subtitle reflecting the active preset.
+      - One-tap "Reset" action restoring default `NATIVE` auto-detection.
+      - Horizontally scrollable row of selectable profile chips (`Native Device`, `Pixel 9`, `Galaxy S24 Ultra`, `Desktop Chrome`, `Custom`).
+      - Expandable raw `OutlinedTextField` when `Custom` is selected with clear button.
+      - Live Header Preview box rendering exact monospace string with one-tap clipboard copy button and toast confirmation.
+      - Informational caption explaining session resumption invariance.
+    - Added active `⚡ Custom UA` pill badge in `MainActivity.kt` for active and paused downloads when a non-default User-Agent is engaged.
+    - Verified via `UserAgentUiTest.kt` (3 unit tests, 100% green).
+    - Full test suite passed 100% green (367 tests across 62 test suites).
+    - Production APK `app-release.apk` (1,695,492 bytes) assembled cleanly via `.\gradlew.bat assembleRelease` and installed directly onto Google Pixel 9 (`53201VDAQ00067`).
 - **Dynamic Chunk Segment Slicing & Auto-Adaptive Sizing (ADR-045 / 347 Tests across 59 Suites - 100% Green)**:
   - **Slice 1: ChunkConfig Domain Model & Balanced Sizing Matrix**:
     - Created `ChunkConfig` domain model supporting Auto-Adaptive sizing alongside manual overrides from 1 MB to 64 MB (1 MB, 2 MB, 4 MB, 8 MB, 16 MB, 32 MB, 64 MB).

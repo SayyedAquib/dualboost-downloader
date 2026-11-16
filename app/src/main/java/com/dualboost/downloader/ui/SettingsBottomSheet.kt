@@ -49,6 +49,9 @@ import com.dualboost.downloader.data.StreamPalette
 import com.dualboost.downloader.data.StreamPalettePreferences
 import com.dualboost.downloader.data.StorageDestination
 import com.dualboost.downloader.data.StoragePreferences
+import com.dualboost.downloader.data.UserAgentConfig
+import com.dualboost.downloader.data.UserAgentPreset
+import com.dualboost.downloader.data.UserAgentPreferences
 import com.dualboost.downloader.security.SecurityPreferences
 import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.data.WorkerTestStatus
@@ -181,6 +184,42 @@ fun SettingsBottomSheet(
             ChunkPreferences(context).resetToDefault()
             localChunkConfig = ChunkPreferences(context).getChunkConfig()
         }
+    }
+
+    var localUserAgentConfig by remember { mutableStateOf(UserAgentPreferences(context).getUserAgentConfig()) }
+    val userAgentConfigState = viewModel?.userAgentConfig?.collectAsState()
+    val currentUserAgentConfig = userAgentConfigState?.value ?: localUserAgentConfig
+
+    var customUaInput by remember(currentUserAgentConfig.customUserAgentString) {
+        mutableStateOf(currentUserAgentConfig.customUserAgentString)
+    }
+
+    fun updateUaPreset(preset: UserAgentPreset) {
+        if (viewModel != null) {
+            viewModel.updateUserAgentPreset(preset)
+        } else {
+            UserAgentPreferences(context).setPreset(preset)
+            localUserAgentConfig = UserAgentPreferences(context).getUserAgentConfig()
+        }
+    }
+
+    fun updateCustomUa(customUa: String) {
+        if (viewModel != null) {
+            viewModel.setCustomUserAgent(customUa)
+        } else {
+            UserAgentPreferences(context).setCustomUserAgent(customUa)
+            localUserAgentConfig = UserAgentPreferences(context).getUserAgentConfig()
+        }
+    }
+
+    fun resetUserAgent() {
+        if (viewModel != null) {
+            viewModel.resetUserAgentToDefault()
+        } else {
+            UserAgentPreferences(context).resetToDefault()
+            localUserAgentConfig = UserAgentPreferences(context).getUserAgentConfig()
+        }
+        customUaInput = ""
     }
 
     val directoryPickerLauncher = rememberLauncherForActivityResult(
@@ -1380,6 +1419,234 @@ fun SettingsBottomSheet(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Resumed downloads strictly preserve original segment size to prevent file corruption.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Browser Identity & User-Agent (ADR-046)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Language,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Browser Identity (User-Agent)",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = currentUserAgentConfig.preset.displayName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (currentUserAgentConfig.preset != UserAgentPreset.NATIVE || currentUserAgentConfig.customUserAgentString.isNotBlank()) {
+                            TextButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    resetUserAgent()
+                                }
+                            ) {
+                                Text(
+                                    text = "Reset",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Controls how download servers identify your phone model. Bypasses mobile throttling and desktop-only range blocks.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Preset Chips
+                    Text(
+                        text = "Device Profile Presets",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        UserAgentPreset.entries.forEach { preset ->
+                            val isSelected = currentUserAgentConfig.preset == preset
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    updateUaPreset(preset)
+                                },
+                                label = {
+                                    Text(
+                                        text = preset.displayName,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    )
+                                },
+                                leadingIcon = if (isSelected) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                } else null
+                            )
+                        }
+                    }
+
+                    // Custom UA input field if CUSTOM preset is selected
+                    AnimatedVisibility(visible = currentUserAgentConfig.preset == UserAgentPreset.CUSTOM) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                            OutlinedTextField(
+                                value = customUaInput,
+                                onValueChange = {
+                                    customUaInput = it
+                                    updateCustomUa(it)
+                                },
+                                label = { Text("Custom User-Agent String") },
+                                placeholder = { Text("e.g. Mozilla/5.0 ...") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = false,
+                                maxLines = 3,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                shape = RoundedCornerShape(12.dp),
+                                trailingIcon = {
+                                    if (customUaInput.isNotBlank()) {
+                                        IconButton(onClick = {
+                                            customUaInput = ""
+                                            updateCustomUa("")
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Close,
+                                                contentDescription = "Clear",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Live UA String Preview Box with 1-tap Copy
+                    val activeUaString = currentUserAgentConfig.resolveUserAgentString()
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Active Header Preview",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                IconButton(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = ClipData.newPlainText("User-Agent", activeUaString)
+                                        clipboard.setPrimaryClip(clip)
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        Toast.makeText(context, "User-Agent copied to clipboard", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.ContentCopy,
+                                        contentDescription = "Copy User-Agent",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = activeUaString,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Resumption Session Invariance Caption
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Session Resumption Invariance: Resumed downloads preserve their original User-Agent to prevent CDN 403 Forbidden errors.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )

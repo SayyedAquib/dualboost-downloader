@@ -433,6 +433,32 @@ End-to-end and component UI testing on Android devices is performed using Google
   - `testChunkStripLegend_FormatsDynamicWifiAndCellular`: Tests chunk visualizer legends.
   - `testCompletionBanner_FormatsDynamicWifiAndCellular`: Tests celebratory completion banners.
 
+### Dynamic User-Agent Strings & Phone Model Identity Test Suite (`ADR-046`)
+- **UserAgentConfigTest** (7 tests):
+  - `testConfig_DefaultsToNativeDevice`: Asserts default preset is `NATIVE` with empty custom string and no desktop fast-track.
+  - `testConfig_ResolvesNativeUserAgentWithDeviceModel`: Verifies auto-detection of device model and Android OS version from hardware properties (`Build.MODEL` and `Build.VERSION.RELEASE`).
+  - `testConfig_ResolvesBuiltInPresets_Pixel9_GalaxyS24_Desktop`: Tests curated preset strings for Pixel 9, Samsung Galaxy S24 Ultra (`SM-S928B`), and Desktop Chrome.
+  - `testConfig_CustomPreset_UsesUserDefinedString`: Validates raw custom User-Agent strings.
+  - `testConfig_CustomPreset_BlankStringFallsBackToNative`: Verifies graceful fallback to native device string when custom input is blank or whitespace.
+  - `testConfig_DetectsDesktopModeFastTrack`: Asserts `isDesktopFastTrack()` returns true for `DESKTOP_CHROME` or custom strings containing "Windows NT".
+  - `testConfig_FindPresetById`: Tests ID lookup with case-insensitive resilience and fallback to `NATIVE`.
+- **UserAgentPreferencesTest** (4 tests):
+  - `testPreferences_DefaultsToNativePreset`: Asserts SharedPreferences initializes with `NATIVE` and empty custom string.
+  - `testPreferences_PersistAndReadPreset`: Verifies updating and reading preset ID across instances.
+  - `testPreferences_PersistAndReadCustomUserAgent`: Verifies updating and reading custom UA string.
+  - `testPreferences_ResetToDefault`: Tests one-tap reset restoring `NATIVE` preset and clearing custom strings.
+- **EngineDynamicUserAgentTest** (6 tests):
+  - `testEngine_DefaultsToNativeUserAgentConfig`: Verifies `DualDownloaderEngine` defaults to `NATIVE` configuration.
+  - `testEngine_AppliesConfiguredUserAgentHeaderToRequest`: Tests applying custom and preset User-Agent headers to OkHttp requests.
+  - `testEngine_DesktopPreset_FastTracksToDesktopModeDirectly`: Asserts Desktop Chrome fast-tracks directly to desktop headers with `Sec-CH-UA` client hints.
+  - `testEngine_SaveAndReadMetadata_PreservesUserAgentOnResume`: Verifies session resumption invariance: stored User-Agent in `.dualboost_meta` is strictly preserved upon resuming downloads.
+  - `testRepository_ExposesUserAgentConfigStateFlowAndUpdates`: Tests `DownloadRepository` state flow exposure, updates, and engine synchronization.
+  - `testDownloadState_Downloading_ExposesCustomUserAgentFlag`: Verifies `isCustomUserAgent` flag exposure on download states.
+- **UserAgentUiTest** (3 tests):
+  - `testUserAgentUi_PresetLabelsAndDescriptions`: Verifies all 5 presets feature intuitive human-readable display names and technical descriptions.
+  - `testUserAgentUi_FormatSubtitle`: Tests subtitle formatting across all presets including empty and filled custom modes.
+  - `testUserAgentUi_FormatsCustomBadgeText`: Verifies badge label formatting (`⚡ Pixel 9 UA`, `⚡ Galaxy S24 UA`, `⚡ Desktop UA`, `⚡ Custom UA`).
+
 ## API Testing
 - Verify HTTP 206 response validation.
 - Verify fallback behavior when a mock server returns HTTP 200 (server ignored Range header).

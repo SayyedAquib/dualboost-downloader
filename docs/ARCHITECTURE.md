@@ -259,6 +259,11 @@ sequenceDiagram
   - Balanced Payload & Speed Matrix: Intelligent auto-sizing matrix that matches segment size to payload volume and real-time interface capabilities: smaller chunks (1 MB .. 2 MB) for small files (< 16 MB) or spotty links to ensure both Wi-Fi and Cellular stay saturated without one idling; standard 4 MB chunks for medium files; larger chunks (8 MB .. 16 MB) for multi-hundred megabyte payloads; and up to 64 MB chunks on multi-gigabit Wi-Fi 7 / 5G to minimize HTTP header overhead.
   - Resumption Invariance Guarantee: Resuming paused or interrupted transfers strictly enforces `existingMeta.chunkSize` from `.dualboost_meta`, eliminating byte boundary shifts and guaranteeing 0% file corruption.
   - UI Presentation: `SettingsBottomSheet.kt` provides a dedicated Chunk Slicing Strategy card with auto-adaptive toggle, tier chips, and reset action. Active transfers display a badge (`⚡ X MB Chunks`).
+- **Dynamic User-Agent Strings & Phone Model Identity (`ADR-046`)**:
+  - Domain Modeling (`UserAgentConfig` & `UserAgentPreset`): Five selectable profile identities (`NATIVE`, `PIXEL_9`, `GALAXY_S24`, `DESKTOP_CHROME`, `CUSTOM`). Native mode auto-detects real device hardware and Android release version via `Build.MODEL` and `Build.VERSION.RELEASE`.
+  - Smart Probing & Desktop Fast-Track: Bypasses mobile probing and fast-tracks directly to desktop headers and `Sec-CH-UA` client hints when Desktop Chrome or a Windows custom UA is active. For other profiles, probes with configured mobile headers and auto-falls back to desktop spoofing if the remote server rejects mobile byte ranges.
+  - Session Resumption Invariance: Saves active User-Agent string to `.dualboost_meta` upon chunk completion. On download resume, `resolveEffectiveUserAgent()` strictly enforces the originating session User-Agent, preventing mid-stream identity mutations and CDN/Cloudflare 403 Forbidden errors.
+  - UI Presentation: `SettingsBottomSheet.kt` includes a dedicated Browser Identity card with preset filter chips, custom text field, live header preview box with 1-tap clipboard copy, and a `⚡ Custom UA` pill badge in `MainActivity.kt`.
 
 ## Constraints
 - Server must support HTTP Range requests (either via standard mobile headers, desktop browser spoofing, or Personal Cloud Slicer) for dual-channel acceleration.

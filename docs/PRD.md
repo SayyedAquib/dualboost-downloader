@@ -88,6 +88,14 @@ Standard Android operating system behavior automatically deactivates or idles th
    - User can manually select fixed chunk sizes spanning 1 MB, 2 MB, 4 MB, 8 MB, 16 MB, 32 MB, or 64 MB.
    - Incomplete downloads resuming from `.dualboost_meta` strictly preserve their original chunk size to ensure 100% data integrity and zero corruption.
    - Active download card displays an adaptive badge (`⚡ X MB Chunks`).
+6. **Dynamic User-Agent Strings & Phone Model Identity (ADR-046)**:
+   - User navigates to Settings > "Browser Identity (User-Agent)".
+   - By default, Native Device Auto-Detect dynamically discovers the phone model and Android OS version via `Build.MODEL` and `Build.VERSION.RELEASE`.
+   - User can choose from built-in device presets (`Pixel 9`, `Galaxy S24 Ultra`, `Desktop Chrome`) or define arbitrary custom User-Agent strings.
+   - Desktop Chrome fast-tracks directly to desktop headers and Client Hints, bypassing mobile probing delays on desktop-only CDNs.
+   - Live Header Preview box allows 1-tap copy of the active User-Agent string to the system clipboard.
+   - Session Resumption Invariance ensures resumed downloads retain their originating User-Agent in `.dualboost_meta`, preventing mid-stream CDN 403 Forbidden errors.
+   - Active download card displays an active `⚡ Custom UA` badge when non-default identities are engaged.
 
 ## Future Features
 - Multi-file batch download queue.
