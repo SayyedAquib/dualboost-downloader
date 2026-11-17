@@ -459,6 +459,31 @@ End-to-end and component UI testing on Android devices is performed using Google
   - `testUserAgentUi_FormatSubtitle`: Tests subtitle formatting across all presets including empty and filled custom modes.
   - `testUserAgentUi_FormatsCustomBadgeText`: Verifies badge label formatting (`⚡ Pixel 9 UA`, `⚡ Galaxy S24 UA`, `⚡ Desktop UA`, `⚡ Custom UA`).
 
+### Network Timeouts & Fast Failover Policy Test Suite (`ADR-047`)
+- **TimeoutConfigTest** (7 tests):
+  - `testTimeoutConfig_DefaultValues`: Validates default is `BALANCED` profile with 15s connect, 30s read, 5 retries, 300ms backoff.
+  - `testTimeoutConfig_AggressiveProfileValues`: Validates `AGGRESSIVE` profile with 5s connect, 10s read, 3 retries, 150ms backoff.
+  - `testTimeoutConfig_ResilientProfileValues`: Validates `RESILIENT` profile with 30s connect, 60s read, 8 retries, 1000ms backoff.
+  - `testTimeoutConfig_CustomProfileOverrides`: Validates `CUSTOM` profile custom parameter overrides and effective getters.
+  - `testTimeoutConfig_BadgeLabels`: Tests badge text (`⚡ Fast Failover`, `⚡ Resilient Mode`, `⚡ Custom Timeouts`, empty for `BALANCED`).
+  - `testTimeoutConfig_ProfileFromIdCaseInsensitive`: Tests case-insensitive profile ID resolution and default fallback.
+  - `testTimeoutConfig_EqualityAndCopy`: Tests data class contract and immutability.
+- **TimeoutPreferencesTest** (4 tests):
+  - `testTimeoutPreferences_DefaultConfig`: Tests clean preference initialization to `BALANCED`.
+  - `testTimeoutPreferences_PersistAndReadProfile`: Tests saving and loading profile selections across instances.
+  - `testTimeoutPreferences_PersistAndReadCustomConfig`: Tests saving and retrieving custom timeout limits.
+  - `testTimeoutPreferences_ResetToDefault`: Tests 1-tap reset restoring `BALANCED` defaults.
+- **EngineTimeoutFailoverTest** (4 tests):
+  - `testNetworkManager_ApplyTimeoutConfig_ReconfiguresClients`: Validates dynamic OkHttp client rebuilding with updated connect/read timeouts.
+  - `testEngine_AppliesTimeoutConfigToRetriesAndBackoff`: Validates engine chunk retry ceilings and backoff delay integration.
+  - `testRepository_ExposesTimeoutConfigStateFlowAndUpdates`: Tests repository state flow exposure, preference updates, and engine synchronization.
+  - `testEngine_DynamicTransportResumption_AppliesCurrentTimeoutToResumedDownload`: Validates dynamic transport resumption where resumed transfers adopt active timeout configurations.
+- **TimeoutUiTest** (4 tests):
+  - `testTimeoutUi_ProfileLabelsAndDescriptions`: Validates human-readable labels and technical descriptions for all profiles.
+  - `testTimeoutUi_BadgeFormatting`: Validates badge label formatting for all 4 profiles.
+  - `testTimeoutUi_SummaryTextFormatting`: Validates unified `TimeoutUiConstants.formatSummary()` output across profiles.
+  - `testTimeoutUi_CustomStepperBounds`: Validates boundary constants and clamping logic for custom parameter steppers.
+
 ## API Testing
 - Verify HTTP 206 response validation.
 - Verify fallback behavior when a mock server returns HTTP 200 (server ignored Range header).

@@ -52,6 +52,10 @@ import com.dualboost.downloader.data.StoragePreferences
 import com.dualboost.downloader.data.UserAgentConfig
 import com.dualboost.downloader.data.UserAgentPreset
 import com.dualboost.downloader.data.UserAgentPreferences
+import com.dualboost.downloader.data.TimeoutConfig
+import com.dualboost.downloader.data.TimeoutProfile
+import com.dualboost.downloader.data.TimeoutPreferences
+import com.dualboost.downloader.data.TimeoutUiConstants
 import com.dualboost.downloader.security.SecurityPreferences
 import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.data.WorkerTestStatus
@@ -220,6 +224,37 @@ fun SettingsBottomSheet(
             localUserAgentConfig = UserAgentPreferences(context).getUserAgentConfig()
         }
         customUaInput = ""
+    }
+
+    var localTimeoutConfig by remember { mutableStateOf(TimeoutPreferences(context).getTimeoutConfig()) }
+    val timeoutConfigState = viewModel?.timeoutConfig?.collectAsState()
+    val currentTimeoutConfig = timeoutConfigState?.value ?: localTimeoutConfig
+
+    fun updateTimeoutProfile(profile: TimeoutProfile) {
+        if (viewModel != null) {
+            viewModel.updateTimeoutProfile(profile)
+        } else {
+            TimeoutPreferences(context).setProfile(profile)
+            localTimeoutConfig = TimeoutPreferences(context).getTimeoutConfig()
+        }
+    }
+
+    fun updateCustomTimeouts(connectSec: Int, readSec: Int, retries: Int, backoffMs: Long) {
+        if (viewModel != null) {
+            viewModel.updateCustomTimeouts(connectSec, readSec, retries, backoffMs)
+        } else {
+            TimeoutPreferences(context).setCustomConfig(connectSec, readSec, retries, backoffMs)
+            localTimeoutConfig = TimeoutPreferences(context).getTimeoutConfig()
+        }
+    }
+
+    fun resetTimeoutConfig() {
+        if (viewModel != null) {
+            viewModel.resetTimeoutToDefault()
+        } else {
+            TimeoutPreferences(context).resetToDefault()
+            localTimeoutConfig = TimeoutPreferences(context).getTimeoutConfig()
+        }
     }
 
     val directoryPickerLauncher = rememberLauncherForActivityResult(
@@ -1647,6 +1682,306 @@ fun SettingsBottomSheet(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Session Resumption Invariance: Resumed downloads preserve their original User-Agent to prevent CDN 403 Forbidden errors.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Network Timeouts & Fast Failover (ADR-047)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Timer,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Network Timeouts & Failover",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = currentTimeoutConfig.profile.displayName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (currentTimeoutConfig.profile != TimeoutProfile.BALANCED ||
+                            currentTimeoutConfig.customConnectTimeoutSeconds != 15 ||
+                            currentTimeoutConfig.customReadTimeoutSeconds != 30 ||
+                            currentTimeoutConfig.customMaxChunkRetries != 5 ||
+                            currentTimeoutConfig.customRetryBackoffMs != 300L) {
+                            TextButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    resetTimeoutConfig()
+                                }
+                            ) {
+                                Text(
+                                    text = "Reset",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Configures socket connect/read deadlines and chunk retry pacing. Aggressive mode rapidly shifts traffic off stalled interfaces.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Profile Chips
+                    Text(
+                        text = "Failover Profiles",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TimeoutProfile.entries.forEach { profile ->
+                            val isSelected = currentTimeoutConfig.profile == profile
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    updateTimeoutProfile(profile)
+                                },
+                                label = {
+                                    Text(
+                                        text = profile.displayName,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    )
+                                },
+                                leadingIcon = if (isSelected) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                } else null
+                            )
+                        }
+                    }
+
+                    // Custom Steppers
+                    AnimatedVisibility(visible = currentTimeoutConfig.profile == TimeoutProfile.CUSTOM) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                            // Connect Timeout Stepper
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Connect Timeout",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+                                    )
+                                    Text(
+                                        text = "${currentTimeoutConfig.customConnectTimeoutSeconds} seconds",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            val newVal = (currentTimeoutConfig.customConnectTimeoutSeconds - 1).coerceIn(TimeoutUiConstants.MIN_CONNECT_TIMEOUT_SEC, TimeoutUiConstants.MAX_CONNECT_TIMEOUT_SEC)
+                                            updateCustomTimeouts(newVal, currentTimeoutConfig.customReadTimeoutSeconds, currentTimeoutConfig.customMaxChunkRetries, currentTimeoutConfig.customRetryBackoffMs)
+                                        },
+                                        enabled = currentTimeoutConfig.customConnectTimeoutSeconds > TimeoutUiConstants.MIN_CONNECT_TIMEOUT_SEC
+                                    ) {
+                                        Icon(Icons.Rounded.Remove, contentDescription = "Decrease connect timeout")
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            val newVal = (currentTimeoutConfig.customConnectTimeoutSeconds + 1).coerceIn(TimeoutUiConstants.MIN_CONNECT_TIMEOUT_SEC, TimeoutUiConstants.MAX_CONNECT_TIMEOUT_SEC)
+                                            updateCustomTimeouts(newVal, currentTimeoutConfig.customReadTimeoutSeconds, currentTimeoutConfig.customMaxChunkRetries, currentTimeoutConfig.customRetryBackoffMs)
+                                        },
+                                        enabled = currentTimeoutConfig.customConnectTimeoutSeconds < TimeoutUiConstants.MAX_CONNECT_TIMEOUT_SEC
+                                    ) {
+                                        Icon(Icons.Rounded.Add, contentDescription = "Increase connect timeout")
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Read Timeout Stepper
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Read Timeout",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+                                    )
+                                    Text(
+                                        text = "${currentTimeoutConfig.customReadTimeoutSeconds} seconds",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            val newVal = (currentTimeoutConfig.customReadTimeoutSeconds - 5).coerceIn(TimeoutUiConstants.MIN_READ_TIMEOUT_SEC, TimeoutUiConstants.MAX_READ_TIMEOUT_SEC)
+                                            updateCustomTimeouts(currentTimeoutConfig.customConnectTimeoutSeconds, newVal, currentTimeoutConfig.customMaxChunkRetries, currentTimeoutConfig.customRetryBackoffMs)
+                                        },
+                                        enabled = currentTimeoutConfig.customReadTimeoutSeconds > TimeoutUiConstants.MIN_READ_TIMEOUT_SEC
+                                    ) {
+                                        Icon(Icons.Rounded.Remove, contentDescription = "Decrease read timeout")
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            val newVal = (currentTimeoutConfig.customReadTimeoutSeconds + 5).coerceIn(TimeoutUiConstants.MIN_READ_TIMEOUT_SEC, TimeoutUiConstants.MAX_READ_TIMEOUT_SEC)
+                                            updateCustomTimeouts(currentTimeoutConfig.customConnectTimeoutSeconds, newVal, currentTimeoutConfig.customMaxChunkRetries, currentTimeoutConfig.customRetryBackoffMs)
+                                        },
+                                        enabled = currentTimeoutConfig.customReadTimeoutSeconds < TimeoutUiConstants.MAX_READ_TIMEOUT_SEC
+                                    ) {
+                                        Icon(Icons.Rounded.Add, contentDescription = "Increase read timeout")
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Max Retries Stepper
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Max Chunk Retries",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+                                    )
+                                    Text(
+                                        text = "${currentTimeoutConfig.customMaxChunkRetries} attempts",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            val newVal = (currentTimeoutConfig.customMaxChunkRetries - 1).coerceIn(TimeoutUiConstants.MIN_MAX_RETRIES, TimeoutUiConstants.MAX_MAX_RETRIES)
+                                            updateCustomTimeouts(currentTimeoutConfig.customConnectTimeoutSeconds, currentTimeoutConfig.customReadTimeoutSeconds, newVal, currentTimeoutConfig.customRetryBackoffMs)
+                                        },
+                                        enabled = currentTimeoutConfig.customMaxChunkRetries > TimeoutUiConstants.MIN_MAX_RETRIES
+                                    ) {
+                                        Icon(Icons.Rounded.Remove, contentDescription = "Decrease retries")
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            val newVal = (currentTimeoutConfig.customMaxChunkRetries + 1).coerceIn(TimeoutUiConstants.MIN_MAX_RETRIES, TimeoutUiConstants.MAX_MAX_RETRIES)
+                                            updateCustomTimeouts(currentTimeoutConfig.customConnectTimeoutSeconds, currentTimeoutConfig.customReadTimeoutSeconds, newVal, currentTimeoutConfig.customRetryBackoffMs)
+                                        },
+                                        enabled = currentTimeoutConfig.customMaxChunkRetries < TimeoutUiConstants.MAX_MAX_RETRIES
+                                    ) {
+                                        Icon(Icons.Rounded.Add, contentDescription = "Increase retries")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Summary Box
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "Active Policy Summary",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = TimeoutUiConstants.formatSummary(currentTimeoutConfig),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Dynamic Resumption Notice
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Bolt,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Dynamic Failover: Timeout adjustments apply immediately to active and resumed downloads without re-downloading existing chunks.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )

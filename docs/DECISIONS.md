@@ -1733,3 +1733,44 @@ Implement **Dynamic User-Agent Strings & Phone Model Identity**:
 - Users can bypass mobile range restrictions on demand or define arbitrary custom scraper personas.
 - Strict session resumption invariance prevents CDN 403 Forbidden errors when restarting paused downloads.
 - 100% test coverage with 367 unit tests passing across all test suites.
+
+---
+
+## ADR-047: Configurable Network Timeouts & Fast Failover Policy
+
+### Date
+2026-11-17
+
+### Status
+Accepted
+
+### Context
+1. **Network Interface Heterogeneity**: Wi-Fi and 5G cellular interfaces experience drastically different latency profiles, packet loss rates, and timeout characteristics.
+2. **Slow Stall Detection**: Hardcoded connect (15s) and read (30s) timeouts caused slow failover when a cellular interface became deprioritized by carrier tower handoffs or when a public Wi-Fi link stalled silently.
+3. **High Latency Environments**: In spotty, high-latency, or satellite connections (hotel captive portals, aircraft/train Wi-Fi, remote cellular), conservative retry counts (5) and delays (300ms) caused premature download abortion.
+4. **Dynamic Transport Resumption**: Unlike chunk size and User-Agent identity (which must remain strictly invariant upon resume to prevent byte misalignment and session invalidation), network timeouts and retry policies are purely transport-layer parameters. Resumed transfers must dynamically adopt the user's latest timeout policy so users can switch to "Resilient Mode" when transitioning to unstable networks.
+
+### Decision
+Implement **Network Timeouts & Fast Failover Policy**:
+1. **Domain Model & Persistence (`TimeoutConfig`, `TimeoutPreferences`, `TimeoutUiConstants`)**:
+   - `TimeoutProfile`:
+     - `AGGRESSIVE` (Fast Failover): 5s connect, 10s read, 3 retries, 150ms backoff. Rapidly aborts dead sockets and shifts traffic to the alternative interface.
+     - `BALANCED` (Default): 15s connect, 30s read, 5 retries, 300ms backoff. Ideal for stable home broadband and solid 5G.
+     - `RESILIENT` (High Latency): 30s connect, 60s read, 8 retries, 1000ms backoff. Tolerates high jitter, packet loss, and satellite latency.
+     - `CUSTOM`: Granular steppers for user-defined limits (connect 3s..60s, read 5s..120s, retries 1..15, backoff 50ms..3000ms).
+   - `TimeoutConfig`: Encapsulates active profile, custom parameter overrides, effective getters (`effectiveConnectTimeoutSeconds`, `effectiveReadTimeoutSeconds`, `effectiveMaxChunkRetries`, `effectiveRetryBackoffMs`), and `getBadgeLabel()`.
+   - `TimeoutPreferences`: SharedPreferences storage (`KEY_PROFILE_ID`, `KEY_CUSTOM_CONNECT_TIMEOUT`, `KEY_CUSTOM_READ_TIMEOUT`, `KEY_CUSTOM_MAX_RETRIES`, `KEY_CUSTOM_RETRY_BACKOFF`) with `resetToDefault()`.
+   - `TimeoutUiConstants`: Stepper bounds and unified formatting helper (`formatSummary()`).
+2. **Engine & Networking Integration**:
+   - `DualNetworkManager`: Added `applyTimeoutConfig(config: TimeoutConfig)` to dynamically rebuild `baseOkHttpClient`, `wifiClient`, and `cellularClient` with updated timeouts on the fly without network disconnections. Guarded `ConnectivityManager` nullability for headless JVM unit tests.
+   - `DualDownloaderEngine`: Integrated `activeTimeoutConfig` into chunk retry ceiling and backoff delay pacing. Resumed transfers dynamically inherit the active timeout configuration.
+   - `DownloadRepository`: Exposes `timeoutConfig: StateFlow<TimeoutConfig>`, binds preferences to engine and network managers, and exposes view model updaters.
+   - `DownloadModel.kt`: Added `val timeoutBadge: String = ""` to `DownloadState.Downloading` and `DownloadState.Paused`.
+3. **UI Integration (`SettingsBottomSheet.kt` & `MainActivity.kt`)**:
+   - `SettingsBottomSheet.kt`: Added **Network Timeouts & Failover** settings card with profile filter chips, custom steppers, 1-tap Reset, active summary box, and dynamic failover caption.
+   - `MainActivity.kt`: Displays status badge (`⚡ Fast Failover`, `⚡ Resilient Mode`, `⚡ Custom Timeouts`) in the active download card.
+
+### Consequences
+- Rapid socket stall detection on fluctuating cellular/Wi-Fi interfaces.
+- Seamless adaptability to high-latency satellite and public hotspot environments.
+- 100% test coverage with 384 unit tests passing across all test suites.

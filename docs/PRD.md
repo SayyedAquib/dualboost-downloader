@@ -96,6 +96,16 @@ Standard Android operating system behavior automatically deactivates or idles th
    - Live Header Preview box allows 1-tap copy of the active User-Agent string to the system clipboard.
    - Session Resumption Invariance ensures resumed downloads retain their originating User-Agent in `.dualboost_meta`, preventing mid-stream CDN 403 Forbidden errors.
    - Active download card displays an active `⚡ Custom UA` badge when non-default identities are engaged.
+7. **Configurable Network Timeouts & Fast Failover Policy (ADR-047)**:
+   - User navigates to Settings > "Network Timeouts & Failover".
+   - Built-in failover profiles tailored to connection characteristics:
+     - `Fast Failover` (AGGRESSIVE): 5s connect, 10s read, 3 retries, 150ms backoff. Rapidly aborts dead sockets and shifts traffic to the alternative interface.
+     - `Balanced (Default)`: 15s connect, 30s read, 5 retries, 300ms backoff. Optimized for stable broadband and 5G.
+     - `Resilient`: 30s connect, 60s read, 8 retries, 1000ms backoff. Tolerates high jitter, packet loss, and satellite/hotel Wi-Fi.
+     - `Custom`: Granular steppers for user-defined limits (connect 3s..60s, read 5s..120s, retries 1..15, backoff 50ms..3000ms).
+   - Dynamic Socket Re-binding: Adjusting timeouts rebuilds underlying OkHttp clients immediately on the fly without network disconnection.
+   - Dynamic Transport Resumption: Unlike chunk size or User-Agent, timeout configurations apply dynamically to active and resumed downloads without re-downloading existing chunks.
+   - Active download card displays a dynamic badge (`⚡ Fast Failover`, `⚡ Resilient Mode`, or `⚡ Custom Timeouts`).
 
 ## Future Features
 - Multi-file batch download queue.

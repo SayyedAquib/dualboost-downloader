@@ -32,8 +32,37 @@ class DownloadRepository(
     val streamPalettePreferencesOverride: StreamPalettePreferences? = null,
     val storagePreferencesOverride: StoragePreferences? = null,
     val chunkPreferencesOverride: ChunkPreferences? = null,
-    val userAgentPreferencesOverride: UserAgentPreferences? = null
+    val userAgentPreferencesOverride: UserAgentPreferences? = null,
+    val timeoutPreferencesOverride: TimeoutPreferences? = null
 ) : com.dualboost.downloader.engine.QueueDownloadDispatcher {
+
+    val timeoutPreferences: TimeoutPreferences by lazy {
+        timeoutPreferencesOverride ?: TimeoutPreferences(context)
+    }
+
+    private val _timeoutConfig = MutableStateFlow(timeoutPreferences.getTimeoutConfig())
+    val timeoutConfig: StateFlow<TimeoutConfig> = _timeoutConfig.asStateFlow()
+
+    fun updateTimeoutProfile(profile: TimeoutProfile) {
+        timeoutPreferences.setProfile(profile)
+        _timeoutConfig.value = timeoutPreferences.getTimeoutConfig()
+        downloaderEngine.setTimeoutConfig(_timeoutConfig.value)
+        (networkProvider ?: networkManager).applyTimeoutConfig(_timeoutConfig.value)
+    }
+
+    fun updateCustomTimeouts(connectSec: Int, readSec: Int, maxRetries: Int, retryBackoffMs: Long) {
+        timeoutPreferences.setCustomConfig(connectSec, readSec, maxRetries, retryBackoffMs)
+        _timeoutConfig.value = timeoutPreferences.getTimeoutConfig()
+        downloaderEngine.setTimeoutConfig(_timeoutConfig.value)
+        (networkProvider ?: networkManager).applyTimeoutConfig(_timeoutConfig.value)
+    }
+
+    fun resetTimeoutToDefault() {
+        timeoutPreferences.resetToDefault()
+        _timeoutConfig.value = timeoutPreferences.getTimeoutConfig()
+        downloaderEngine.setTimeoutConfig(_timeoutConfig.value)
+        (networkProvider ?: networkManager).applyTimeoutConfig(_timeoutConfig.value)
+    }
 
     val userAgentPreferences: UserAgentPreferences by lazy {
         userAgentPreferencesOverride ?: UserAgentPreferences(context)
@@ -266,6 +295,12 @@ class DownloadRepository(
             downloaderEngine.setUserAgentConfig(_userAgentConfig.value)
         } catch (_: Exception) {}
         try {
+            downloaderEngine.setTimeoutConfig(_timeoutConfig.value)
+        } catch (_: Exception) {}
+        try {
+            (networkProvider ?: networkManager).applyTimeoutConfig(_timeoutConfig.value)
+        } catch (_: Exception) {}
+        try {
             downloaderEngine.restoreIncompleteDownload()
         } catch (e: Exception) {
             Log.w("DownloadRepository", "Could not restore incomplete download: ${e.message}")
@@ -283,11 +318,13 @@ class DownloadRepository(
         allowDangerousBypass: Boolean = false,
         concurrencyConfigOverride: ConcurrencyConfig? = null,
         chunkConfigOverride: ChunkConfig? = null,
-        userAgentConfigOverride: UserAgentConfig? = null
+        userAgentConfigOverride: UserAgentConfig? = null,
+        timeoutConfigOverride: TimeoutConfig? = null
     ) {
         val effectiveConcurrency = concurrencyConfigOverride ?: _concurrencyConfig.value
         val effectiveChunkConfig = chunkConfigOverride ?: _chunkConfig.value
         val effectiveUserAgentConfig = userAgentConfigOverride ?: _userAgentConfig.value
+        val effectiveTimeoutConfig = timeoutConfigOverride ?: _timeoutConfig.value
         if (isServiceEnabled) {
             try {
                 val intent = Intent(context, DownloadForegroundService::class.java).apply {
@@ -304,7 +341,7 @@ class DownloadRepository(
                 // Safe fallback in test environments or if ForegroundServiceStartNotAllowedException is thrown
             }
         }
-        downloaderEngine.startDownload(url, targetDir, forceSequentialMode, allowDangerousBypass, effectiveConcurrency, effectiveChunkConfig, effectiveUserAgentConfig)
+        downloaderEngine.startDownload(url, targetDir, forceSequentialMode, allowDangerousBypass, effectiveConcurrency, effectiveChunkConfig, effectiveUserAgentConfig, effectiveTimeoutConfig)
     }
 
     override fun pauseDownload() {

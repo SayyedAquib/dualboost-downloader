@@ -265,6 +265,21 @@ open class MainViewModel(
         repository?.resetUserAgentToDefault()
     }
 
+    val timeoutConfig: StateFlow<com.dualboost.downloader.data.TimeoutConfig> =
+        repository?.timeoutConfig ?: MutableStateFlow(com.dualboost.downloader.data.TimeoutConfig.DEFAULT)
+
+    fun updateTimeoutProfile(profile: com.dualboost.downloader.data.TimeoutProfile) {
+        repository?.updateTimeoutProfile(profile)
+    }
+
+    fun updateCustomTimeouts(connectSec: Int, readSec: Int, maxRetries: Int, retryBackoffMs: Long) {
+        repository?.updateCustomTimeouts(connectSec, readSec, maxRetries, retryBackoffMs)
+    }
+
+    fun resetTimeoutToDefault() {
+        repository?.resetTimeoutToDefault()
+    }
+
     val queueItems: StateFlow<List<com.dualboost.downloader.data.QueueItem>> =
         repository?.queueRepository?.queueItems ?: MutableStateFlow(emptyList())
 

@@ -1,9 +1,37 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-046 (Dynamic User-Agent Strings & Phone Model Identity). The codebase is backed by **367 unit and integration tests across 62 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing, and is installed and running on Google Pixel 9 (`53201VDAQ00067`).
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-047 (Configurable Network Timeouts & Fast Failover Policy). The codebase is backed by **384 unit and integration tests across 66 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
 
 ## Recently Completed
+- **Network Timeouts & Fast Failover Policy (ADR-047 / 384 Tests across 66 Suites - 100% Green)**:
+  - **Slice 1: TimeoutConfig Domain Model & Failover Profiles**:
+    - Created `TimeoutProfile` enum (`AGGRESSIVE`, `BALANCED`, `RESILIENT`, `CUSTOM`) with tailored connect timeouts (5s..30s), read timeouts (10s..60s), retry counts (3..8), and backoff delays (150ms..1000ms).
+    - Created `TimeoutConfig` domain model encapsulating active profile, custom parameter overrides, effective getters, and `getBadgeLabel()`.
+    - Verified via `TimeoutConfigTest.kt` (7 unit tests, 100% green).
+  - **Slice 2: TimeoutPreferences Persistence**:
+    - Created `TimeoutPreferences` persisting profile IDs and custom timeout limits (`KEY_PROFILE_ID`, `KEY_CUSTOM_CONNECT_TIMEOUT`, `KEY_CUSTOM_READ_TIMEOUT`, `KEY_CUSTOM_MAX_RETRIES`, `KEY_CUSTOM_RETRY_BACKOFF`) via Android `SharedPreferences`, with one-tap `resetToDefault()`.
+    - Verified via `TimeoutPreferencesTest.kt` (4 unit tests, 100% green).
+  - **Slice 3: DualNetworkManager & DualDownloaderEngine Integration**:
+    - Enhanced `DualNetworkManager` with `applyTimeoutConfig(config: TimeoutConfig)` dynamically re-binding `baseOkHttpClient`, `wifiClient`, and `cellularClient` with updated connect and read timeouts on the fly without network disconnection. Guarded `ConnectivityManager` nullability for headless JVM unit tests.
+    - Wired `activeTimeoutConfig` through `DualDownloaderEngine` replacing hardcoded retry ceilings (5) and backoff delays (300ms) with `effectiveMaxChunkRetries` and `effectiveRetryBackoffMs`.
+    - **Dynamic Transport Resumption**: Resumed transfers dynamically inherit active timeout configurations, allowing users to switch into Resilient mode when moving to spotty networks.
+    - Exposed reactive `timeoutConfig: StateFlow<TimeoutConfig>` on `DownloadRepository` and `MainViewModel` with UI delegates.
+    - Added `timeoutBadge: String = ""` to `DownloadState.Downloading` and `DownloadState.Paused` for live UI telemetry.
+    - Verified via `EngineTimeoutFailoverTest.kt` (4 unit tests, 100% green).
+  - **Slice 4: SettingsBottomSheet & Active Download UI Controls**:
+    - Created `TimeoutUiConstants` with stepper boundaries and unified `formatSummary()` helper.
+    - Added dedicated **Network Timeouts & Failover** settings card in `SettingsBottomSheet.kt`:
+      - Header with live subtitle reflecting active profile.
+      - One-tap "Reset" action restoring default `BALANCED` settings.
+      - Horizontally scrollable row of selectable profile chips (`Fast Failover`, `Balanced`, `Resilient`, `Custom`).
+      - Expandable custom steppers when `Custom` is active (Connect Timeout: 3s..60s, Read Timeout: 5s..120s, Max Retries: 1..15, Retry Backoff: 50ms..3000ms).
+      - Live Active Policy Summary box rendering unified configuration string in monospace font.
+      - Informational caption explaining dynamic failover.
+    - Added dynamic status badge (`⚡ Fast Failover`, `⚡ Resilient Mode`, or `⚡ Custom Timeouts`) in `MainActivity.kt` for active and paused transfers.
+    - Verified via `TimeoutUiTest.kt` (4 unit tests, 100% green).
+    - Full test suite passed 100% green (384 tests across 66 test suites).
+    - Production APK `app-release.apk` (1,711,876 bytes) assembled cleanly via `.\gradlew.bat assembleRelease`.
 - **Dynamic User-Agent Strings & Phone Model Identity (ADR-046 / 367 Tests across 62 Suites - 100% Green)**:
   - **Slice 1: UserAgentConfig Domain Model & Device Resolver**:
     - Created `UserAgentPreset` enum featuring 5 distinct profiles (`NATIVE`, `PIXEL_9`, `GALAXY_S24`, `DESKTOP_CHROME`, `CUSTOM`).

@@ -72,7 +72,8 @@ sealed class DownloadState {
         val filePath: String = "",
         val contentUriString: String? = null,
         val chunkSize: Long = 4 * 1024 * 1024L,
-        val isCustomUserAgent: Boolean = false
+        val isCustomUserAgent: Boolean = false,
+        val timeoutBadge: String = ""
     ) : DownloadState() {
         val wifiSpeedMbps: Double get() = wifiSpeedMBps
         val cellularSpeedMbps: Double get() = cellularSpeedMBps
@@ -104,7 +105,8 @@ sealed class DownloadState {
         val url: String = "",
         val isDesktopSpoofed: Boolean = false,
         val isCloudSlicerActive: Boolean = false,
-        val isCustomUserAgent: Boolean = false
+        val isCustomUserAgent: Boolean = false,
+        val timeoutBadge: String = ""
     ) : DownloadState()
 }
 

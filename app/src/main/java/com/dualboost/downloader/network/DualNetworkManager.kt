@@ -204,6 +204,7 @@ interface NetworkProvider {
         get() = MutableStateFlow(false)
     fun acquireCellularKeepAlive() {}
     fun releaseCellularKeepAlive() {}
+    fun applyTimeoutConfig(config: com.dualboost.downloader.data.TimeoutConfig) {}
     fun getWifiClient(): OkHttpClient?
     fun getCellularClient(): OkHttpClient?
     fun getDefaultClient(): OkHttpClient
@@ -211,8 +212,9 @@ interface NetworkProvider {
 
 class DualNetworkManager(private val context: Context) : NetworkProvider {
 
-    private val connectivityManager =
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private val connectivityManager: ConnectivityManager? = runCatching {
+        context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+    }.getOrNull()
 
     @Volatile private var wifiNetwork: Network? = null
     @Volatile private var cellularNetwork: Network? = null
@@ -266,7 +268,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
 
     // SEC-AUDIT M-5: Enforce TLS 1.2+ with modern cipher suites (blocks deprecated TLS 1.0/1.1)
     // CLEARTEXT included for localhost/loopback testing; manifest usesCleartextTraffic=false blocks real cleartext
-    private val baseOkHttpClient = OkHttpClient.Builder()
+    @Volatile private var baseOkHttpClient = OkHttpClient.Builder()
         .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS, ConnectionSpec.CLEARTEXT))
         .certificatePinner(cloudflareSlicerPinner)
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -276,6 +278,45 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
 
     @Volatile private var wifiClient: OkHttpClient = baseOkHttpClient
     @Volatile private var cellularClient: OkHttpClient = baseOkHttpClient
+
+    private var currentTimeoutConfig: com.dualboost.downloader.data.TimeoutConfig =
+        com.dualboost.downloader.data.TimeoutConfig.DEFAULT
+
+    fun getTimeoutConfig(): com.dualboost.downloader.data.TimeoutConfig = currentTimeoutConfig
+
+    override fun applyTimeoutConfig(config: com.dualboost.downloader.data.TimeoutConfig) {
+        currentTimeoutConfig = config
+        baseOkHttpClient = baseOkHttpClient.newBuilder()
+            .connectTimeout(config.effectiveConnectTimeoutSeconds.toLong(), TimeUnit.SECONDS)
+            .readTimeout(config.effectiveReadTimeoutSeconds.toLong(), TimeUnit.SECONDS)
+            .build()
+
+        wifiNetwork?.let { net ->
+            wifiClient = baseOkHttpClient.newBuilder()
+                .socketFactory(net.socketFactory)
+                .dns(object : Dns {
+                    override fun lookup(hostname: String): List<java.net.InetAddress> {
+                        return net.getAllByName(hostname).toList()
+                    }
+                })
+                .build()
+        } ?: run {
+            wifiClient = baseOkHttpClient
+        }
+
+        cellularNetwork?.let { net ->
+            cellularClient = baseOkHttpClient.newBuilder()
+                .socketFactory(net.socketFactory)
+                .dns(object : Dns {
+                    override fun lookup(hostname: String): List<java.net.InetAddress> {
+                        return net.getAllByName(hostname).toList()
+                    }
+                })
+                .build()
+        } ?: run {
+            cellularClient = baseOkHttpClient
+        }
+    }
 
     private val defaultNetworkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
@@ -302,7 +343,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 })
                 .build()
             _isWifiAvailable.value = true
-            connectivityManager.getNetworkCapabilities(network)?.let { updateWifiSignal(it) }
+            connectivityManager?.getNetworkCapabilities(network)?.let { updateWifiSignal(it) }
         }
 
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
@@ -337,7 +378,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 .build()
             _isCellularAvailable.value = true
             _isModemStandbyDetected.value = false
-            connectivityManager.getNetworkCapabilities(network)?.let { updateCellularDetails(it) }
+            connectivityManager?.getNetworkCapabilities(network)?.let { updateCellularDetails(it) }
         }
 
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
@@ -467,17 +508,19 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
     }
 
     fun startListening() {
+        val cm = connectivityManager ?: return
+
         // Explicitly request Wi-Fi interface (with registerNetworkCallback fallback)
         val wifiRequest = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
         try {
-            connectivityManager.requestNetwork(wifiRequest, wifiCallback)
+            cm.requestNetwork(wifiRequest, wifiCallback)
         } catch (e: Exception) {
             Log.w(TAG, "requestNetwork for Wi-Fi failed, falling back to registerNetworkCallback", e)
             try {
-                connectivityManager.registerNetworkCallback(wifiRequest, wifiCallback)
+                cm.registerNetworkCallback(wifiRequest, wifiCallback)
             } catch (e2: Exception) {
                 Log.e(TAG, "registerNetworkCallback for Wi-Fi failed", e2)
             }
@@ -489,16 +532,16 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
         try {
-            connectivityManager.registerNetworkCallback(cellularRequest, cellularCallback)
+            cm.registerNetworkCallback(cellularRequest, cellularCallback)
         } catch (e: Exception) {
             Log.w(TAG, "registerNetworkCallback for Cellular failed", e)
         }
 
         // Immediately inspect currently active networks to populate initial state
         try {
-            val allNetworks = connectivityManager.allNetworks
+            val allNetworks = cm.allNetworks
             for (network in allNetworks) {
-                val caps = connectivityManager.getNetworkCapabilities(network) ?: continue
+                val caps = cm.getNetworkCapabilities(network) ?: continue
                 if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
                     if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
                         wifiCallback.onAvailable(network)
@@ -516,7 +559,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
 
         // Monitor default network for VPN transport encapsulation
         try {
-            connectivityManager.registerDefaultNetworkCallback(defaultNetworkCallback)
+            cm.registerDefaultNetworkCallback(defaultNetworkCallback)
         } catch (_: Exception) {}
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -557,7 +600,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 }
             }
             activeCellularCallback = cb
-            connectivityManager.requestNetwork(cellularRequest, cb)
+            connectivityManager?.requestNetwork(cellularRequest, cb)
         } catch (e: Exception) {
             Log.w(TAG, "Could not acquire on-demand cellular request", e)
         }
@@ -569,7 +612,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         Log.d(TAG, "Releasing on-demand cellular keep-alive request (allowing modem sleep)")
         activeCellularCallback?.let { cb ->
             try {
-                connectivityManager.unregisterNetworkCallback(cb)
+                connectivityManager?.unregisterNetworkCallback(cb)
             } catch (e: Exception) {
                 Log.w(TAG, "Could not unregister on-demand cellular callback", e)
             }
@@ -581,13 +624,13 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         releaseCellularKeepAlive()
         hasReceivedDisplayInfo = false
         try {
-            connectivityManager.unregisterNetworkCallback(wifiCallback)
+            connectivityManager?.unregisterNetworkCallback(wifiCallback)
         } catch (_: Exception) {}
         try {
-            connectivityManager.unregisterNetworkCallback(cellularCallback)
+            connectivityManager?.unregisterNetworkCallback(cellularCallback)
         } catch (_: Exception) {}
         try {
-            connectivityManager.unregisterNetworkCallback(defaultNetworkCallback)
+            connectivityManager?.unregisterNetworkCallback(defaultNetworkCallback)
         } catch (_: Exception) {}
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && telephonyCallback is TelephonyCallback) {

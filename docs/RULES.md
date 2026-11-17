@@ -49,6 +49,7 @@ For all new features, bug fixes, and architectural modifications, strictly follo
 - Use RFC 7233 range syntax: `Range: bytes=start-end`.
 - Always verify HTTP status code 206 for partial content; status code 200 on any chunk where `startByte > 0` must be immediately rejected with an exception and never written to disk.
 - **Session Resumption Invariance (`ADR-045`, `ADR-046`)**: Resumed transfers must strictly retain their originating session parameters (chunk size, User-Agent) from `.dualboost_meta` to guarantee byte alignment and prevent CDN 403 Forbidden errors.
+- **Dynamic Transport Re-binding (`ADR-047`)**: Network timeouts (connect/read), retry ceilings, and backoff pacing operate strictly at the transport layer and are dynamic. Resumed downloads adopt the active timeout configuration immediately without re-downloading completed chunks. Dynamic timeout modifications must reconfigure OkHttp client instances via `DualNetworkManager.applyTimeoutConfig()`.
 
 ## Database Rules
 - Keep download chunks and state in-memory during transfer. Do not introduce an SQLite/Room layer until scheduled in future iterations.

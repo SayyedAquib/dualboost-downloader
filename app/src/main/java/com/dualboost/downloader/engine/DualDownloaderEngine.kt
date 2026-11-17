@@ -19,6 +19,8 @@ import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.data.NetworkInterfaceType
 import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.data.StorageDestination
+import com.dualboost.downloader.data.TimeoutConfig
+import com.dualboost.downloader.data.TimeoutProfile
 import com.dualboost.downloader.data.UserAgentConfig
 import com.dualboost.downloader.data.UserAgentPreset
 import com.dualboost.downloader.network.NetworkProvider
@@ -193,6 +195,14 @@ class DualDownloaderEngine(
     }
 
     fun getUserAgentConfig(): UserAgentConfig = this.userAgentConfig
+
+    private var timeoutConfig: TimeoutConfig = TimeoutConfig.DEFAULT
+
+    fun setTimeoutConfig(config: TimeoutConfig) {
+        this.timeoutConfig = config
+    }
+
+    fun getTimeoutConfig(): TimeoutConfig = this.timeoutConfig
 
     internal fun resolveEffectiveUserAgent(
         canResume: Boolean,
@@ -566,7 +576,8 @@ class DualDownloaderEngine(
         allowDangerousBypass: Boolean = false,
         concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT,
         chunkConfig: ChunkConfig? = null,
-        userAgentConfig: UserAgentConfig? = null
+        userAgentConfig: UserAgentConfig? = null,
+        timeoutConfig: TimeoutConfig? = null
     ) {
         val rawTrimmed = url.trim()
         val parsedHttpUrl = runCatching { rawTrimmed.toHttpUrlOrNull() }.getOrNull()
@@ -594,7 +605,7 @@ class DualDownloaderEngine(
             try {
                 networkManager.acquireCellularKeepAlive()
                 thermalStatusProvider.startListening()
-                executeDownload(sanitizedUrl, targetDir, forceSequentialMode, allowDangerousBypass, concurrencyConfig, chunkConfig, userAgentConfig)
+                executeDownload(sanitizedUrl, targetDir, forceSequentialMode, allowDangerousBypass, concurrencyConfig, chunkConfig, userAgentConfig, timeoutConfig)
             } catch (e: ThreatDetectedException) {
                 Log.w(TAG, "Threat detected during download: ${e.threat.description}")
                 discardDownload(targetDir, e.fileName)
@@ -772,8 +783,10 @@ class DualDownloaderEngine(
         allowDangerousBypass: Boolean = false,
         concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT,
         chunkConfigOverride: ChunkConfig? = null,
-        userAgentConfigOverride: UserAgentConfig? = null
+        userAgentConfigOverride: UserAgentConfig? = null,
+        timeoutConfigOverride: TimeoutConfig? = null
     ) {
+        val activeTimeoutConfig = timeoutConfigOverride ?: this.timeoutConfig
         val activeUserAgentConfig = userAgentConfigOverride ?: this.userAgentConfig
         var effectiveUserAgent = activeUserAgentConfig.resolveUserAgentString()
         var fileName = extractFileName(url)
@@ -1066,7 +1079,7 @@ class DualDownloaderEngine(
 
         if (!supportsRanges || contentLength <= 0) {
             Log.w(TAG, "Server lacks range support or length is unknown. Falling back to single-stream download.")
-            executeSingleStreamDownload(url, outputFile, contentLength, isDesktopSpoofed, isCloudSlicerActive, allowDangerousBypass, activeUserAgentConfig, effectiveUserAgent)
+            executeSingleStreamDownload(url, outputFile, contentLength, isDesktopSpoofed, isCloudSlicerActive, allowDangerousBypass, activeUserAgentConfig, effectiveUserAgent, activeTimeoutConfig)
             return
         }
 
@@ -1602,8 +1615,8 @@ class DualDownloaderEngine(
                         }
                         for (c in chunkBatch) {
                             val attempts = chunkFailures.computeIfAbsent(c.index) { AtomicInteger(0) }.incrementAndGet()
-                            if (attempts >= 5) {
-                                Log.w(TAG, "Chunk ${c.index} exceeded retry limit (5). Escalating to auto-pause.")
+                            if (attempts >= activeTimeoutConfig.effectiveMaxChunkRetries) {
+                                Log.w(TAG, "Chunk ${c.index} exceeded retry limit (${activeTimeoutConfig.effectiveMaxChunkRetries}). Escalating to auto-pause.")
                                 isPausedDueToExhaustion.set(true)
                             }
                         }
@@ -1629,7 +1642,7 @@ class DualDownloaderEngine(
                     }
 
                     if (!success) {
-                        delay(300)
+                        delay(activeTimeoutConfig.effectiveRetryBackoffMs)
                     }
                 }
             }
@@ -1757,7 +1770,8 @@ class DualDownloaderEngine(
         isCloudSlicerActive: Boolean = false,
         allowDangerousBypass: Boolean = false,
         userAgentConfigOverride: UserAgentConfig? = null,
-        effectiveUserAgent: String? = null
+        effectiveUserAgent: String? = null,
+        timeoutConfigOverride: TimeoutConfig? = null
     ) {
         val activeUserAgentConfig = userAgentConfigOverride ?: this.userAgentConfig
         val resolvedUa = effectiveUserAgent ?: if (!isDesktopSpoofed) activeUserAgentConfig.resolveUserAgentString() else null

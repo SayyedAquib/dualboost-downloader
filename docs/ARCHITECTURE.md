@@ -264,6 +264,11 @@ sequenceDiagram
   - Smart Probing & Desktop Fast-Track: Bypasses mobile probing and fast-tracks directly to desktop headers and `Sec-CH-UA` client hints when Desktop Chrome or a Windows custom UA is active. For other profiles, probes with configured mobile headers and auto-falls back to desktop spoofing if the remote server rejects mobile byte ranges.
   - Session Resumption Invariance: Saves active User-Agent string to `.dualboost_meta` upon chunk completion. On download resume, `resolveEffectiveUserAgent()` strictly enforces the originating session User-Agent, preventing mid-stream identity mutations and CDN/Cloudflare 403 Forbidden errors.
   - UI Presentation: `SettingsBottomSheet.kt` includes a dedicated Browser Identity card with preset filter chips, custom text field, live header preview box with 1-tap clipboard copy, and a `⚡ Custom UA` pill badge in `MainActivity.kt`.
+- **Configurable Network Timeouts & Fast Failover Policy (`ADR-047`)**:
+  - Failover Profiles (`TimeoutProfile`): `AGGRESSIVE` (5s connect • 10s read • 3 retries • 150ms backoff), `BALANCED` (15s connect • 30s read • 5 retries • 300ms backoff), `RESILIENT` (30s connect • 60s read • 8 retries • 1000ms backoff), and `CUSTOM` (user-defined limits).
+  - Dynamic OkHttpClient Re-binding: `DualNetworkManager.applyTimeoutConfig()` dynamically reconstructs `baseOkHttpClient`, `wifiClient`, and `cellularClient` with updated timeouts immediately upon preference change without tearing down network connectivity.
+  - Dynamic Transport Resumption: Timeouts operate at the transport layer, allowing resumed downloads to adopt new profile parameters dynamically (enabling users to transition into Resilient mode when moving to unstable networks).
+  - UI Presentation: `SettingsBottomSheet.kt` provides a dedicated Network Timeouts & Failover card with profile chips, custom parameter steppers, 1-tap Reset, active summary preview, and an active status badge (`⚡ Fast Failover`, `⚡ Resilient Mode`, `⚡ Custom Timeouts`) in `MainActivity.kt`.
 
 ## Constraints
 - Server must support HTTP Range requests (either via standard mobile headers, desktop browser spoofing, or Personal Cloud Slicer) for dual-channel acceleration.
