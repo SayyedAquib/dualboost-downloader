@@ -844,7 +844,9 @@ fun MainScreen(
             AnimatedContent(
                 targetState = downloadState,
                 contentKey = { it::class },
-                transitionSpec = { fadeIn(tween(250)) togetherWith fadeOut(tween(200)) },
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(150, delayMillis = 50)) togetherWith fadeOut(animationSpec = tween(100))
+                },
                 label = "DownloadStateAnimation"
             ) { state ->
                 when (state) {
@@ -978,6 +980,34 @@ fun MainScreen(
                                                 }
                                             }
                                         }
+
+                                        // Compact Single-Stream Status Chip
+                                        if (!state.supportsRanges) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f))
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Info,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = "Single-Stream • ${if (state.cellularDownloadedBytes > 0L && state.wifiDownloadedBytes == 0L) cellularGeneration.detailLabel else "Wi-Fi Only"}",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
@@ -992,36 +1022,37 @@ fun MainScreen(
                                     }
                                 }
 
-                                // Single-Stream Informative Alert Banner
-                                if (!state.supportsRanges) {
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f)),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Info,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Text(
-                                                text = "Single-Stream Mode: Server does not support dual-channel splitting • Running on ${if (state.cellularDownloadedBytes > 0L && state.wifiDownloadedBytes == 0L) cellularGeneration.detailLabel else "${wifiDetails.detailLabel} to preserve mobile data"}",
-                                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                                color = MaterialTheme.colorScheme.onTertiaryContainer
-                                            )
-                                        }
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                // Integrated Hero Speed & Transfer Readout
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.Bottom
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Speed,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = com.dualboost.downloader.data.formatSpeed(state.totalSpeedMBps),
+                                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
                                     }
+
+                                    Text(
+                                        text = "${formatBytes(state.downloadedBytes)} of ${formatBytes(state.totalBytes)}",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
 
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
 
                                 // Dual-Color Contribution Progress Bar
                                 val isDarkState = isSystemInDarkTheme()
@@ -1035,8 +1066,8 @@ fun MainScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(12.dp)
-                                        .clip(RoundedCornerShape(6.dp))
+                                        .height(10.dp)
+                                        .clip(RoundedCornerShape(5.dp))
                                         .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                                 ) {
                                     Row(
@@ -1063,108 +1094,104 @@ fun MainScreen(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
 
-                                // Hero Speed Display
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(14.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Speed,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Column {
-                                                Text(
-                                                    text = "Download Speed",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Text(
-                                                    text = com.dualboost.downloader.data.formatSpeed(state.totalSpeedMBps),
-                                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                // Detailed Interface Speeds
+                                // Compact Inline Network Chips (Wi-Fi & Cellular)
                                 val isWifiInactiveInSingleStream = !state.supportsRanges && state.wifiDownloadedBytes == 0L && state.cellularDownloadedBytes > 0L
                                 val isCellularInactiveInSingleStream = !state.supportsRanges && state.cellularDownloadedBytes == 0L
                                 val cellTypeLabel = cellularGeneration.fullDisplayName
 
-                                SpeedDetailRow(
-                                    label = if (isWifiInactiveInSingleStream) "${wifiDetails.shortLabel} (Inactive)" else wifiDetails.shortLabel,
-                                    speedMBps = state.wifiSpeedMBps,
-                                    downloadedBytes = state.wifiDownloadedBytes,
-                                    indicatorColor = rowWifiColor,
-                                    icon = Icons.Rounded.Wifi,
-                                    isDimmed = isWifiInactiveInSingleStream
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                SpeedDetailRow(
-                                    label = if (isCellularInactiveInSingleStream) "$cellTypeLabel Mobile Data (Inactive)" else "$cellTypeLabel Mobile Data",
-                                    speedMBps = state.cellularSpeedMBps,
-                                    downloadedBytes = state.cellularDownloadedBytes,
-                                    indicatorColor = rowCellularColor,
-                                    icon = Icons.Rounded.SignalCellularAlt,
-                                    isDimmed = isCellularInactiveInSingleStream
-                                )
-
-                                Spacer(modifier = Modifier.height(18.dp))
-
-                                // Stream Preview Hero Button
-                                if (state.isPlayable) {
-                                    Button(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            onOpenFile(state.filePath, state.contentUriString)
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(52.dp),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFF00E676),
-                                            contentColor = Color(0xFF121212)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Wi-Fi Telemetry Tag
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isWifiInactiveInSingleStream) rowWifiColor.copy(alpha = 0.35f) else rowWifiColor)
                                         )
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Icon(
+                                            imageVector = Icons.Rounded.Wifi,
+                                            contentDescription = null,
+                                            tint = if (isWifiInactiveInSingleStream) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (isWifiInactiveInSingleStream) "${wifiDetails.shortLabel} (Inactive)" else "${wifiDetails.shortLabel} • ${com.dualboost.downloader.data.formatSpeed(state.wifiSpeedMBps)}",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                            color = if (isWifiInactiveInSingleStream) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Cellular Telemetry Tag
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isCellularInactiveInSingleStream) rowCellularColor.copy(alpha = 0.35f) else rowCellularColor)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Icon(
+                                            imageVector = Icons.Rounded.SignalCellularAlt,
+                                            contentDescription = null,
+                                            tint = if (isCellularInactiveInSingleStream) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (isCellularInactiveInSingleStream) "$cellTypeLabel (Inactive)" else "$cellTypeLabel • ${com.dualboost.downloader.data.formatSpeed(state.cellularSpeedMBps)}",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                            color = if (isCellularInactiveInSingleStream) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Integrated Controls Row (Preview + Pause + Cancel)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (state.isPlayable) {
+                                        Button(
+                                            onClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                onOpenFile(state.filePath, state.contentUriString)
+                                            },
+                                            modifier = Modifier
+                                                .weight(1.3f)
+                                                .height(48.dp),
+                                            shape = RoundedCornerShape(14.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFF00E676),
+                                                contentColor = Color(0xFF121212)
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 8.dp)
+                                        ) {
                                             Icon(
                                                 imageVector = Icons.Rounded.PlayArrow,
                                                 contentDescription = null,
-                                                modifier = Modifier.size(24.dp)
+                                                modifier = Modifier.size(20.dp)
                                             )
-                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = "Watch Preview (${formatBytes(state.contiguousPlayableBytes)} buffered)",
-                                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                                text = "Preview",
+                                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                }
 
-                                // Controls (Separate Pause and Cancel Buttons)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
                                     OutlinedButton(
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1174,11 +1201,12 @@ fun MainScreen(
                                             .weight(1f)
                                             .height(48.dp),
                                         shape = RoundedCornerShape(14.dp),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                        contentPadding = PaddingValues(horizontal = 8.dp)
                                     ) {
                                         Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Pause", fontWeight = FontWeight.SemiBold)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Pause", fontWeight = FontWeight.SemiBold, maxLines = 1)
                                     }
 
                                     OutlinedButton(
@@ -1194,11 +1222,12 @@ fun MainScreen(
                                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             contentColor = MaterialTheme.colorScheme.error
-                                        )
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 8.dp)
                                     ) {
                                         Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Cancel", fontWeight = FontWeight.SemiBold)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Cancel", fontWeight = FontWeight.SemiBold, maxLines = 1)
                                     }
                                 }
                             }

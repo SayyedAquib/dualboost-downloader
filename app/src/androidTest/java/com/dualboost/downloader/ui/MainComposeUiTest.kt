@@ -357,9 +357,43 @@ class MainComposeUiTest {
         // Verify Stream Ready badge is displayed
         composeTestRule.onNodeWithText("⚡ Stream Ready • 24.00 MB buffered").performScrollTo().assertIsDisplayed()
 
-        // Verify Hero "Watch Preview" CTA is displayed and triggers onOpenFile
-        composeTestRule.onNodeWithText("Watch Preview (24.00 MB buffered)").performScrollTo().assertIsDisplayed().performClick()
+        // Verify Hero integrated "Preview" CTA is displayed and triggers onOpenFile
+        composeTestRule.onNodeWithText("Preview").performScrollTo().assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
-        org.junit.Assert.assertTrue("onOpenFile must be invoked on Watch Preview click", openFileInvoked)
+        org.junit.Assert.assertTrue("onOpenFile must be invoked on Preview click", openFileInvoked)
+    }
+
+    @Test
+    fun testDownloadingState_SingleStreamMode_DisplaysCompactStatusChip() {
+        val singleStreamDownloadingState = kotlinx.coroutines.flow.MutableStateFlow<DownloadState>(
+            DownloadState.Downloading(
+                fileName = "Movie.mkv",
+                filePath = "/storage/emulated/0/Download/Movie.mkv",
+                totalBytes = 700_000_000L,
+                downloadedBytes = 50_000_000L,
+                wifiDownloadedBytes = 50_000_000L,
+                cellularDownloadedBytes = 0L,
+                wifiSpeedMBps = 4.5,
+                cellularSpeedMBps = 0.0,
+                totalSpeedMBps = 4.5,
+                progressPercentage = 0.07f,
+                supportsRanges = false,
+                isSequentialMode = false,
+                isPlayable = false
+            )
+        )
+        val viewModel = MainViewModel(repository = null, downloadStateOverride = singleStreamDownloadingState)
+        composeTestRule.setContent {
+            DualBoostTheme {
+                MainScreen(
+                    viewModel = viewModel,
+                    onOpenFile = { _, _ -> },
+                    onShareFile = { _, _ -> }
+                )
+            }
+        }
+
+        // Verify compact Single-Stream chip is displayed
+        composeTestRule.onNodeWithText("Single-Stream • Wi-Fi Only").performScrollTo().assertIsDisplayed()
     }
 }

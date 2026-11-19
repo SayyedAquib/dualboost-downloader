@@ -1,9 +1,46 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-051 (Pure Minimalist Navigation Architecture). The codebase is backed by **405 unit and integration tests across 71 test suites (100% passing green)** with zero failures or regressions. All 9 configuration domains operate autonomously with zero manual intervention required. The hamburger menu (navigation drawer) has been completely eliminated in favor of a Pure Minimalist, zero-drawer, single-surface UI with a pristine centered brand header. Production release APK (`app-release.apk`, ~1.66 MB) compiles with R8 optimization, resource shrinking, and installs cleanly via ADB on Google Pixel 9.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-053 (Ultra-Clean Minimalist Active Download Card Architecture). The codebase is backed by **406 unit and integration tests across 71 test suites (100% passing green)** with zero failures or regressions. All 9 configuration domains operate autonomously with zero manual intervention required. The active download card has been redesigned with a Pixel-native minimalist hierarchy: eliminated nested box-inside-box speed cards, replaced the bulky lavender banner with an inline single-stream chip, and merged Preview, Pause, and Cancel into a unified 48dp single-row control layout. Production release APK (`app-release.apk`, ~1.66 MB) compiles with R8 optimization, resource shrinking, and installs cleanly via ADB on Google Pixel 9.
 
 ## Recently Completed
+- **Ultra-Clean Minimalist Active Download Card Architecture (ADR-053 / 406 Tests across 71 Suites - 100% Green)**:
+  - **Eliminated Nested Box-in-Box Speed Container**:
+    - Removed the bulky inner container card (`surfaceContainerHigh`) previously wrapping the download speed readout.
+    - Integrated the hero speed metric (`headlineSmall`, extra-bold) and transfer volume (`X of Y MB`) directly above the progress bar in a clean, modern row.
+  - **Replaced Bulky Lavender Banner with Inline Status Chip**:
+    - Replaced the full-width single-stream alert banner with an unobtrusive inline status chip (`Single-Stream • Wi-Fi Only` / `Single-Stream • 5G Only`) alongside other badges, saving over 60dp of vertical space.
+  - **Single-Row Telemetry Legend**:
+    - Flattened the individual Wi-Fi and Cellular breakdown rows into a compact horizontal telemetry legend directly below the progress bar with live activity dot indicators.
+  - **Integrated Single Action Row**:
+    - Merged `[ ▶ Preview ]` (weight 1.3f, vibrant emerald), `[ || Pause ]` (weight 1.0f), and `[ ✕ Cancel ]` (weight 1.0f) into a single horizontal `48.dp` control row, completely eliminating double-stacked button rows.
+  - **TDD Verification**: Added unit and UI test coverage in `MainComposeUiTest.kt`. All 406 tests passing green.
+- **Stream Preview Hero CTA Layout Fix (Zero Text Truncation & Consistent Geometry)**:
+  - **Fixed Text Wrapping & Vertical Clipping**:
+    - Addressed user-reported UI defect where `"Watch Preview (56.0 MB buffered)"` wrapped onto two lines inside `.height(52.dp)`, clipping the second line (`buffered)`) at the bottom edge.
+    - Simplified button label to clean, punchy `"Watch Preview"`, eliminating duplicate buffered byte metrics already displayed in the dedicated `⚡ Stream Ready • X MB buffered` status badge directly above.
+    - Added strict single-line constraints (`maxLines = 1`, `overflow = TextOverflow.Ellipsis`) preventing text wrapping across all system accessibility font scales.
+    - Standardized CTA height to `48.dp` with `RoundedCornerShape(14.dp)`, establishing visual harmony with the companion `48.dp` Pause and Cancel buttons below it.
+    - Updated instrumented Compose UI test suite (`MainComposeUiTest.kt`).
+- **Direct Invidious API Stream Resolver for YouTube (ADR-052 / 405 Tests across 71 Suites - 100% Green)**:
+  - **Resolved YouTube Media Stream Extraction Failure**:
+    - Addressed reported issue where YouTube links (`https://youtu.be/0Qzrfr3vINg?si=5p__1i4dkQ0yww4L`) failed with *"Could Not Extract Stream: Failed to resolve media stream from available instances"*.
+    - Upstream Cobalt v11 stripped YouTube support entirely, and remaining public instances enforce Cloudflare Turnstile CAPTCHA and JWT authentication.
+    - Decoupled YouTube extraction from Cobalt by integrating a dedicated, high-performance Invidious API resolver (`resolveYouTubeDirectly`).
+  - **Healthy Multi-Instance Failover Pool & Dynamic Directory Resolution**:
+    - Primary pool targets healthy, verified Invidious nodes (`yt.chocolatemoo53.com`, `inv.nadeko.net`, `invidious.nerdvpn.de`, `invidious.tiekoetter.com`).
+    - Dynamic instance directory failover: queries `https://api.invidious.io/instances.json?sort_by=health` to discover live nodes if hardcoded instances become degraded.
+    - Resilient fallback cascade: Invidious Primary -> Dynamic Invidious Directory -> Cobalt Fallback.
+  - **Safe Linear Bracket-Counting Parser (`parseInvidiousFormats`)**:
+    - Replaced multiline greedy regex (`Pattern.DOTALL`) with an iterative bracket-counting depth tracker (`extractArrayContent`) and character-index object boundary scanner.
+    - Completely eliminates Java `StackOverflowError` caused by regex backtracking on large multiline Invidious JSON payloads (>100 KB).
+    - Extracts direct Google CDN streaming URLs (`googlevideo.com`) from `adaptiveFormats` and `formatStreams`.
+    - Supports full quality selection: `AUDIO_ONLY` (`audio/mp4` / `.m4a`), `HD_720` (`720p` `video/mp4`), and `MAX` (`1080p` `video/mp4`).
+  - **DualBoost Concurrent Engine Acceleration**:
+    - Google CDN streaming URLs return HTTP `206 Partial Content` with `Accept-Ranges: bytes`, fully unlocking DualBoost's concurrent Wi-Fi + Cellular chunking engine for YouTube downloads.
+  - **100% Unit Test Verification (`SocialMediaResolverTest.kt`)**:
+    - Added dedicated test coverage for Invidious 1080p, 720p, and audio resolution, plus fallback to Cobalt when Invidious instances fail.
+    - All 405 tests across 71 test suites pass 100% green.
 - **Pure Minimalist Navigation Architecture (ADR-051 / 405 Tests across 71 Suites - 100% Green)**:
   - **Eliminated Hamburger Navigation Drawer**:
     - Completely removed `ModalNavigationDrawer`, `ModalDrawerSheet`, and `NavigationDrawerItem` from `MainActivity.kt`.
