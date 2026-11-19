@@ -359,13 +359,13 @@ class MainComposeUiTest {
             }
         }
 
-        // Verify Sequential Stream Mode toggle is visible
-        composeTestRule.onNodeWithText("Sequential Stream Mode").performScrollTo().assertIsDisplayed()
+        // Verify Watch While Downloading toggle is visible
+        composeTestRule.onNodeWithText("Watch While Downloading").performScrollTo().assertIsDisplayed()
 
         // Type a video URL and verify auto-detection text
         viewModel.onUrlChanged("https://example.com/videos/movie.mkv")
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithText("Auto-detected video • Ready to stream").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Video detected • Ready to watch while downloading").performScrollTo().assertIsDisplayed()
     }
 
     @Test

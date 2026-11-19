@@ -849,64 +849,81 @@ fun MainScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Sequential Video Stream Toggle
+                    // Watch While Downloading (Sequential Video Streaming)
                     val isAutoVideoUrl = isSequentialRequested == null && com.dualboost.downloader.engine.DualDownloaderEngine.isVideoFile(urlInput)
                     val isSequentialActive = isSequentialRequested == true || (isSequentialRequested == null && isAutoVideoUrl)
 
-                    Row(
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isSequentialActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, if (isSequentialActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f))
+                            .clip(RoundedCornerShape(16.dp))
                             .clickable {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 viewModel.setSequentialStreamMode(!isSequentialActive)
                             }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 11.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.PlayCircleOutline,
-                                contentDescription = null,
-                                tint = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "Sequential Stream Mode",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                                )
-                                val statusText = when {
-                                    isSequentialRequested == true -> "Forced on • Play video while downloading"
-                                    isSequentialRequested == false -> "Disabled • High-speed random chunking"
-                                    isAutoVideoUrl -> "Auto-detected video • Ready to stream"
-                                    else -> "Auto • Stream videos sequentially"
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (isSequentialActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = if (isSequentialActive) Icons.Rounded.PlayCircle else Icons.Rounded.PlayCircleOutline,
+                                            contentDescription = null,
+                                            tint = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
-                                Text(
-                                    text = statusText,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Watch While Downloading",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    val statusText = when {
+                                        isSequentialRequested == true -> "On • Downloads in order to preview early"
+                                        isSequentialRequested == false -> "Off • Maximum speed for files & games"
+                                        isAutoVideoUrl -> "Video detected • Ready to watch while downloading"
+                                        else -> "Auto • Activates automatically for video links"
+                                    }
+                                    Text(
+                                        text = statusText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                        }
-                        Switch(
-                            checked = isSequentialActive,
-                            onCheckedChange = { isChecked ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                viewModel.setSequentialStreamMode(isChecked)
-                            },
-                            modifier = Modifier.scale(0.85f),
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Switch(
+                                checked = isSequentialActive,
+                                onCheckedChange = { isChecked ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    viewModel.setSequentialStreamMode(isChecked)
+                                },
+                                modifier = Modifier.scale(0.85f),
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                                )
                             )
-                        )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))

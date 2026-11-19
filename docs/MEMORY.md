@@ -11,6 +11,13 @@ DualBoost Downloader is 100% production-grade across all Android devices (Pixel,
     3. **Stacking Developer Badges**: Removed internal debug telemetry (`4 MB Chunks`, `Balanced Timeout`, `Auto 5G`, `Custom UA`) from both `Downloading` and `Paused` cards, preserving only user-facing functional badges (`⚡ Cloud Slicer Active`, `⚡ Desktop Mode Active`, and `⚡ Stream Ready`).
     4. **Redundant Network Status Banner**: Removed the full-width text banner below Wi-Fi and Cellular cards; live interface connection and signal metrics are communicated directly by the glowing, pulsing hero cards.
     5. **Idle Placeholder Card**: Removed the large "Ready to Download" empty-state card; when idle, the screen maintains a distraction-free layout showing only the top app bar, hero network cards, and download input card.
+  - **Watch While Downloading Readability Refinement**:
+    - Replaced technical "Sequential Stream Mode" jargon with consumer-friendly **"Watch While Downloading"** title and plain-English dynamic status captions:
+      - Auto/Video Detected: *"Video detected • Ready to watch while downloading"*
+      - Manually Enabled: *"On • Downloads in order to preview early"*
+      - Manually Disabled: *"Off • Maximum speed for files & games"*
+      - Auto/Default: *"Auto • Activates automatically for video links"*
+    - Enhanced card UI with 16dp rounded `Surface`, responsive primary border tint, and 34dp circular icon badge.
   - **Over 400 Lines of UI Clutter Removed**: `MainActivity.kt` streamlined from 2,721 lines to 2,345 lines (-380 lines) with zero impact on underlying engine capabilities.
   - **Instrumented Test Alignment (`MainComposeUiTest.kt`)**: Updated UI test suites to reflect drawer-based Speed Benchmark testing, programmatic preset validation, and the streamlined main screen hierarchy.
   - **Full Test & Release Verification**: 405 unit tests passing 100% green (`.\gradlew.bat test`), release APK assembled via R8 (`.\gradlew.bat assembleRelease`, size 1.66 MB).
