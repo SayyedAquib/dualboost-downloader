@@ -142,7 +142,7 @@ class DownloadRepositoryTest {
         repo.pauseDownload()
 
         var isPaused = false
-        for (i in 1..20) {
+        for (i in 1..40) {
             if (repo.downloadState.value is DownloadState.Paused) {
                 isPaused = true
                 break

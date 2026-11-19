@@ -14,6 +14,8 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.dualboost.downloader.data.CellularNetworkConfig
+import com.dualboost.downloader.data.CellularNetworkMode
 import okhttp3.CertificatePinner
 import okhttp3.ConnectionSpec
 import okhttp3.Dns
@@ -49,11 +51,13 @@ enum class CellularGeneration(
     companion object {
         fun fromTelephony(
             networkType: Int,
-            overrideNetworkType: Int = TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
+            overrideNetworkType: Int = TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE,
+            downstreamBandwidthKbps: Int = 0
         ): CellularGeneration {
             val is5GDetected = overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ||
                     overrideNetworkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_ADVANCED ||
-                    networkType == TelephonyManager.NETWORK_TYPE_NR
+                    networkType == TelephonyManager.NETWORK_TYPE_NR ||
+                    (downstreamBandwidthKbps >= 120_000 && networkType == TelephonyManager.NETWORK_TYPE_LTE)
 
             if (is5GDetected) {
                 return FIVE_G
@@ -205,6 +209,8 @@ interface NetworkProvider {
     fun acquireCellularKeepAlive() {}
     fun releaseCellularKeepAlive() {}
     fun applyTimeoutConfig(config: com.dualboost.downloader.data.TimeoutConfig) {}
+    fun applyCellularConfig(config: CellularNetworkConfig) {}
+    fun refreshCellularGeneration() {}
     fun getWifiClient(): OkHttpClient?
     fun getCellularClient(): OkHttpClient?
     fun getDefaultClient(): OkHttpClient
@@ -248,8 +254,33 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
     private val _cellularSignalLevel = MutableStateFlow(4)
     override val cellularSignalLevel: StateFlow<Int> = _cellularSignalLevel.asStateFlow()
 
-    private val _cellularGeneration = MutableStateFlow(CellularGeneration.FOUR_G)
+    private val _cellularGeneration = MutableStateFlow(CellularGeneration.UNKNOWN)
     override val cellularGeneration: StateFlow<CellularGeneration> = _cellularGeneration.asStateFlow()
+
+    @Volatile private var latestOverrideNetworkType = TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
+    @Volatile private var cellularConfig = CellularNetworkConfig.DEFAULT
+    @Volatile private var lastDetectedGeneration = CellularGeneration.UNKNOWN
+
+    override fun applyCellularConfig(config: CellularNetworkConfig) {
+        cellularConfig = config
+        if (config.mode != CellularNetworkMode.AUTO) {
+            _cellularGeneration.value = config.effectiveGeneration
+        } else {
+            _cellularGeneration.value = lastDetectedGeneration
+            refreshCellularGeneration()
+        }
+    }
+
+    override fun refreshCellularGeneration() {
+        if (cellularConfig.mode != CellularNetworkMode.AUTO) {
+            _cellularGeneration.value = cellularConfig.effectiveGeneration
+            return
+        }
+        val cm = connectivityManager ?: return
+        val net = cellularNetwork ?: return
+        val caps = cm.getNetworkCapabilities(net) ?: return
+        reevaluateCellularGeneration(caps)
+    }
 
     private val _isCellularKeepAliveActive = MutableStateFlow(false)
     override val isCellularKeepAliveActive: StateFlow<Boolean> = _isCellularKeepAliveActive.asStateFlow()
@@ -395,6 +426,11 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 _cellularSignalLevel.value = 0
                 _isRoamingActive.value = false
                 hasReceivedDisplayInfo = false
+                latestOverrideNetworkType = TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
+                lastDetectedGeneration = CellularGeneration.UNKNOWN
+                if (cellularConfig.mode == CellularNetworkMode.AUTO) {
+                    _cellularGeneration.value = CellularGeneration.UNKNOWN
+                }
                 if (_isWifiAvailable.value) {
                     _isModemStandbyDetected.value = true
                 }
@@ -474,9 +510,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         _isRoamingActive.value = isRoaming
         _isModemStandbyDetected.value = false
         detectCarrierName()
-        if (!hasReceivedDisplayInfo) {
-            detectInitialCellularGeneration(capabilities)
-        }
+        reevaluateCellularGeneration(capabilities)
     }
 
     private fun detectCarrierName() {
@@ -491,20 +525,35 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         } catch (_: Exception) {}
     }
 
-    private fun detectInitialCellularGeneration(capabilities: NetworkCapabilities) {
-        if (hasReceivedDisplayInfo) return
+    private fun reevaluateCellularGeneration(capabilities: NetworkCapabilities) {
+        if (cellularConfig.mode != CellularNetworkMode.AUTO) {
+            _cellularGeneration.value = cellularConfig.effectiveGeneration
+            return
+        }
+        val downstreamKbps = capabilities.linkDownstreamBandwidthKbps
+        var resolvedGen = CellularGeneration.UNKNOWN
+
         try {
             val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
             if (telephonyManager != null) {
                 val networkType = telephonyManager.dataNetworkType
-                val generation = CellularGeneration.fromTelephony(networkType)
-                if (generation != CellularGeneration.UNKNOWN) {
-                    _cellularGeneration.value = generation
-                    return
-                }
+                resolvedGen = CellularGeneration.fromTelephony(
+                    networkType = networkType,
+                    overrideNetworkType = latestOverrideNetworkType,
+                    downstreamBandwidthKbps = downstreamKbps
+                )
             }
         } catch (_: SecurityException) {
         } catch (_: Exception) {}
+
+        if (resolvedGen == CellularGeneration.UNKNOWN && downstreamKbps >= 120_000) {
+            resolvedGen = CellularGeneration.FIVE_G
+        }
+
+        if (resolvedGen != CellularGeneration.UNKNOWN) {
+            lastDetectedGeneration = resolvedGen
+            _cellularGeneration.value = resolvedGen
+        }
     }
 
     fun startListening() {
@@ -568,9 +617,17 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 val callback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
                     override fun onDisplayInfoChanged(telephonyDisplayInfo: TelephonyDisplayInfo) {
                         hasReceivedDisplayInfo = true
-                        val override = telephonyDisplayInfo.overrideNetworkType
+                        latestOverrideNetworkType = telephonyDisplayInfo.overrideNetworkType
                         val networkType = telephonyDisplayInfo.networkType
-                        _cellularGeneration.value = CellularGeneration.fromTelephony(networkType, override)
+                        val caps = connectivityManager?.getNetworkCapabilities(cellularNetwork)
+                        val downstreamKbps = caps?.linkDownstreamBandwidthKbps ?: 0
+                        val gen = CellularGeneration.fromTelephony(networkType, latestOverrideNetworkType, downstreamKbps)
+                        if (gen != CellularGeneration.UNKNOWN) {
+                            lastDetectedGeneration = gen
+                            if (cellularConfig.mode == CellularNetworkMode.AUTO) {
+                                _cellularGeneration.value = gen
+                            }
+                        }
                     }
                 }
                 telephonyManager?.registerTelephonyCallback(context.mainExecutor, callback)

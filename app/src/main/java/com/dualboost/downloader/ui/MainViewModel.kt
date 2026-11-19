@@ -280,6 +280,17 @@ open class MainViewModel(
         repository?.resetTimeoutToDefault()
     }
 
+    val cellularNetworkConfig: StateFlow<com.dualboost.downloader.data.CellularNetworkConfig> =
+        repository?.cellularNetworkConfig ?: MutableStateFlow(com.dualboost.downloader.data.CellularNetworkConfig.DEFAULT)
+
+    fun updateCellularMode(mode: com.dualboost.downloader.data.CellularNetworkMode) {
+        repository?.updateCellularMode(mode)
+    }
+
+    fun resetCellularModeToDefault() {
+        repository?.resetCellularModeToDefault()
+    }
+
     val queueItems: StateFlow<List<com.dualboost.downloader.data.QueueItem>> =
         repository?.queueRepository?.queueItems ?: MutableStateFlow(emptyList())
 

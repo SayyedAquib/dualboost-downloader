@@ -484,6 +484,34 @@ End-to-end and component UI testing on Android devices is performed using Google
   - `testTimeoutUi_SummaryTextFormatting`: Validates unified `TimeoutUiConstants.formatSummary()` output across profiles.
   - `testTimeoutUi_CustomStepperBounds`: Validates boundary constants and clamping logic for custom parameter steppers.
 
+### Dynamic Cellular Network Type Detection & 5G Real-Time Handoff Test Suite (`ADR-048`)
+- **CellularNetworkConfigTest** (6 tests):
+  - `testCellularNetworkConfig_DefaultValues`: Validates default mode is `AUTO` with unknown detected generation.
+  - `testCellularNetworkConfig_EffectiveGeneration_AutoMode`: Asserts `effectiveGeneration` passes through raw detected telephony generation under `AUTO` mode.
+  - `testCellularNetworkConfig_EffectiveGeneration_Force5GMode`: Asserts `effectiveGeneration` returns `FIVE_G` regardless of detected generation when `FORCE_5G` is engaged.
+  - `testCellularNetworkConfig_EffectiveGeneration_Force4GMode`: Asserts `effectiveGeneration` returns `FOUR_G` regardless of detected generation when `FORCE_4G` is engaged.
+  - `testCellularNetworkConfig_BadgeLabels`: Verifies badge strings (`⚡ Force 5G`, `⚡ Force 4G`, empty for `AUTO`).
+  - `testCellularNetworkConfig_EqualityAndCopy`: Validates data class immutability and copy contract.
+- **CellularPreferencesTest** (3 tests):
+  - `testCellularPreferences_DefaultIsAuto`: Tests preference initialization defaulting to `AUTO`.
+  - `testCellularPreferences_PersistAndReadMode`: Tests saving and reloading cellular network modes across instances.
+  - `testCellularPreferences_ResetToDefault`: Tests 1-tap reset restoring `AUTO` mode.
+- **DynamicCellularDetectionTest** (6 tests):
+  - `test5GNSA_WithOverrideNetworkType_ClassifiesAs5G`: Asserts `NETWORK_TYPE_LTE` with `OVERRIDE_NETWORK_TYPE_NR_NSA` / `NR_ADVANCED` resolves to `FIVE_G`.
+  - `test5GSA_WithNetworkTypeNR_ClassifiesAs5G`: Asserts standalone `NETWORK_TYPE_NR` resolves to `FIVE_G`.
+  - `test4GLTE_StandardAndCarrierAggregation_ClassifiesAs4G`: Asserts standard LTE and LTE-CA resolve to `FOUR_G`.
+  - `testBandwidthHeuristic_HighBandwidthOnLTE_ClassifiesAs5G`: Asserts downstream link bandwidth $\ge 120_000\text{ Kbps}$ triggers 5G classification as a hardware heuristic.
+  - `testDynamicHandoff_IdleSleepToActive5GWakeup`: Simulates modem idle sleep (reporting 4G) transitioning to active 5G on download start via `refreshCellularGeneration()`.
+  - `testTelephonyManager_ReadPhoneStatePermission_DeclaredInManifest`: Asserts `android.permission.READ_PHONE_STATE` is explicitly declared in `AndroidManifest.xml`.
+- **EngineCellularDynamicIntegrationTest** (3 tests):
+  - `testRepository_ExposesCellularNetworkConfigAndUpdatesMode`: Verifies repository `cellularNetworkConfig` state flow, mode updates, and preference synchronization.
+  - `testRepository_EffectiveCellularGeneration_RespectsModeOverrides`: Asserts `repository.cellularGeneration` dynamically honors user overrides (`FORCE_5G` / `FORCE_4G`).
+  - `testRepository_StartDownload_TriggersRefreshCellularGeneration`: Asserts starting a download invokes `refreshCellularGeneration()` on the network provider to catch modem radio wake-up.
+- **CellularUiTest** (3 tests):
+  - `testCellularUi_ModeLabelsAndDescriptions`: Validates human-readable labels and descriptions for `AUTO`, `FORCE_5G`, and `FORCE_4G`.
+  - `testCellularUi_HeroCardFormatting`: Validates title formatting with and without carrier names (`5G Cellular (Jio)` vs `4G LTE Cellular (Airtel)`).
+  - `testCellularUi_BadgeFormatting`: Validates status badge formatting for active transfers.
+
 ## API Testing
 - Verify HTTP 206 response validation.
 - Verify fallback behavior when a mock server returns HTTP 200 (server ignored Range header).

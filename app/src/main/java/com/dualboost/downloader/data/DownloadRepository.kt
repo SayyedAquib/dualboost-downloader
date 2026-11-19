@@ -33,8 +33,35 @@ class DownloadRepository(
     val storagePreferencesOverride: StoragePreferences? = null,
     val chunkPreferencesOverride: ChunkPreferences? = null,
     val userAgentPreferencesOverride: UserAgentPreferences? = null,
-    val timeoutPreferencesOverride: TimeoutPreferences? = null
+    val timeoutPreferencesOverride: TimeoutPreferences? = null,
+    val cellularPreferencesOverride: CellularPreferences? = null
 ) : com.dualboost.downloader.engine.QueueDownloadDispatcher {
+
+    val cellularPreferences: CellularPreferences by lazy {
+        cellularPreferencesOverride ?: CellularPreferences(context)
+    }
+
+    private val _cellularNetworkConfig = MutableStateFlow(
+        CellularNetworkConfig(
+            mode = (cellularPreferencesOverride ?: CellularPreferences(context)).getCellularMode(),
+            detectedGeneration = (networkProvider?.cellularGeneration?.value ?: com.dualboost.downloader.network.CellularGeneration.UNKNOWN)
+        )
+    )
+    val cellularNetworkConfig: StateFlow<CellularNetworkConfig> = _cellularNetworkConfig.asStateFlow()
+
+    fun updateCellularMode(mode: CellularNetworkMode) {
+        cellularPreferences.setCellularMode(mode)
+        val updated = _cellularNetworkConfig.value.copy(mode = mode)
+        _cellularNetworkConfig.value = updated
+        (networkProvider ?: networkManager).applyCellularConfig(updated)
+    }
+
+    fun resetCellularModeToDefault() {
+        cellularPreferences.resetToDefault()
+        val updated = _cellularNetworkConfig.value.copy(mode = CellularNetworkMode.AUTO)
+        _cellularNetworkConfig.value = updated
+        (networkProvider ?: networkManager).applyCellularConfig(updated)
+    }
 
     val timeoutPreferences: TimeoutPreferences by lazy {
         timeoutPreferencesOverride ?: TimeoutPreferences(context)
@@ -301,6 +328,11 @@ class DownloadRepository(
             (networkProvider ?: networkManager).applyTimeoutConfig(_timeoutConfig.value)
         } catch (_: Exception) {}
         try {
+            val currentGen = (networkProvider ?: networkManager).cellularGeneration.value
+            _cellularNetworkConfig.value = _cellularNetworkConfig.value.copy(detectedGeneration = currentGen)
+            (networkProvider ?: networkManager).applyCellularConfig(_cellularNetworkConfig.value)
+        } catch (_: Exception) {}
+        try {
             downloaderEngine.restoreIncompleteDownload()
         } catch (e: Exception) {
             Log.w("DownloadRepository", "Could not restore incomplete download: ${e.message}")
@@ -325,6 +357,9 @@ class DownloadRepository(
         val effectiveChunkConfig = chunkConfigOverride ?: _chunkConfig.value
         val effectiveUserAgentConfig = userAgentConfigOverride ?: _userAgentConfig.value
         val effectiveTimeoutConfig = timeoutConfigOverride ?: _timeoutConfig.value
+        try {
+            (networkProvider ?: networkManager).refreshCellularGeneration()
+        } catch (_: Exception) {}
         if (isServiceEnabled) {
             try {
                 val intent = Intent(context, DownloadForegroundService::class.java).apply {

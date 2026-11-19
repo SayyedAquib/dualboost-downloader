@@ -299,6 +299,7 @@ fun MainScreen(
     val wifiSignalLevel by viewModel.wifiSignalLevel.collectAsState()
     val cellularSignalLevel by viewModel.cellularSignalLevel.collectAsState()
     val cellularGeneration by viewModel.cellularGeneration.collectAsState()
+    val cellularNetworkConfig by viewModel.cellularNetworkConfig.collectAsState()
     val wifiDetails by viewModel.wifiDetails.collectAsState()
     val showBatteryGuidance by viewModel.showBatteryGuidance.collectAsState()
     val isVpnActive by viewModel.isVpnActive.collectAsState()
@@ -1379,6 +1380,22 @@ fun MainScreen(
                                             }
                                         }
 
+                                        if (cellularNetworkConfig.getBadgeLabel().isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                                            ) {
+                                                Text(
+                                                    text = cellularNetworkConfig.getBadgeLabel(),
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+
                                         if (state.isSequentialMode) {
                                             Spacer(modifier = Modifier.height(4.dp))
                                             val isReady = state.isPlayable
@@ -1977,6 +1994,21 @@ fun MainScreen(
                                                         text = state.timeoutBadge,
                                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
                                                         color = MaterialTheme.colorScheme.onErrorContainer,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                                    )
+                                                }
+                                            }
+
+                                            if (cellularNetworkConfig.getBadgeLabel().isNotBlank()) {
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
+                                                ) {
+                                                    Text(
+                                                        text = cellularNetworkConfig.getBadgeLabel(),
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
                                                     )
                                                 }

@@ -56,6 +56,9 @@ import com.dualboost.downloader.data.TimeoutConfig
 import com.dualboost.downloader.data.TimeoutProfile
 import com.dualboost.downloader.data.TimeoutPreferences
 import com.dualboost.downloader.data.TimeoutUiConstants
+import com.dualboost.downloader.data.CellularNetworkConfig
+import com.dualboost.downloader.data.CellularNetworkMode
+import com.dualboost.downloader.data.CellularPreferences
 import com.dualboost.downloader.security.SecurityPreferences
 import com.dualboost.downloader.data.SlicerPreferences
 import com.dualboost.downloader.data.WorkerTestStatus
@@ -254,6 +257,30 @@ fun SettingsBottomSheet(
         } else {
             TimeoutPreferences(context).resetToDefault()
             localTimeoutConfig = TimeoutPreferences(context).getTimeoutConfig()
+        }
+    }
+
+    var localCellularConfig by remember {
+        mutableStateOf(CellularNetworkConfig(mode = CellularPreferences(context).getCellularMode()))
+    }
+    val cellularConfigState = viewModel?.cellularNetworkConfig?.collectAsState()
+    val currentCellularConfig = cellularConfigState?.value ?: localCellularConfig
+
+    fun updateCellularMode(mode: CellularNetworkMode) {
+        if (viewModel != null) {
+            viewModel.updateCellularMode(mode)
+        } else {
+            CellularPreferences(context).setCellularMode(mode)
+            localCellularConfig = localCellularConfig.copy(mode = mode)
+        }
+    }
+
+    fun resetCellularMode() {
+        if (viewModel != null) {
+            viewModel.resetCellularModeToDefault()
+        } else {
+            CellularPreferences(context).resetToDefault()
+            localCellularConfig = localCellularConfig.copy(mode = CellularNetworkMode.AUTO)
         }
     }
 
@@ -1982,6 +2009,149 @@ fun SettingsBottomSheet(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Dynamic Failover: Timeout adjustments apply immediately to active and resumed downloads without re-downloading existing chunks.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Cellular Network Detection & 5G Handoff (ADR-048)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.SignalCellularAlt,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Cellular Network Detection",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = currentCellularConfig.mode.displayName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (currentCellularConfig.mode != CellularNetworkMode.AUTO) {
+                            TextButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    resetCellularMode()
+                                }
+                            ) {
+                                Text(
+                                    text = "Reset",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Configures 5G New Radio (NR) and 4G LTE detection. Auto-Detect continuously monitors 5G NSA radio handoffs during active transfers.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Mode Selection Chips
+                    Text(
+                        text = "Operation Mode",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CellularNetworkMode.entries.forEach { mode ->
+                            val isSelected = currentCellularConfig.mode == mode
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    updateCellularMode(mode)
+                                },
+                                label = {
+                                    Text(
+                                        text = mode.displayName,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    )
+                                },
+                                leadingIcon = if (isSelected) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                } else null
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Dynamic 5G Radio Sleep Caption
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "5G NSA Radio Sleep: Many carriers keep the 5G radio asleep while idle. DualBoost automatically re-probes for 5G attachment as soon as download data flows.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )

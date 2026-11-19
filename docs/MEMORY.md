@@ -1,9 +1,37 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-047 (Configurable Network Timeouts & Fast Failover Policy). The codebase is backed by **384 unit and integration tests across 66 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-048 (Dynamic Cellular Network Type Detection & 5G Real-Time Handoff). The codebase is backed by **405 unit and integration tests across 71 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`, size 1,711,888 bytes) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
 
 ## Recently Completed
+- **Dynamic Cellular Network Type Detection & 5G Real-Time Handoff (ADR-048 / 405 Tests across 71 Suites - 100% Green)**:
+  - **Slice 1: CellularNetworkConfig Domain Model & Preferences**:
+    - Created `CellularNetworkMode` enum (`AUTO`, `FORCE_5G`, `FORCE_4G`) with human-readable display names and technical descriptions.
+    - Created `CellularNetworkConfig` domain model encapsulating active mode, detected telephony generation, `effectiveGeneration(detected)` resolver, and `getBadgeLabel()`.
+    - Created `CellularPreferences` persisting mode selection via Android `SharedPreferences` with one-tap `resetToDefault()`.
+    - Verified via `CellularNetworkConfigTest.kt` (6 unit tests, 100% green) and `CellularPreferencesTest.kt` (3 unit tests, 100% green).
+  - **Slice 2: DualNetworkManager Dynamic Detection & Telephony Display Info**:
+    - Added `<uses-permission android:name="android.permission.READ_PHONE_STATE" />` to `AndroidManifest.xml` to unlock `TelephonyCallback.DisplayInfoListener` callbacks for `OVERRIDE_NETWORK_TYPE_NR_NSA` and `OVERRIDE_NETWORK_TYPE_NR_ADVANCED` on Android 12+ (API 31+).
+    - Enhanced `CellularGeneration.fromTelephony` with `downstreamBandwidthKbps: Int = 0` supporting 5G NSA, 5G SA, 5G Advanced, and a link downstream bandwidth heuristic ($\ge 120_000\text{ Kbps}$ / 120 Mbps as zero-permission indicator of 5G carrier aggregation).
+    - Replaced one-time initial detection with continuous `reevaluateCellularGeneration(capabilities)` invoked on every `onCapabilitiesChanged` callback.
+    - Implemented `refreshCellularGeneration()` on `NetworkProvider` and `DualNetworkManager` to instantly re-poll network capabilities and telephony display info the moment download traffic starts.
+    - Verified via `DynamicCellularDetectionTest.kt` (6 unit tests, 100% green).
+  - **Slice 3: Engine & Repository Integration**:
+    - Connected `DownloadRepository` with `cellularPreferences`, exposing reactive `cellularNetworkConfig: StateFlow<CellularNetworkConfig>` and dynamically deriving `cellularGeneration` via `combine(networkManager.cellularGeneration, _cellularNetworkConfig)`.
+    - Wired `refreshCellularGeneration()` into `DownloadRepository.startDownload()` to automatically catch carrier Secondary Cell Group (SCG) radio wake-up from modem idle sleep.
+    - Exposed `updateCellularMode(mode)` and `resetCellularModeToDefault()` on `DownloadRepository` and `MainViewModel`.
+    - Strengthened `DualDownloaderEngine.probeAndDownload()` with pause and discard guards (`isPaused.get() || isDiscarding.get()`) across all probe stages (Stage 1, GET Range, Stage 2 Desktop, Stage 3 Cloud Slicer, and Output File allocation) guaranteeing background probing coroutines never clobber `DownloadState.Paused` back to `DownloadState.Probing`.
+    - Verified via `EngineCellularDynamicIntegrationTest.kt` (3 unit tests, 100% green).
+  - **Slice 4: SettingsBottomSheet & Active Download UI Controls**:
+    - Added dedicated **Cellular Network Detection** settings card in `SettingsBottomSheet.kt`:
+      - Header with live subtitle reflecting active mode.
+      - Horizontally scrollable row of selectable profile chips (`Auto-Detect (Dynamic)`, `Force 5G Mode`, `Force 4G Mode`).
+      - One-tap "Reset" action restoring default `AUTO`.
+      - Informational caption explaining 5G NSA modem sleep and carrier radio wake-up behavior.
+    - Added high-visibility status badges (`⚡ Force 5G` or `⚡ Force 4G`) in `MainActivity.kt` for active and paused transfers when manual override is engaged.
+    - Verified via `CellularUiTest.kt` (3 unit tests, 100% green).
+    - Full test suite passed 100% green (405 tests across 71 test suites).
+    - Production APK `app-release.apk` (1,711,888 bytes) assembled cleanly via `.\gradlew.bat assembleRelease`.
 - **Network Timeouts & Fast Failover Policy (ADR-047 / 384 Tests across 66 Suites - 100% Green)**:
   - **Slice 1: TimeoutConfig Domain Model & Failover Profiles**:
     - Created `TimeoutProfile` enum (`AGGRESSIVE`, `BALANCED`, `RESILIENT`, `CUSTOM`) with tailored connect timeouts (5s..30s), read timeouts (10s..60s), retry counts (3..8), and backoff delays (150ms..1000ms).
@@ -596,8 +624,8 @@ DualBoost Downloader is 100% production-grade across all Android devices (Pixel,
 - **External Code Deployment Rule**: Whenever modifying external components (such as `cloud-slicer/worker.js`), proactively notify the user immediately in the response, stating clearly whether redeployment is optional or required, what changed, and how to update it in 30 seconds.
 
 ## Next Steps
-1. User can deploy updated `cloud-slicer/worker.js` to Cloudflare whenever ready (or tap "Copy Script" in the app's Settings).
-2. Enter the Worker URL in DualBoost Settings and tap "Test Worker".
-3. Download any dynamic stream (like the Cloudflare 100MB test link) and enjoy high-speed dual Wi-Fi + 5G download aggregation!
+1. Connect Google Pixel 9 via USB or Wi-Fi debugging and install the newly compiled production APK: `adb install -r app/build/outputs/apk/release/app-release.apk`.
+2. Open DualBoost Downloader and verify the Cellular hero card dynamically reflects 5G upon active data transfer or immediately with "Force 5G Mode" in Settings.
+3. Test download aggregation and speed boost across Wi-Fi and 5G cellular.
 
 

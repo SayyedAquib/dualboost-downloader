@@ -60,6 +60,7 @@ Standard Android operating system behavior automatically deactivates or idles th
 26. **Dynamic Multi-Thread Concurrency Tuning & Auto-Scaling (`ADR-042`)**: Configurable independent per-interface worker streams (`1..8`), opportunistic Auto-Scale mode on high-bandwidth links (>25 MB/s), persistent SharedPreferences storage, and non-negotiable thermal fail-safe limits (`MODERATE` caps cellular to 1 stream, `SEVERE` offloads to Wi-Fi).
 27. **Dynamic Stream Visualizer Palette & Material You Theming (`ADR-043`)**: Material You wallpaper-adaptive stream colors on Android 12+ harmonizing with system primary and tertiary accents, alongside selectable curated dual-tone palettes (Cyberpunk Neon, Emerald & Amber, Sunset Coral) with dark/light mode contrast compliance.
 28. **Dynamic Download Storage Directory & SAF Integration (`ADR-044`)**: Customizable target download locations with built-in subfolder presets (`Standard`, `DualBoost`, `Media`), Storage Access Framework (SAF) folder picker (`ACTION_OPEN_DOCUMENT_TREE`) supporting external directories and removable media, automatic safe fallback to standard Downloads on unmounted/unwritable volumes, and cross-directory resumption scanning.
+29. **Dynamic Cellular Network Type Detection & 5G Real-Time Handoff (`ADR-048`)**: Continuous telephony and network capabilities classification eliminating 5G NSA anchor traps (`telephonyManager.dataNetworkType` returning LTE 13 on 5G NSA), integrating `TelephonyCallback.DisplayInfoListener` (`OVERRIDE_NETWORK_TYPE_NR_NSA` / `NR_ADVANCED`), link downstream bandwidth ($\ge 120\text{ Mbps}$) carrier aggregation heuristic, automatic modem radio wake-up re-evaluation upon download start, and user-configurable modes (`Auto-Detect (Dynamic)`, `Force 5G Mode`, `Force 4G Mode`) with live UI badges (`⚡ Force 5G`, `⚡ Force 4G`).
 
 ## User Flows
 1. **Direct URL Download Flow**:
@@ -106,6 +107,12 @@ Standard Android operating system behavior automatically deactivates or idles th
    - Dynamic Socket Re-binding: Adjusting timeouts rebuilds underlying OkHttp clients immediately on the fly without network disconnection.
    - Dynamic Transport Resumption: Unlike chunk size or User-Agent, timeout configurations apply dynamically to active and resumed downloads without re-downloading existing chunks.
    - Active download card displays a dynamic badge (`⚡ Fast Failover`, `⚡ Resilient Mode`, or `⚡ Custom Timeouts`).
+8. **Dynamic Cellular Network Type Detection & 5G Real-Time Handoff (ADR-048)**:
+   - User navigates to Side Drawer > Settings > "Cellular Network Detection".
+   - By default, `Auto-Detect (Dynamic)` leverages telephony display overrides and hardware link bandwidth to detect 5G NSA, 5G SA, and 5G Advanced.
+   - When the modem sleeps in LTE idle mode, starting a download automatically triggers `refreshCellularGeneration()` to catch the carrier SCG radio wake-up and instantly transition the UI hero label to 5G.
+   - Users on non-standard carriers can manually select `Force 5G Mode` or `Force 4G Mode` to override carrier telemetry.
+   - Active and paused download cards display a status badge (`⚡ Force 5G` or `⚡ Force 4G`) when manual mode is active.
 
 ## Future Features
 - Multi-file batch download queue.

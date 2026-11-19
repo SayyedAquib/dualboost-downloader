@@ -843,6 +843,7 @@ class DualDownloaderEngine(
         }
 
         // --- STAGE 1: Standard Probe (Mobile by default, or Desktop/Slicer if previously engaged) ---
+        if (isPaused.get() || isDiscarding.get()) return
         try {
             val headRequest = if (isCloudSlicerActive) {
                 val secret = SlicerPreferences.getSlicerSecret(context)
@@ -884,6 +885,7 @@ class DualDownloaderEngine(
         }
 
         // If HEAD didn't yield range or length, test with GET range 0-0
+        if (isPaused.get() || isDiscarding.get()) return
         if (contentLength <= 0 || !supportsRanges) {
             val rangeProbeRequest = if (isCloudSlicerActive) {
                 val secret = SlicerPreferences.getSlicerSecret(context)
@@ -939,6 +941,7 @@ class DualDownloaderEngine(
 
         // --- STAGE 2: Adaptive Desktop Probe ---
         // If mobile probe did not unlock byte ranges and we didn't already force desktop, retry with Windows Chrome Desktop headers!
+        if (isPaused.get() || isDiscarding.get()) return
         if (!supportsRanges && !forceDesktop) {
             Log.i(TAG, "Server rejected byte ranges on mobile headers. Triggering Stage 2 probe with Windows 11 Desktop spoofing...")
             _downloadState.value = DownloadState.Probing("Adapting desktop mode for multi-channel support...")
@@ -1007,6 +1010,7 @@ class DualDownloaderEngine(
 
         // --- STAGE 3: Personal Cloud Slicer Probe ---
         // If server still rejected byte ranges after Desktop spoofing, check if user configured a personal Cloud Slicer worker
+        if (isPaused.get() || isDiscarding.get()) return
         if (!supportsRanges && !isCloudSlicerActive) {
             val slicerUrl = SlicerPreferences.getSlicerUrl(context)
             if (slicerUrl.isNotBlank()) {
@@ -1061,6 +1065,8 @@ class DualDownloaderEngine(
                 }
             }
         }
+
+        if (isPaused.get() || isDiscarding.get()) return
 
         val outputFile = resolveWritableOutputFile(targetDir, fileName, url)
         val actualTargetDir = outputFile.parentFile ?: targetDir
