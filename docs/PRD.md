@@ -77,18 +77,22 @@ Standard Android operating system behavior automatically deactivates or idles th
    - User starts download and locks phone or switches to another app.
    - Foreground notification maintains ongoing download without OS termination.
    - Notification updates live transfer rates and dual-network breakdown.
-4. **Personal Cloud Slicer Flow**:
-   - User navigates to Settings (gear icon in TopAppBar).
-   - Taps "Copy Script" to copy the pre-built serverless slice worker to clipboard.
-   - Deploys it to Cloudflare Workers in 60 seconds (free tier, 100k requests/day).
-   - Enters their worker URL into DualBoost and taps "Test Worker".
-   - Any future file download on servers that reject byte ranges automatically routes through the Cloud Slicer, transforming the single stream into parallel HTTP 206 byte chunks and rendering the `⚡ Cloud Slicer Active` badge.
-5. **Dynamic Chunk Segment Slicing & Auto-Adaptive Sizing (ADR-045)**:
-   - User navigates to Settings > "Chunk Slicing Strategy".
-   - By default, Auto-Adaptive Sizing scales chunk segment sizes dynamically from 1 MB (small files or spotty links) up to 64 MB (multi-gigabit Wi-Fi 7 / 5G on multi-gigabyte payloads).
-   - User can manually select fixed chunk sizes spanning 1 MB, 2 MB, 4 MB, 8 MB, 16 MB, 32 MB, or 64 MB.
-   - Incomplete downloads resuming from `.dualboost_meta` strictly preserve their original chunk size to ensure 100% data integrity and zero corruption.
-   - Active download card displays an adaptive badge (`⚡ X MB Chunks`).
+4. **Personal Cloud Slicer & Zero-Touch Background Defaults (ADR-049)**:
+   - The application enforces optimal, production-ready defaults in the background without UI clutter:
+     - **Personal Cloud Slicer**: Automatically pre-configured via build properties (`local.properties`), quietly accelerating single-stream links when servers reject byte ranges without requiring manual worker URL or secret key setup.
+     - **Dynamic Chunk Segment Slicing**: Defaults to Auto-Adaptive Sizing (1 MB to 64 MB based on payload and throughput).
+     - **Multi-Thread Concurrency**: Defaults to Auto-Scaling (dynamic worker scaling with strict thermal protection).
+     - **Cellular Network Mode**: Defaults to Auto-Detect (continuous 5G NR NSA/SA detection and carrier SCG wake-up monitoring).
+     - **Network Timeouts**: Defaults to Balanced profile (15s connect, 30s read, 5 retries, 300ms backoff).
+     - **Download Storage**: Defaults directly to the public device `Downloads/` directory.
+     - **Stream Visualizer Theme**: Defaults to system Material You wallpaper adaptation (`DYNAMIC_MATERIAL_YOU`).
+5. **Zero-Touch Settings & Automation Dashboard (ADR-049)**:
+   - Accessible via the navigation drawer ("Settings").
+   - Converted from cluttered manual knobs into a reassuring **System Protections & Automation** status dashboard:
+     1. **Antivirus & Threat Guard**: Permanently active in the background, inspecting incoming streams, APK extensions, and payload headers before bytes are written to disk.
+     2. **Browser Identity & Adaptive Escalation**: Operates under Smart Auto—initiates with native phone headers, and automatically escalates to Windows 11 Chrome Desktop spoofing if servers restrict mobile streams.
+     3. **Core Engine Automations**: Summarizes active background auto-pilots (Auto-Adaptive Concurrency, 1 MB–64 MB Dynamic Chunk Slicing, 5G NR Telephony Handoff, Balanced Network Timeouts, Pre-configured Cloud Slicer, and Standard Downloads Storage).
+   - Clean, centered Material 3 hero badge and full-width "Done" button.
 6. **Dynamic User-Agent Strings & Phone Model Identity (ADR-046)**:
    - User navigates to Settings > "Browser Identity (User-Agent)".
    - By default, Native Device Auto-Detect dynamically discovers the phone model and Android OS version via `Build.MODEL` and `Build.VERSION.RELEASE`.

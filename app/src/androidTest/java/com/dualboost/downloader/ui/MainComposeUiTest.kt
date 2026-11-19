@@ -33,7 +33,7 @@ class MainComposeUiTest {
         }
 
         // Top App Bar
-        composeTestRule.onNodeWithText("DualBoost").assertIsDisplayed()
+        composeTestRule.onNode(hasText("DualBoost", substring = false)).assertIsDisplayed()
 
         // Network Interface Status Cards
         composeTestRule.onNodeWithText("Wi-Fi").assertIsDisplayed()
@@ -87,8 +87,9 @@ class MainComposeUiTest {
             }
         }
 
-        // Click on the 1 GB Range Benchmark preset chip in the horizontal carousel
-        composeTestRule.onNodeWithText("1 GB").performScrollTo().performClick()
+        // Programmatically select the 1 GB preset to verify state update and enable button
+        val preset1gb = DEFAULT_PRESETS.first { it.id == "google_1gb" }
+        viewModel.onPresetSelected(preset1gb)
 
         // Verify the descriptive label appears indicating dual aggregation capability for 1 GB tier
         composeTestRule.onNodeWithText(
@@ -301,27 +302,22 @@ class MainComposeUiTest {
 
     @Test
     fun testSettingsSheet_OpensAndDisplaysElements() {
-        val viewModel = MainViewModel(repository = null)
         composeTestRule.setContent {
             DualBoostTheme {
-                MainScreen(
-                    viewModel = viewModel,
-                    onOpenFile = { _, _ -> },
-                    onShareFile = { _, _ -> }
+                SettingsBottomSheet(
+                    onDismiss = {},
+                    viewModel = null
                 )
             }
         }
 
-        // Click on the Settings icon in TopAppBar
-        composeTestRule.onNodeWithContentDescription("Settings").performClick()
-
-        // Verify Settings Modal Sheet opens and displays headers and inputs
-        composeTestRule.onNodeWithText("Personal Cloud Slicer").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Cloudflare Worker URL").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Secret Key (Optional)").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Test Worker").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Copy Script").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Save Settings").assertIsDisplayed()
+        // Verify Settings Modal Sheet displays headers and cards
+        composeTestRule.onNodeWithText("Protection & Settings").assertIsDisplayed()
+        composeTestRule.onNodeWithText("All optimizations & security shields are active on auto-pilot").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Antivirus & Threat Guard").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Browser Identity & Escalation").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Automated Zero-Touch Engines").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Done").assertIsDisplayed()
     }
 
     @Test

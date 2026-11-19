@@ -33,12 +33,12 @@ class SettingsConcurrencyUiTest {
 
     @Test
     fun testConcurrencyCard_ResetActionRestoresDefaults() {
-        var current = ConcurrencyConfig(wifiWorkers = 7, cellularWorkers = 6, isAutoScaleEnabled = true)
+        var current = ConcurrencyConfig(wifiWorkers = 7, cellularWorkers = 6, isAutoScaleEnabled = false)
         // Reset action
         current = ConcurrencyConfig.DEFAULT
         assertEquals(ConcurrencyConfig.DEFAULT_WIFI_WORKERS, current.wifiWorkers)
         assertEquals(ConcurrencyConfig.DEFAULT_CELLULAR_WORKERS, current.cellularWorkers)
-        assertFalse(current.isAutoScaleEnabled)
+        assertTrue(current.isAutoScaleEnabled)
         assertEquals(4, current.totalWorkers)
     }
 

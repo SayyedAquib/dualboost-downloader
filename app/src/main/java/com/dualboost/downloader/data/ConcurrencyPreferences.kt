@@ -10,7 +10,7 @@ class ConcurrencyPreferences(context: Context) {
     fun getConcurrencyConfig(): ConcurrencyConfig {
         val wifi = prefs.getInt(KEY_WIFI_WORKERS, ConcurrencyConfig.DEFAULT_WIFI_WORKERS)
         val cell = prefs.getInt(KEY_CELLULAR_WORKERS, ConcurrencyConfig.DEFAULT_CELLULAR_WORKERS)
-        val autoScale = prefs.getBoolean(KEY_AUTO_SCALE, false)
+        val autoScale = prefs.getBoolean(KEY_AUTO_SCALE, true)
         return ConcurrencyConfig(
             wifiWorkers = wifi,
             cellularWorkers = cell,
@@ -36,7 +36,7 @@ class ConcurrencyPreferences(context: Context) {
         prefs.edit()
             .putInt(KEY_WIFI_WORKERS, ConcurrencyConfig.DEFAULT_WIFI_WORKERS)
             .putInt(KEY_CELLULAR_WORKERS, ConcurrencyConfig.DEFAULT_CELLULAR_WORKERS)
-            .putBoolean(KEY_AUTO_SCALE, false)
+            .putBoolean(KEY_AUTO_SCALE, true)
             .apply()
     }
 

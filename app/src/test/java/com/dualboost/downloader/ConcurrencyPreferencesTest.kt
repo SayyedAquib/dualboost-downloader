@@ -52,7 +52,7 @@ class ConcurrencyPreferencesTest {
 
         assertEquals(2, config.wifiWorkers)
         assertEquals(2, config.cellularWorkers)
-        assertFalse(config.isAutoScaleEnabled)
+        assertTrue(config.isAutoScaleEnabled)
         assertEquals(4, config.totalWorkers)
     }
 
@@ -84,6 +84,6 @@ class ConcurrencyPreferencesTest {
         val config = prefs.getConcurrencyConfig()
         assertEquals(2, config.wifiWorkers)
         assertEquals(2, config.cellularWorkers)
-        assertFalse(config.isAutoScaleEnabled)
+        assertTrue(config.isAutoScaleEnabled)
     }
 }

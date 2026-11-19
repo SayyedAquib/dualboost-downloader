@@ -1,9 +1,30 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-048 (Dynamic Cellular Network Type Detection & 5G Real-Time Handoff). The codebase is backed by **405 unit and integration tests across 71 test suites (100% passing green)** with zero failures or regressions. Production release APK (`app-release.apk`, size 1,711,888 bytes) compiles and packages cleanly with R8 optimization, resource shrinking, lint-vital verification, and release signing.
+DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-049 (Zero-Touch Settings Architecture & Automated Protections Dashboard - Option 2). The codebase is backed by **405 unit and integration tests across 71 test suites (100% passing green)** with zero failures or regressions. All 9 configuration domains (Antivirus & Threat Guard Always ON, Smart Browser Identity with Automatic Desktop Escalation, Stream Theme Material You, Multi-Thread Concurrency Auto, Chunk Slicing Auto, Cellular Mode Auto, Network Timeouts Balanced, Storage Public Downloads, and Pre-configured Cloud Slicer) operate autonomously with zero manual intervention required. The Settings UI is converted into a clean "Protection & Settings" status dashboard. Production release APK (`app-release.apk`) compiles with R8 optimization, resource shrinking, and installs cleanly via ADB on Google Pixel 9.
 
 ## Recently Completed
+- **Zero-Touch Settings Architecture & Automated Protections Dashboard (ADR-049 Option 2 / 405 Tests across 71 Suites - 100% Green)**:
+  - **Slice 1: Zero-Touch Background Automations**:
+    - **Antivirus & Threat Guard**: Permanently active in the background, inspecting incoming streams, APK extensions, and payload headers before bytes are written to disk.
+    - **Browser Identity & Adaptive Escalation**: Operates under Smart Auto—initiates with native phone headers, and automatically escalates to Windows 11 Chrome Desktop spoofing if servers restrict mobile streams.
+    - **Stream Theme**: Defaults to `StreamPalette.DYNAMIC_MATERIAL_YOU` matching Android 14/15 wallpaper palette (`primary` for Wi-Fi, `tertiary` for Cellular).
+    - **Multi-Thread Concurrency**: Defaults to `isAutoScaleEnabled = true` in `ConcurrencyConfig` and `ConcurrencyPreferences` with thermal safety guardrails.
+    - **Chunk Slicing**: Defaults to `isAutoAdaptive = true` in `ChunkConfig` and `ChunkPreferences` (1 MB up to 64 MB).
+    - **Cellular Network Mode**: Defaults to `CellularNetworkMode.AUTO` in `CellularNetworkConfig` and `CellularPreferences` for continuous 5G NR NSA/SA detection and carrier SCG wake-up monitoring.
+    - **Network Timeouts**: Defaults to `TimeoutProfile.BALANCED` (15s connect, 30s read, 5 retries, 300ms backoff).
+    - **Download Storage**: Defaults to `StorageDestination.PRESET_DEFAULT` (public `Downloads/` directory).
+    - **Personal Cloud Slicer**: Built-in default resolution via user's Cloudflare Worker credentials (`https://dualboost-slicer.sayyed-aquib89.workers.dev/` and secret key) in `SlicerPreferences`.
+  - **Slice 2: Reassuring Protection & Automation Dashboard (`SettingsBottomSheet.kt`)**:
+    - Converted the Settings sheet into a clean status modal (`Icons.Rounded.VerifiedUser`, "Protection & Settings", "All optimizations & security shields are active on auto-pilot").
+    - Card 1: Antivirus & Threat Guard (Green Shield, `ACTIVE` badge, Always On protection summary).
+    - Card 2: Browser Identity & Escalation (Language icon, `AUTO` badge, Smart Auto mobile + Desktop Chrome failover explanation).
+    - Card 3: Automated Zero-Touch Engines (summary rows for Concurrency, Chunk Slicing, 5G Detection, Timeout Policy, Cloud Slicer, and Download Storage).
+    - Replaced multi-button footer with full-width "Done" button.
+  - **Slice 3: Verification & Test Alignment**:
+    - Updated `MainComposeUiTest` for new modal elements.
+    - 405 unit and integration tests passing green (100%).
+    - Production APK `app-release.apk` assembled and installed directly on Google Pixel 9 (`53201VDAQ00067`).
 - **Dynamic Cellular Network Type Detection & 5G Real-Time Handoff (ADR-048 / 405 Tests across 71 Suites - 100% Green)**:
   - **Slice 1: CellularNetworkConfig Domain Model & Preferences**:
     - Created `CellularNetworkMode` enum (`AUTO`, `FORCE_5G`, `FORCE_4G`) with human-readable display names and technical descriptions.

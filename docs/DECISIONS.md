@@ -1824,3 +1824,55 @@ Implement **Dynamic Cellular Network Type Detection & 5G Real-Time Handoff**:
 - Instant real-time UI handoff from 4G to 5G as soon as the carrier wakes the 5G modem radio for data transfer.
 - Immediate user override capability via Settings sheet.
 - 100% test coverage with 405 unit tests passing across all test suites.
+
+---
+
+## ADR-049: Streamlined Settings Architecture & Zero-Touch Background Defaults
+
+### Date
+2026-11-19
+
+### Status
+Accepted
+
+### Context
+Over iterative releases, the Settings bottom sheet accumulated 9 distinct configuration sections (Personal Cloud Slicer, Antivirus & Threat Guard, Multi-Thread Concurrency, Stream Visualizer Theme, Download Storage, Chunk Slicing Strategy, Browser Identity User-Agent, Network Timeouts & Failover, and Cellular Network Detection).
+
+User feedback indicated that the settings surface had become cluttered, presenting complex network engineering parameters (byte slice sizes, socket timeout seconds, worker thread counts) that caused decision fatigue and suboptimal configurations. The underlying engine had already matured with auto-adaptive chunk sizing, thermal-aware concurrency scaling, carrier NR 5G handoffs, and fallback storage routing. Exposing manual toggles for these features was unnecessary for standard users and diluted the core UX.
+
+### Decision
+Streamline the Settings bottom sheet into a focused, 2-card interface and lock 7 configuration domains to zero-touch, intelligent background defaults:
+
+1. **Stream Theme**:
+   - Removed the "Stream Visualizer Theme" card from the UI.
+   - Enforce system **Material You** (`StreamPalette.DYNAMIC_MATERIAL_YOU`) dynamically resolving to the Android 14/15 system wallpaper tokens (`primary` for Wi-Fi, `tertiary` for Cellular).
+2. **Multi-Thread Concurrency**:
+   - Removed the "Multi-Thread Concurrency" stepper card.
+   - Defaulted to **Auto** (`isAutoScaleEnabled = true`), enabling the engine to dynamically balance worker streams up to 8 threads based on real-time throughput (>25 MB/s) while prioritizing thermal safety rules (capping cellular at MODERATE/LIGHT).
+3. **Chunk Slicing Strategy**:
+   - Removed the "Chunk Slicing Strategy" card and manual MB tier chips.
+   - Defaulted to **Auto** (`isAutoAdaptive = true`), allowing chunks to scale adaptively from 1 MB (spotty connections / small files) up to 64 MB (Gigabit Wi-Fi 7).
+4. **Cellular Network Detection**:
+   - Removed the "Cellular Network Detection" card.
+   - Defaulted to **Auto** (`CellularNetworkMode.AUTO`), running real-time 5G NR NSA/SA detection and dynamic handoff without manual intervention.
+5. **Network Timeout & Failover**:
+   - Removed the "Network Timeouts & Failover" card and custom sliders.
+   - Defaulted to **Balanced** (`TimeoutProfile.BALANCED`: 15s connect timeout, 30s read timeout, 5 max chunk retries, 300ms backoff).
+6. **Download Storage**:
+   - Removed the "Download Storage" card and SAF directory picker.
+   - Defaulted to the public **Downloads** directory (`StorageDestination.PRESET_DEFAULT`), with automatic fallback to app-specific files if storage is unavailable.
+7. **Personal Cloud Slicer**:
+   - Removed the setup card, Worker URL/Secret inputs, test button, and setup guide from the sheet.
+   - Preconfigured credentials automatically via `local.properties` (`slicer.url = https://dualboost-slicer.sayyed-aquib89.workers.dev/` and `slicer.secret`), ensuring dynamic links continue to slice seamlessly in the background without UI overhead.
+8. **Zero-Touch Settings & Protection Dashboard (Option 2)**:
+   - Converted the Settings modal into a reassuring, live **Protection & Settings** status dashboard with zero manual knobs, switches, or text fields:
+     - **Antivirus & Threat Guard**: Permanently locked to **Always ON** in the background, inspecting incoming streams, APK extensions, and payload headers before bytes are written to disk.
+     - **Browser Identity & Adaptive Escalation**: Operates under **Smart Auto**—initiates with native phone headers, and automatically escalates to Windows 11 Chrome Desktop spoofing if servers restrict mobile streams.
+     - **Core Engine Automations**: Summarizes active background auto-pilots (Auto-Adaptive Concurrency, 1 MB–64 MB Dynamic Chunk Slicing, 5G NR Telephony Handoff, Balanced Network Timeouts, Pre-configured Cloud Slicer, and Standard Downloads Storage).
+   - Redesigned header with centered `Icons.Rounded.VerifiedUser` hero badge and full-width "Done" button.
+
+### Consequences
+- Dramatic reduction in UI clutter and cognitive load.
+- Peak performance achieved out of the box via verified Auto-scaling and Auto-adaptive algorithms.
+- Seamless, zero-configuration Cloud Slicer acceleration.
+- Release APK size and Compose layout tree depth reduced.

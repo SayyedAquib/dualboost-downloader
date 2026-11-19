@@ -3,7 +3,7 @@ package com.dualboost.downloader.data
 class ConcurrencyConfig(
     wifiWorkers: Int = DEFAULT_WIFI_WORKERS,
     cellularWorkers: Int = DEFAULT_CELLULAR_WORKERS,
-    val isAutoScaleEnabled: Boolean = false
+    val isAutoScaleEnabled: Boolean = true
 ) {
     val wifiWorkers: Int = wifiWorkers.coerceIn(MIN_WORKERS, MAX_WORKERS)
     val cellularWorkers: Int = cellularWorkers.coerceIn(MIN_WORKERS, MAX_WORKERS)
@@ -41,6 +41,6 @@ class ConcurrencyConfig(
         const val MAX_WORKERS = 8
         const val DEFAULT_WIFI_WORKERS = 2
         const val DEFAULT_CELLULAR_WORKERS = 2
-        val DEFAULT = ConcurrencyConfig(DEFAULT_WIFI_WORKERS, DEFAULT_CELLULAR_WORKERS, false)
+        val DEFAULT = ConcurrencyConfig(DEFAULT_WIFI_WORKERS, DEFAULT_CELLULAR_WORKERS, true)
     }
 }

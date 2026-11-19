@@ -59,7 +59,7 @@ class MainViewModelConcurrencyTest {
         val config = viewModel.concurrencyConfig.value
         assertEquals("Default Wi-Fi workers must be 2", 2, config.wifiWorkers)
         assertEquals("Default Cellular workers must be 2", 2, config.cellularWorkers)
-        assertFalse("Auto-Scale must be disabled by default", config.isAutoScaleEnabled)
+        assertTrue("Auto-Scale must be enabled by default", config.isAutoScaleEnabled)
         assertEquals("Default total workers must be 4", 4, config.totalWorkers)
     }
 
