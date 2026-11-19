@@ -39,18 +39,13 @@ class MainComposeUiTest {
         composeTestRule.onNodeWithText("Wi-Fi").assertIsDisplayed()
         composeTestRule.onNodeWithText("5G Cellular").assertIsDisplayed()
 
-        // Quick Benchmark Card
-        composeTestRule.onNodeWithText("Speed Benchmark").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Test Speed").performScrollTo().assertIsDisplayed()
-
         // Download Section
         composeTestRule.onNodeWithText("New Download").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("150 MB").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Ready to Download").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Boost Download").performScrollTo().assertIsDisplayed()
     }
 
     @Test
-    fun testPresetChipSelection_PopulatesUrlAndEnablesDownload() {
+    fun testPresetSelection_PopulatesUrlAndEnablesDownload() {
         val viewModel = MainViewModel(repository = null)
         composeTestRule.setContent {
             DualBoostTheme {
@@ -62,20 +57,17 @@ class MainComposeUiTest {
             }
         }
 
-        // Click on the 150 MB Range Benchmark preset chip
-        composeTestRule.onNodeWithText("150 MB").performScrollTo().performClick()
+        // Programmatically select the 150 MB preset
+        val preset150 = DEFAULT_PRESETS.first { it.id == "google_150mb" }
+        viewModel.onPresetSelected(preset150)
+        composeTestRule.waitForIdle()
 
-        // Verify the descriptive label appears indicating dual aggregation capability
-        composeTestRule.onNodeWithText(
-            "Google Edge CDN (Full Aggregation Stress Test) • Aggregates Wi-Fi + 5G concurrently"
-        ).performScrollTo().assertIsDisplayed()
-
-        // Verify Boost Download button is enabled
+        // Verify Boost Download button is enabled with preset URL
         composeTestRule.onNodeWithText("Boost Download").performScrollTo().assertIsEnabled()
     }
 
     @Test
-    fun testLargePresetChipSelection_Populates1GBUrlAndEnablesDownload() {
+    fun testLargePresetSelection_Populates1GBUrlAndEnablesDownload() {
         val viewModel = MainViewModel(repository = null)
         composeTestRule.setContent {
             DualBoostTheme {
@@ -90,11 +82,7 @@ class MainComposeUiTest {
         // Programmatically select the 1 GB preset to verify state update and enable button
         val preset1gb = DEFAULT_PRESETS.first { it.id == "google_1gb" }
         viewModel.onPresetSelected(preset1gb)
-
-        // Verify the descriptive label appears indicating dual aggregation capability for 1 GB tier
-        composeTestRule.onNodeWithText(
-            "Google Edge CDN (Massive 1.2 GB Endurance Stress Test) • Aggregates Wi-Fi + 5G concurrently"
-        ).performScrollTo().assertIsDisplayed()
+        composeTestRule.waitForIdle()
 
         // Verify Boost Download button is enabled
         composeTestRule.onNodeWithText("Boost Download").performScrollTo().assertIsEnabled()
@@ -133,7 +121,7 @@ class MainComposeUiTest {
     }
 
     @Test
-    fun testSpeedBenchmarkBottomSheet_OpensAndDismissesCleanly() {
+    fun testSpeedBenchmarkBottomSheet_OpensFromDrawerAndDismissesCleanly() {
         val viewModel = MainViewModel(repository = null)
         composeTestRule.setContent {
             DualBoostTheme {
@@ -145,8 +133,11 @@ class MainComposeUiTest {
             }
         }
 
-        // Tap on Test Speed button on dashboard
-        composeTestRule.onNodeWithText("Test Speed").performScrollTo().performClick()
+        // Open navigation drawer and tap Speed Benchmark
+        composeTestRule.onNodeWithContentDescription("Open Navigation Menu").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Speed Benchmark").performClick()
+        composeTestRule.waitForIdle()
 
         // Verify Speed Benchmark Bottom Sheet is displayed
         composeTestRule.onNodeWithText("Start Speed Benchmark").assertIsDisplayed()
@@ -154,9 +145,10 @@ class MainComposeUiTest {
 
         // Dismiss the sheet by tapping the Close button
         composeTestRule.onNodeWithContentDescription("Close").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
 
         // Verify bottom sheet dismissed and returned to main dashboard
-        composeTestRule.onNodeWithText("Ready to Download").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("New Download").performScrollTo().assertIsDisplayed()
     }
 
     @Test

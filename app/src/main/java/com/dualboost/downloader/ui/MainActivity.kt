@@ -308,7 +308,6 @@ fun MainScreen(
     val isModemStandbyDetected by viewModel.isModemStandbyDetected.collectAsState()
 
     val urlInput by viewModel.urlInput.collectAsState()
-    val selectedPreset by viewModel.selectedPreset.collectAsState()
     val hasClipboardContent by viewModel.hasClipboardContent.collectAsState()
     val detectedClipboardUrl by viewModel.detectedClipboardUrl.collectAsState()
     val isSequentialRequested by viewModel.isSequentialStreamRequested.collectAsState()
@@ -672,7 +671,6 @@ fun MainScreen(
             }
 
             // Network Aggregation Hero Cards
-            val cellularName = cellularGeneration.fullDisplayName
             val cellularCarrierSuffix = cellularCarrierName?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
             val cellularTitle = "${cellularGeneration.detailLabel}$cellularCarrierSuffix"
             val cellularSubtitle = when {
@@ -711,187 +709,7 @@ fun MainScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Context-Aware Network Status Banner
-            if (wifiAvailable && cellularAvailable) {
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Speed,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Dual-Channel Active: Aggregating ${wifiDetails.shortLabel} + $cellularName",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-            } else if (!wifiAvailable && !cellularAvailable) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CloudOff,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "No Network Available: Reconnect Wi-Fi or Cellular to download.",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            } else if (wifiAvailable && !cellularAvailable) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Lightbulb,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            if (isModemStandbyDetected) {
-                                Text(
-                                    text = "Cellular Modem in Standby",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Your device sleeps mobile data while Wi-Fi is active. Enable 'Mobile data always active' in Developer Options to unleash dual-channel aggregation.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            } else {
-                                Text(
-                                    text = "Using ${wifiDetails.detailLabel} only: Enable 'Mobile data always active' in Developer Options to aggregate $cellularName.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SignalCellularAlt,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Using $cellularName Cellular only: Connect ${wifiDetails.shortLabel} to activate DualBoost aggregation.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Speed Benchmark Quick Card
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Speed,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Speed Benchmark",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                            Text(
-                                text = "Test combined ${wifiDetails.shortLabel} + $cellularName speed",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = { showSpeedTestSheet = true },
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                        modifier = Modifier.height(38.dp)
-                    ) {
-                        Text(text = "Test Speed", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Download Input Card
             Card(
@@ -1029,55 +847,6 @@ fun MainScreen(
                         singleLine = true
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Preset Quick-Test Benchmarks
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Quick Test Benchmarks:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "⚡ = Dual-Channel Range",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        DEFAULT_PRESETS.forEach { preset ->
-                            PresetChip(
-                                label = preset.label,
-                                isSelected = selectedPreset?.id == preset.id,
-                                isRangeEnabled = preset.supportsRange,
-                                onClick = {
-                                    viewModel.onPresetSelected(preset)
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                }
-                            )
-                        }
-                    }
-
-                    selectedPreset?.let { preset ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        val cellShort = cellularGeneration.shortLabel
-                        Text(
-                            text = "${preset.description} • ${if (preset.supportsRange) "Aggregates ${wifiDetails.shortLabel} + $cellShort concurrently" else "Single-stream fallback mode"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (preset.supportsRange) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                        )
-                    }
-
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // Sequential Video Stream Toggle
@@ -1193,46 +962,7 @@ fun MainScreen(
             ) { state ->
                 when (state) {
                     is DownloadState.Idle -> {
-                        Surface(
-                            shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                                    modifier = Modifier.size(56.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.CloudDownload,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(14.dp))
-                                Text(
-                                    text = "Ready to Download",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "Paste any direct download link above, pick a test benchmark, or share a URL from your browser.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                    lineHeight = 18.sp
-                                )
-                            }
-                        }
+                        // Clean idle state — no placeholder card
                     }
 
                     is DownloadState.Probing -> {
@@ -1326,69 +1056,6 @@ fun MainScreen(
                                             ) {
                                                 Text(
                                                     text = "⚡ Desktop Mode Active",
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        } else if (state.isCustomUserAgent) {
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f))
-                                            ) {
-                                                Text(
-                                                    text = "⚡ Custom UA",
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        }
-
-                                        if (state.supportsRanges && state.chunkSize > 0) {
-                                            val chunkMb = state.chunkSize / (1024 * 1024L)
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f),
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f))
-                                            ) {
-                                                Text(
-                                                    text = "⚡ $chunkMb MB Chunks",
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        }
-
-                                        if (state.timeoutBadge.isNotBlank()) {
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
-                                            ) {
-                                                Text(
-                                                    text = state.timeoutBadge,
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        }
-
-                                        if (cellularNetworkConfig.getBadgeLabel().isNotBlank()) {
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
-                                            ) {
-                                                Text(
-                                                    text = cellularNetworkConfig.getBadgeLabel(),
                                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
@@ -1964,49 +1631,6 @@ fun MainScreen(
                                                 ) {
                                                     Text(
                                                         text = "⚡ Desktop Mode",
-                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
-                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
-                                                    )
-                                                }
-                                            } else if (state.isCustomUserAgent) {
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Surface(
-                                                    shape = RoundedCornerShape(6.dp),
-                                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.75f)
-                                                ) {
-                                                    Text(
-                                                        text = "⚡ Custom UA",
-                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
-                                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
-                                                    )
-                                                }
-                                            }
-
-                                            if (state.timeoutBadge.isNotBlank()) {
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Surface(
-                                                    shape = RoundedCornerShape(6.dp),
-                                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.75f)
-                                                ) {
-                                                    Text(
-                                                        text = state.timeoutBadge,
-                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
-                                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
-                                                    )
-                                                }
-                                            }
-
-                                            if (cellularNetworkConfig.getBadgeLabel().isNotBlank()) {
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Surface(
-                                                    shape = RoundedCornerShape(6.dp),
-                                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
-                                                ) {
-                                                    Text(
-                                                        text = cellularNetworkConfig.getBadgeLabel(),
                                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
                                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)

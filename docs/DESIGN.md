@@ -67,8 +67,8 @@ To ensure physical network transparency across any wallpaper palette:
 - **URL Input Field**: `OutlinedTextField` spanning full width, single line, with explicit placeholder and clear affordance.
 
 ### Cards
-- **Speed Benchmark Quick Card**: 18dp rounded container (`surfaceContainer`) with primary container icon badge, live subtitle, and quick-action "Test Speed" button launching the benchmark modal.
-- **Download Telemetry Card**: High-contrast card with 4dp elevation containing sanitized filename (humanized, free of `%20`/`_20` encoding), real-time ETA countdown (`• 45s left (35.2 MB left)`), clean progress metric (`X of Y`), subtle primary-tinted `⚡ Desktop Mode Active` or `⚡ Cloud Slicer Active` badge, dynamic `⚡ Stream Ready • X MB buffered` (or `⚡ Buffering Stream • X / 24 MB`) badge in Sequential Stream Mode, sleek 12dp dual-color contribution progress bar (Cyan for Wi-Fi, Violet for Mobile Data), real-time "Download Speed" hero display, individual Wi-Fi and Mobile Data streaming meters with live pulse animations, an amber alert banner (`tertiaryContainer`) when non-range servers are detected, a full-width vibrant emerald green hero `[ ▶ Watch Preview (X MB buffered) ]` CTA when playable, and side-by-side [ Pause ] and [ Cancel ] buttons with an accidental-cancellation confirmation dialog.
+- **Download Input Card**: 24dp rounded container (`surfaceContainer`) containing the URL input field, optional privacy-conscious clipboard suggestion pill, Sequential Video Stream Mode toggle, and the primary "Boost Download" button. Developer preset benchmark buttons have been pruned for a clean consumer-first layout (ADR-050).
+- **Download Telemetry Card**: High-contrast card with 4dp elevation containing sanitized filename (humanized, free of `%20`/`_20` encoding), real-time ETA countdown (`• 45s left (35.2 MB left)`), clean progress metric (`X of Y`), functional status badges (`⚡ Desktop Mode Active`, `⚡ Cloud Slicer Active`, or dynamic `⚡ Stream Ready • X MB buffered` / `⚡ Buffering Stream • X / 24 MB`), sleek 12dp dual-color contribution progress bar (Cyan for Wi-Fi, Violet for Mobile Data), real-time "Download Speed" hero display, individual Wi-Fi and Mobile Data streaming meters with live pulse animations, an amber alert banner (`tertiaryContainer`) when non-range servers are detected, a full-width vibrant emerald green hero `[ ▶ Watch Preview (X MB buffered) ]` CTA when playable, and side-by-side [ Pause ] and [ Cancel ] buttons with an accidental-cancellation confirmation dialog. Internal developer debug telemetry badges (`4 MB Chunks`, `Balanced Timeout`, `Auto 5G`, `Custom UA`) have been removed for an uncluttered visual hierarchy (ADR-050).
 - **Download Paused Card**: Elevated card (2dp elevation) displaying sanitized filename, frozen progress percentage, progress bar, preserved byte count, primary filled "Resume" button with Play icon, and error-tinted outlined "Discard" button with trash icon and safety confirmation.
 - **Download Completed Card**: Container card (`primaryContainer`) displaying celebratory transfer summary (`⚡ 29.61 GB completed in 55m 55s at 9.0 MB/s avg • Aggregated Wi-Fi + 5G Boost ⚡`), formatted elapsed time, sanitized file name, clean folder indicator ("Saved to Downloads folder"), and a dedicated 2-tier action layout (`DownloadCompletedActions`):
   - **Hero Primary Action**: Full-width filled "Open File" button (`height = 48dp`, `RoundedCornerShape(14.dp)`, Play icon, semi-bold typography) optimized for thumb-reachability as the primary post-download intent (`ACTION_VIEW`).
@@ -78,12 +78,11 @@ To ensure physical network transparency across any wallpaper palette:
 
 ### Navigation
 - Clean `CenterAlignedTopAppBar` with menu drawer trigger on the left (`48dp`) and zero right-side clutter, centering the "DualBoost" brand mark with generous breathing room.
-- Slide-out `ModalNavigationDrawer` (`ModalDrawerSheet`) for rapid access to all app destinations (Download Library, Speed Benchmark, Cloud Slicer Settings, and About dialog).
+- Slide-out `ModalNavigationDrawer` (`ModalDrawerSheet`) for rapid access to all app destinations (Download Library, Speed Benchmark, Cloud Slicer Settings, and About dialog). Speed Benchmark is housed exclusively in the drawer, eliminating duplicate dashboard clutter (ADR-050).
 
 ### Hero Network Cards
 - **Symmetrical Equal-Height Grid**: Side-by-side cards in `Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min))` ensuring 100% equal height across both cards.
-- **Single Icon + Pulsing Status Dot**: Clean visual hierarchy with exactly 1 interface icon in a tinted circle on the left, an animated pulsing connection dot on the top right, and qualitative signal metrics in the subtitle (`Excellent • 4/4 bars`).
-- **Full-Width Positive Context Banner**: Context-aware aggregation banner placed directly below the cards in unified brand styling (`primaryContainer` with Speed icon). Dynamically displays `Dual-Channel Active: Aggregating Wi-Fi + 4G LTE` or `Aggregating Wi-Fi + 5G`, maintaining a clean, reassuring, and balanced visual flow.
+- **Single Icon + Pulsing Status Dot**: Clean visual hierarchy with exactly 1 interface icon in a tinted circle on the left, an animated pulsing connection dot on the top right, and qualitative signal metrics in the subtitle (`Excellent • 4/4 bars`). Redundant stacked text banner below the cards removed to let the glowing cards communicate status directly (ADR-050).
 
 ### Modals & Bottom Sheets
 - **Speed Test Bottom Sheet (`ModalBottomSheet`)**: Rounded 28dp surface container modal delivering an interactive 3-phase automated benchmark (Wi-Fi 3s -> 5G 3s -> DualBoost 4s) with real-time animated speedometer digits, dynamic progress indicator, comparative cards, and celebratory Boost Gain summary banner.
@@ -97,7 +96,7 @@ To ensure physical network transparency across any wallpaper palette:
 - **Segmented Transfer**: Determinate `LinearProgressIndicator` displaying exact percentage ($0.0 \dots 1.0$).
 
 ### Empty States
-- Centered placeholder text when no active download is running: *"Paste a URL or share a link from Chrome to begin."*
+- **Minimalist Idle Screen**: When no download is running, the app maintains an uncluttered, distraction-free layout showing only the hero network cards and the "New Download" card (the redundant "Ready to Download" empty placeholder card is removed per ADR-050).
 
 ### Error States
 - Red container card (`errorContainer`) containing explicit error messages (e.g., DNS failure, timeout, HTTP 404).

@@ -334,15 +334,15 @@ End-to-end and component UI testing on Android devices is performed using Google
   .\gradlew.bat connectedAndroidTest
   ```
 - **Tested User Flows**:
-  1. **Dashboard Initial State**: Confirms "Ready to Download" state, preset chips, and input field rendering.
-  2. **Benchmark Preset Selection**: Tapping preset chips (e.g. "150 MB") updates the URL input reactive state.
-  3. **Custom URL Typing**: Ensures custom URL typing updates reactive StateFlow.
+  1. **Dashboard Initial State**: Confirms clean, minimalist layout with Top App Bar, Wi-Fi and 5G Cellular status cards, and the "New Download" card with "Boost Download" CTA (ADR-050).
+  2. **Preset Selection Programmatic Logic**: Verifies selecting presets updates reactive state and activates the Boost Download button.
+  3. **Custom URL Typing & Clearing**: Ensures custom URL typing and trailing clear icon work seamlessly.
   4. **Download & Discard Lifecycle**: Tests starting download, pausing, and discarding, asserting complete reset back to Idle without losing the URL.
-  5. **Speed Benchmark Bottom Sheet**: Tests clicking "Test Speed", opening the modal sheet, inspecting comparative metric cards, and dismissing cleanly back to dashboard.
+  5. **Speed Benchmark Bottom Sheet (via Drawer)**: Tests opening the side navigation menu, tapping "Speed Benchmark", inspecting comparative metric cards, and dismissing cleanly back to dashboard.
   6. **Single-Stream Alert & Dimming**: Confirms amber banner rendering, "Single-Channel Bandwidth" header, and dimmed inactive cellular meter.
   7. **Desktop Mode Active Badge**: Asserts that `⚡ Desktop Mode Active` badge renders with primary container tint when `isDesktopSpoofed == true`.
   8. **Cloud Slicer Active Badge**: Asserts that `⚡ Cloud Slicer Active` badge renders with tertiary container tint when `isCloudSlicerActive == true`.
-  9. **Settings Modal Sheet**: Asserts that tapping Settings gear icon opens `SettingsBottomSheet` and renders Worker URL, Secret Key, Test Worker, Copy Script, and Save buttons.
+  9. **Settings Modal Sheet**: Asserts that tapping Settings in navigation drawer opens the streamlined `SettingsBottomSheet` status dashboard.
 
 ### Personal Cloud Slicer & Stage 3 Unit Tests (`EngineComprehensiveTest.kt`)
 - `testSlicerPreferences_SaveAndRetrieveUrlAndSecret`: Asserts SharedPreferences storage and retrieval of worker URL and optional secret token.

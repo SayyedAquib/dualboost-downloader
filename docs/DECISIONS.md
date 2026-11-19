@@ -1876,3 +1876,36 @@ Streamline the Settings bottom sheet into a focused, 2-card interface and lock 7
 - Peak performance achieved out of the box via verified Auto-scaling and Auto-adaptive algorithms.
 - Seamless, zero-configuration Cloud Slicer acceleration.
 - Release APK size and Compose layout tree depth reduced.
+
+---
+
+## ADR-050: Main Dashboard Decluttering & Minimalist UI Streamlining
+
+### Date
+2026-11-19
+
+### Status
+Accepted
+
+### Context
+Following the decluttering of the Settings sheet (ADR-049), the main screen still contained several legacy developer shortcuts, redundant status indicators, and stacked telemetry badges that contributed to visual clutter and vertical scroll fatigue:
+1. **Quick Test Benchmarks Row**: A carousel of 7 developer benchmark buttons (10 MB to 1 GB) occupying prime space in the "New Download" card.
+2. **Speed Benchmark Quick Card**: A duplicate mid-screen card with a "Test Speed" button, redundant with the existing "Speed Benchmark" entry in the slide-out navigation drawer.
+3. **Stacked Telemetry Badges**: Up to 6 developer debug badges (`⚡ 4 MB Chunks`, `⚡ Balanced Timeout`, `⚡ Auto 5G`, `⚡ Custom UA`) stacking vertically in the active/paused download card.
+4. **Redundant Network Status Banner**: A full-width text banner directly beneath the Wi-Fi and Cellular cards repeating information already visualized by the animated cards.
+5. **"Ready to Download" Placeholder**: A large empty-state card rendered when idle that added no utility while taking up screen height.
+
+### Decision
+Remove all 5 redundant elements from the main user interface (`MainActivity.kt`):
+1. **Removed Quick Test Benchmarks**: Pruned the carousel from the "New Download" card, placing the URL input and "Boost Download" button in direct proximity.
+2. **Removed Speed Benchmark Quick Card**: Eliminated the mid-screen benchmark card. Speed Benchmark remains accessible 24/7 via the side navigation menu (`NavigationDrawerItem`).
+3. **Cleaned Telemetry Badges**: Removed internal developer telemetry (`4 MB Chunks`, `Balanced Timeout`, `Auto 5G`, `Custom UA`) from both `Downloading` and `Paused` cards. Retained only functional user-facing badges (`⚡ Cloud Slicer Active`, `⚡ Desktop Mode Active`, and `⚡ Stream Ready` / `⚡ Buffering Stream`).
+4. **Removed Redundant Network Banner**: Eliminated the text banner below the hero network cards. The glowing cards with animated pulsing connection dots and signal labels communicate interface status directly.
+5. **Removed Idle State Placeholder**: When idle (`DownloadState.Idle`), no redundant placeholder card is rendered. The home screen cleanly presents only the network cards and the download card.
+
+### Consequences
+- Over 400 lines of layout clutter removed from `MainActivity.kt`.
+- Immediate focus on the user's primary intent: network status and download initiation.
+- All underlying features (benchmarks, auto-chunking, multi-stream routing) continue operating with full fidelity.
+- Release APK size remains ultra-lean (~1.66 MB).
+- 100% of unit tests (405 tests) and Compose UI tests pass.
