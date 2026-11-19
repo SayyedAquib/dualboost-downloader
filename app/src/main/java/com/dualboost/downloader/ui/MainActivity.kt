@@ -955,10 +955,14 @@ fun MainScreen(
                                         if (state.isSequentialMode) {
                                             Spacer(modifier = Modifier.height(4.dp))
                                             val isReady = state.isPlayable
+                                            val badgeBgColor = if (isReady) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f)
+                                            val badgeBorderColor = if (isReady) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
+                                            val badgeContentColor = if (isReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer
+
                                             Surface(
                                                 shape = RoundedCornerShape(8.dp),
-                                                color = if (isReady) Color(0xFF00E676).copy(alpha = 0.15f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
-                                                border = BorderStroke(1.dp, if (isReady) Color(0xFF00E676).copy(alpha = 0.6f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f))
+                                                color = badgeBgColor,
+                                                border = BorderStroke(1.dp, badgeBorderColor)
                                             ) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
@@ -967,7 +971,7 @@ fun MainScreen(
                                                     Icon(
                                                         imageVector = if (isReady) Icons.Rounded.PlayCircle else Icons.Rounded.PlayArrow,
                                                         contentDescription = null,
-                                                        tint = if (isReady) Color(0xFF00E676) else MaterialTheme.colorScheme.onSecondaryContainer,
+                                                        tint = badgeContentColor,
                                                         modifier = Modifier.size(12.dp)
                                                     )
                                                     Spacer(modifier = Modifier.width(4.dp))
@@ -975,7 +979,7 @@ fun MainScreen(
                                                         text = if (isReady) "⚡ Stream Ready • ${formatBytes(state.contiguousPlayableBytes)} buffered"
                                                                else "⚡ Buffering Stream • ${formatBytes(state.contiguousPlayableBytes)} / 24 MB",
                                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                                        color = if (isReady) Color(0xFF00E676) else MaterialTheme.colorScheme.onSecondaryContainer
+                                                        color = badgeContentColor
                                                     )
                                                 }
                                             }
@@ -1172,8 +1176,8 @@ fun MainScreen(
                                                 .height(48.dp),
                                             shape = RoundedCornerShape(14.dp),
                                             colors = ButtonDefaults.buttonColors(
-                                                containerColor = Color(0xFF00E676),
-                                                contentColor = Color(0xFF121212)
+                                                containerColor = MaterialTheme.colorScheme.primary,
+                                                contentColor = MaterialTheme.colorScheme.onPrimary
                                             ),
                                             contentPadding = PaddingValues(horizontal = 8.dp)
                                         ) {

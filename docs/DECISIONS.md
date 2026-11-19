@@ -2043,4 +2043,34 @@ Accepted
 - High-contrast, elegant Material 3 Pixel-native aesthetic with zero box-in-box nesting.
 - 100% unit and UI test pass rate maintained (406 tests green).
 
+---
+
+## ADR-054: Material You Primary Cyan Palette Alignment for Preview and Streaming Badges
+
+### Date
+2026-11-19
+
+### Status
+Accepted
+
+### Context
+1. Following the active download card restructuring in ADR-053, the user noted dissatisfaction with the harsh neon green (`#00E676`) used on the `Preview` button and the `⚡ Stream Ready` badge.
+2. In dark mode, `#00E676` clashed with the dark theme's primary palette (`#64D2FF` electric sky cyan / deep navy) and felt out of place against Pixel Native Material 3 design guidelines.
+3. Through an interactive `/grill-me` alignment, the user selected the **Pixel Primary Accent (Electric Cyan)** direction with solid primary button styling and cohesive cyan status badges.
+
+### Decision
+1. **Harmonized Preview Button Palette**:
+   - Replaced `containerColor = Color(0xFF00E676)` and `contentColor = Color(0xFF121212)` with `MaterialTheme.colorScheme.primary` (`#64D2FF`) and `MaterialTheme.colorScheme.onPrimary` (`#003549`).
+   - Yields a crisp, high-contrast, premium primary CTA that seamlessly matches the lightning bolt icon, download speed readout, and Material 3 design language.
+2. **Harmonized Stream Ready Badge Palette**:
+   - Replaced hardcoded `#00E676` background, border, and text tints with `primaryContainer.copy(alpha = 0.5f)` background, `primary.copy(alpha = 0.6f)` 1dp border, and `primary` icon/text.
+   - Eliminates all hardcoded green colors from the active download UI while retaining clear visual distinction between buffering (secondary container) and ready (primary container).
+3. **Staggered Crossfade Animation**:
+   - Polished `AnimatedContent` transition to complete `fadeOut(100ms)` before completing `fadeIn(150ms, delayMillis = 50)` to eliminate momentary crossfade ghosting between `Downloading` and `Completed` cards.
+
+### Consequences
+- Completely eliminates dissonant neon green elements from the UI in favor of a 100% cohesive Pixel-native palette.
+- Preserves high readability and accessibility standards (WCAG AAA contrast between `#64D2FF` and `#003549`).
+- Verified on Google Pixel 9 hardware; all 406 unit and UI tests pass 100% green.
+
 

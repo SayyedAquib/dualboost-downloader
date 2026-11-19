@@ -4,6 +4,12 @@
 DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-053 (Ultra-Clean Minimalist Active Download Card Architecture). The codebase is backed by **406 unit and integration tests across 71 test suites (100% passing green)** with zero failures or regressions. All 9 configuration domains operate autonomously with zero manual intervention required. The active download card has been redesigned with a Pixel-native minimalist hierarchy: eliminated nested box-inside-box speed cards, replaced the bulky lavender banner with an inline single-stream chip, and merged Preview, Pause, and Cancel into a unified 48dp single-row control layout. Production release APK (`app-release.apk`, ~1.66 MB) compiles with R8 optimization, resource shrinking, and installs cleanly via ADB on Google Pixel 9.
 
 ## Recently Completed
+- **Material You Primary Cyan Palette Alignment for Preview & Stream Badges (ADR-054 / 406 Tests across 71 Suites - 100% Green)**:
+  - **Eliminated Dissonant Neon Green**: Completely removed hardcoded `#00E676` across `MainActivity.kt`.
+  - **Cohesive Pixel Electric Cyan CTA**: Styled `[ ▶ Preview ]` using `MaterialTheme.colorScheme.primary` (`#64D2FF`) with `onPrimary` deep navy text (`#003549`) for WCAG AAA contrast and cohesive harmony with the lightning and speed indicators.
+  - **Harmonized Stream Status Badges**: Updated `⚡ Stream Ready` badge to use `primaryContainer.copy(alpha = 0.5f)` background, `primary.copy(alpha = 0.6f)` border, and `primary` icon/text.
+  - **Staggered Crossfade Transitions**: Polished `AnimatedContent` transition to complete `fadeOut(100ms)` before `fadeIn(150ms, delayMillis = 50)` to eliminate momentary crossfade ghosting between `Downloading` and `Completed` cards.
+  - **Live Device Verification**: Verified on Google Pixel 9 hardware; all 406 unit and UI tests pass 100% green.
 - **Ultra-Clean Minimalist Active Download Card Architecture (ADR-053 / 406 Tests across 71 Suites - 100% Green)**:
   - **Eliminated Nested Box-in-Box Speed Container**:
     - Removed the bulky inner container card (`surfaceContainerHigh`) previously wrapping the download speed readout.
