@@ -258,39 +258,22 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val drawerScope = rememberCoroutineScope()
-
-    var showInfoDialog by remember { mutableStateOf(false) }
-    var showSpeedTestSheet by remember { mutableStateOf(false) }
-    var showSettingsSheet by remember { mutableStateOf(false) }
-    var showHistorySheet by remember { mutableStateOf(false) }
     var showCancelConfirmDialog by remember { mutableStateOf(false) }
     var pendingCancelFileName by remember { mutableStateOf<String?>(null) }
     var showExitDownloadConfirmDialog by remember { mutableStateOf(false) }
 
     val downloadState by viewModel.downloadState.collectAsState()
     val socialIntakeState by viewModel.socialIntakeState.collectAsState()
-    val isAnySheetOrDialogActive = drawerState.isOpen ||
-            socialIntakeState !is com.dualboost.downloader.social.SocialIntakeState.Idle ||
-            showSpeedTestSheet ||
-            showSettingsSheet ||
-            showHistorySheet ||
-            showInfoDialog ||
+    val isAnySheetOrDialogActive = socialIntakeState !is com.dualboost.downloader.social.SocialIntakeState.Idle ||
             showCancelConfirmDialog ||
             showExitDownloadConfirmDialog
     val isDownloadRunning = downloadState is DownloadState.Downloading || downloadState is DownloadState.Probing
 
     BackHandler(enabled = isAnySheetOrDialogActive || isDownloadRunning) {
         when {
-            drawerState.isOpen -> drawerScope.launch { drawerState.close() }
             socialIntakeState !is com.dualboost.downloader.social.SocialIntakeState.Idle -> viewModel.dismissSocialIntake()
-            showInfoDialog -> showInfoDialog = false
             showCancelConfirmDialog -> showCancelConfirmDialog = false
             showExitDownloadConfirmDialog -> showExitDownloadConfirmDialog = false
-            showSpeedTestSheet -> showSpeedTestSheet = false
-            showSettingsSheet -> showSettingsSheet = false
-            showHistorySheet -> showHistorySheet = false
             isDownloadRunning -> showExitDownloadConfirmDialog = true
         }
     }
@@ -319,152 +302,39 @@ fun MainScreen(
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet(
-                drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
-                modifier = Modifier.width(310.dp)
-            ) {
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.Bolt,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(26.dp)
-                            )
+    Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Bolt,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
                         }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "DualBoost",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Bandwidth Aggregator",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                         )
                     }
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Rounded.FolderOpen, contentDescription = null) },
-                    label = { Text("Download Library", fontWeight = FontWeight.Medium) },
-                    selected = false,
-                    onClick = {
-                        drawerScope.launch { drawerState.close() }
-                        showHistorySheet = true
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
                 )
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Rounded.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                    label = { Text("Speed Benchmark", fontWeight = FontWeight.Medium) },
-                    selected = false,
-                    onClick = {
-                        drawerScope.launch { drawerState.close() }
-                        showSpeedTestSheet = true
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
-                    label = { Text("Settings", fontWeight = FontWeight.Medium) },
-                    selected = false,
-                    onClick = {
-                        drawerScope.launch { drawerState.close() }
-                        showSettingsSheet = true
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Rounded.Info, contentDescription = null) },
-                    label = { Text("About DualBoost", fontWeight = FontWeight.Medium) },
-                    selected = false,
-                    onClick = {
-                        drawerScope.launch { drawerState.close() }
-                        showInfoDialog = true
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
-                    Text(
-                        text = "DualBoost Downloader v1.0",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Android 15 (SDK 35) • Open Source CLI",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
+            )
         }
-    ) {
-        Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing,
-            topBar = {
-                CenterAlignedTopAppBar(
-                    navigationIcon = {
-                        IconButton(onClick = { drawerScope.launch { drawerState.open() } }) {
-                            Icon(
-                                imageVector = Icons.Rounded.Menu,
-                                contentDescription = "Open Navigation Menu",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    },
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Bolt,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "DualBoost",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
-                    )
-                )
-            }
-        ) { innerPadding ->
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1740,26 +1610,6 @@ fun MainScreen(
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
-    }
-
-    if (showInfoDialog) {
-        AlertDialog(
-            onDismissRequest = { showInfoDialog = false },
-            icon = { Icon(Icons.Rounded.Bolt, contentDescription = null) },
-            title = { Text("About DualBoost") },
-            text = {
-                Text(
-                    "DualBoost aggregates your Wi-Fi and Cellular (5G/LTE) connections into a single high-speed pipe.\n\n" +
-                    "It requests distinct network interfaces from Android, binds independent sockets to each interface, and downloads dynamic 4MB chunks concurrently directly to storage."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showInfoDialog = false }) {
-                    Text("Got it")
-                }
-            }
-        )
-    }
 
     if (showCancelConfirmDialog) {
         AlertDialog(
@@ -1884,29 +1734,6 @@ fun MainScreen(
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             shape = RoundedCornerShape(24.dp)
-        )
-    }
-
-    if (showHistorySheet) {
-        val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        HistoryBottomSheet(
-            viewModel = viewModel,
-            sheetState = historySheetState,
-            onDismissRequest = { showHistorySheet = false }
-        )
-    }
-
-    if (showSpeedTestSheet) {
-        SpeedTestBottomSheet(
-            viewModel = viewModel,
-            onDismiss = { showSpeedTestSheet = false }
-        )
-    }
-
-    if (showSettingsSheet) {
-        SettingsBottomSheet(
-            onDismiss = { showSettingsSheet = false },
-            viewModel = viewModel
         )
     }
 

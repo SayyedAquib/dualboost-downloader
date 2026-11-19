@@ -121,37 +121,6 @@ class MainComposeUiTest {
     }
 
     @Test
-    fun testSpeedBenchmarkBottomSheet_OpensFromDrawerAndDismissesCleanly() {
-        val viewModel = MainViewModel(repository = null)
-        composeTestRule.setContent {
-            DualBoostTheme {
-                MainScreen(
-                    viewModel = viewModel,
-                    onOpenFile = { _, _ -> },
-                    onShareFile = { _, _ -> }
-                )
-            }
-        }
-
-        // Open navigation drawer and tap Speed Benchmark
-        composeTestRule.onNodeWithContentDescription("Open Navigation Menu").performClick()
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithText("Speed Benchmark").performClick()
-        composeTestRule.waitForIdle()
-
-        // Verify Speed Benchmark Bottom Sheet is displayed
-        composeTestRule.onNodeWithText("Start Speed Benchmark").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Ephemeral stream · 0 bytes stored").assertIsDisplayed()
-
-        // Dismiss the sheet by tapping the Close button
-        composeTestRule.onNodeWithContentDescription("Close").assertIsDisplayed().performClick()
-        composeTestRule.waitForIdle()
-
-        // Verify bottom sheet dismissed and returned to main dashboard
-        composeTestRule.onNodeWithText("New Download").performScrollTo().assertIsDisplayed()
-    }
-
-    @Test
     fun testPausedState_DisplaysDiscardButtonAndPausedCard() {
         val pausedState = kotlinx.coroutines.flow.MutableStateFlow<DownloadState>(
             DownloadState.Paused(
@@ -290,26 +259,6 @@ class MainComposeUiTest {
         composeTestRule.onNodeWithText("⚡ Cloud Slicer Active").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("cloud_sliced_file.bin").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("30.0 MB/s").performScrollTo().assertIsDisplayed()
-    }
-
-    @Test
-    fun testSettingsSheet_OpensAndDisplaysElements() {
-        composeTestRule.setContent {
-            DualBoostTheme {
-                SettingsBottomSheet(
-                    onDismiss = {},
-                    viewModel = null
-                )
-            }
-        }
-
-        // Verify Settings Modal Sheet displays headers and cards
-        composeTestRule.onNodeWithText("Protection & Settings").assertIsDisplayed()
-        composeTestRule.onNodeWithText("All optimizations & security shields are active on auto-pilot").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Antivirus & Threat Guard").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Browser Identity & Escalation").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Automated Zero-Touch Engines").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Done").assertIsDisplayed()
     }
 
     @Test

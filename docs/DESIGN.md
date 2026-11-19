@@ -43,8 +43,8 @@ To ensure physical network transparency across any wallpaper palette:
 - Haptic tactile feedback (`HapticFeedbackType.LongPress` and `TextHandleMove`) on actions and completion.
 
 ## Layout & Components
-- **Top Bar**: `CenterAlignedTopAppBar` balanced with a navigation menu icon on the left opening `ModalNavigationDrawer`, the centered brand title (`[⚡] DualBoost`), and exactly 2 high-frequency quick actions (`FolderOpen` for History, `Settings` for Cloud Slicer) on the right, providing clean visual symmetry.
-- **Modal Navigation Drawer**: Sleek Material 3 slide-out drawer providing unified access to the Download Library, Speed Benchmark, Cloud Slicer Settings, and About DualBoost info.
+- **Top Bar**: Pure Minimalist `CenterAlignedTopAppBar` displaying only the centered brand title (`[⚡] DualBoost`) with zero navigation icons and zero action buttons, delivering a distraction-free, balanced header (ADR-051).
+- **Zero-Drawer Navigation**: Entire navigation drawer and hamburger menu button removed in favor of single-screen direct interaction (ADR-051).
 - **Hero Network Cards**: Dual `Card` containers with live status indicators, connection state badges, dynamic active/inactive iconography (`Wifi`/`WifiOff`, `SignalCellularAlt`/`SignalCellularOff`), dynamic 4-bar signal level meters with qualitative status (`Excellent • 4/4 bars`, `Good • 3/4 bars`, etc.), real-time Wi-Fi telemetry (`wifiDetails.richHeroLabel`: e.g. `Wi-Fi 7 (6 GHz • 2400 Mbps)`, `Wi-Fi 6 (5 GHz • 1200 Mbps)`, `Wi-Fi`), real-time cellular generation detection (`5G Cellular`, `4G LTE Cellular`, `3G Cellular`, `Cellular`), and an in-card amber advisory badge when on 4G LTE (`⚠️ 4G Active • Lower boost than 5G`).
 - **Download Action Card**: 24dp rounded elevated container with Smart Context Pill Banner (auto-detecting URLs in clipboard), quick clipboard paste, text clear, dynamic quick-test benchmark presets arranged in ascending order (10MB, 25MB, 50MB, 100MB Cloudflare, 150MB, 500MB, 1GB), selected chip visual state with primary border and lightning bolt (`⚡`) range indicators, dynamic server capability captions ("Aggregates {WifiShort} + {CellularShort} concurrently"), and prominent "Boost Download" button.
 - **Watch While Downloading Toggle (Sequential Streaming)**: Sleek interactive surface container card (`RoundedCornerShape(16.dp)`) within the New Download card featuring a 34dp circular icon badge (`Icons.Rounded.PlayCircle`), humanized title (`"Watch While Downloading"`), dynamic plain-English status caption (`"Video detected • Ready to watch while downloading"`, `"On • Downloads in order to preview early"`, or `"Off • Maximum speed for files & games"`), and a compact Material 3 Switch control for instant 1-tap toggling.
@@ -77,8 +77,8 @@ To ensure physical network transparency across any wallpaper palette:
 
 
 ### Navigation
-- Clean `CenterAlignedTopAppBar` with menu drawer trigger on the left (`48dp`) and zero right-side clutter, centering the "DualBoost" brand mark with generous breathing room.
-- Slide-out `ModalNavigationDrawer` (`ModalDrawerSheet`) for rapid access to all app destinations (Download Library, Speed Benchmark, Cloud Slicer Settings, and About dialog). Speed Benchmark is housed exclusively in the drawer, eliminating duplicate dashboard clutter (ADR-050).
+- Pure Minimalist `CenterAlignedTopAppBar` featuring exclusively the centered brand mark (`[⚡] DualBoost`) with zero navigation drawer triggers and zero top-right button clutter, providing pristine symmetry and maximum focus on the download experience (ADR-051).
+- Zero-Drawer Architecture: The legacy `ModalNavigationDrawer` has been eliminated. The app operates as an ultra-fast, single-surface utility where completed downloads are managed directly on the finished card via "Open File" and "Share" (ADR-051).
 
 ### Hero Network Cards
 - **Symmetrical Equal-Height Grid**: Side-by-side cards in `Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min))` ensuring 100% equal height across both cards.

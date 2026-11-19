@@ -179,7 +179,6 @@ open class MainViewModel(
     }
 
     val downloadState: StateFlow<DownloadState> = downloadStateOverride ?: repository?.downloadState ?: MutableStateFlow(DownloadState.Idle)
-    val speedTestState: StateFlow<com.dualboost.downloader.data.SpeedTestState> = repository?.speedTestState ?: MutableStateFlow(com.dualboost.downloader.data.SpeedTestState.Idle)
     val isWifiAvailable: StateFlow<Boolean> = repository?.isWifiAvailable ?: MutableStateFlow(false)
     val isCellularAvailable: StateFlow<Boolean> = repository?.isCellularAvailable ?: MutableStateFlow(false)
     val isRoamingActive: StateFlow<Boolean> = repository?.isRoamingActive ?: MutableStateFlow(false)
@@ -520,16 +519,6 @@ open class MainViewModel(
         val isValidHttpScheme = trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)
         return isValidHttpScheme && state !is DownloadState.Downloading && state !is DownloadState.Probing
     }
-
-    fun startSpeedTest() {
-        speedTestEngine?.startSpeedTest() ?: repository?.startSpeedTest()
-    }
-
-    fun stopSpeedTest() {
-        speedTestEngine?.stopSpeedTest() ?: repository?.stopSpeedTest()
-    }
-
-    private val speedTestEngine get() = repository?.speedTestEngine
 
     fun deleteHistoryItem(item: DownloadHistoryItem, deleteFileFromDisk: Boolean) {
         viewModelScope.launch {

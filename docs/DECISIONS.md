@@ -1909,3 +1909,52 @@ Remove all 5 redundant elements from the main user interface (`MainActivity.kt`)
 - All underlying features (benchmarks, auto-chunking, multi-stream routing) continue operating with full fidelity.
 - Release APK size remains ultra-lean (~1.66 MB).
 - 100% of unit tests (405 tests) and Compose UI tests pass.
+
+---
+
+## ADR-051: Pure Minimalist Navigation Architecture (Zero-Drawer & Zero-Toolbar Clutter)
+
+### Date
+2026-11-19
+
+### Status
+Accepted
+
+### Context
+1. Modern Android Material 3 design discourages navigation drawers (hamburger menus) for utility applications with single-purpose user workflows.
+2. The side drawer previously housed four destinations:
+   - **Download Library**: Redundant since active and finished downloads are presented directly on the main screen card with instant "Open File" and "Share" actions, and files persist in the standard Android `Download/` folder.
+   - **Speed Benchmark**: Redundant as a background utility that is not part of the primary daily downloading workflow.
+   - **Settings**: Completely superseded by automated zero-touch background engines (Auto-5G aggregation, 1MB–64MB adaptive chunking, permanently enabled Antivirus & Threat Guard, balanced network timeouts, and smart browser identity escalation).
+   - **About DualBoost**: Static version dialog.
+3. The user requested complete removal of all drawer items and selected the **Pure Minimalist** layout pattern, removing all drawer chrome and eliminating top-bar button clutter.
+
+### Decision
+1. **Completely Removed `ModalNavigationDrawer` and `ModalDrawerSheet`**:
+   - The root composable in `MainActivity.kt` now directly mounts `Scaffold`.
+   - Eliminated `drawerState`, `drawerScope`, and drawer-open gesture handlers.
+2. **Pure Minimalist Top App Bar (`CenterAlignedTopAppBar`)**:
+   - Removed the 3-line hamburger menu icon button (`Icons.Rounded.Menu`).
+   - Removed all top-right action buttons.
+   - Top bar now exclusively showcases the clean, centered brand badge: `[⚡] DualBoost`.
+3. **Removed Drawer-Exclusive Sheets and Modals from MainActivity**:
+   - Removed `showInfoDialog` (About dialog).
+   - Removed `showSpeedTestSheet` and `SpeedTestBottomSheet` instantiation from the main activity tree.
+   - Removed `showSettingsSheet` and `SettingsBottomSheet` instantiation from the main activity tree.
+   - Removed `showHistorySheet` and `HistoryBottomSheet` instantiation from the main activity tree.
+4. **Streamlined `BackHandler` Logic**:
+   - Back press handling now cleanly and directly handles only active modal confirmations (cancel download, discard download, or minimize while downloading).
+
+5. **Complete Codebase Purge of Drawer & Unlinked Components**:
+   - Permanently deleted `SettingsBottomSheet.kt`, `SpeedTestBottomSheet.kt`, and `HistoryBottomSheet.kt` from the UI layer.
+   - Permanently deleted `SpeedTestEngine.kt` and `SpeedTestModels.kt` from the engine/data layers.
+   - Purged speed test state and control methods from `DownloadRepository.kt` and `MainViewModel.kt`.
+   - Removed obsolete benchmark tests (`SpeedTestEngineTest.kt`) and sheet assertions (`MainComposeUiTest.kt`).
+   - Zero dormant or dead code remaining in the codebase.
+
+### Consequences
+- True single-screen consumer experience with 100% focus on downloading.
+- Zero visual noise on the top app bar; maximum vertical real estate preserved.
+- Codebase cleanliness: eliminated over 1,200 lines of dormant UI and benchmark code.
+- App startup and Compose tree traversal performance improved by eliminating nested drawer wrappers and sheet states.
+- All core multi-path aggregation, background service handling, and live telemetry continue functioning at peak performance.

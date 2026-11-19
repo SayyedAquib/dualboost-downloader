@@ -22,7 +22,6 @@ class DownloadRepository(
     private val context: Context,
     val networkProvider: NetworkProvider? = null,
     val engineOverride: DualDownloaderEngine? = null,
-    val speedTestEngineOverride: com.dualboost.downloader.engine.SpeedTestEngine? = null,
     val historyRepositoryOverride: DownloadHistoryRepository? = null,
     val isServiceEnabled: Boolean = (engineOverride == null),
     val thermalStatusProviderOverride: com.dualboost.downloader.thermal.ThermalStatusProvider? = null,
@@ -236,12 +235,7 @@ class DownloadRepository(
         engineOverride ?: DualDownloaderEngine(context, networkProvider ?: networkManager, historyRepository, thermalStatusProvider)
     }
 
-    val speedTestEngine: com.dualboost.downloader.engine.SpeedTestEngine by lazy {
-        speedTestEngineOverride ?: com.dualboost.downloader.engine.SpeedTestEngine(networkProvider ?: networkManager)
-    }
-
     override val downloadState: StateFlow<DownloadState> get() = downloaderEngine.downloadState
-    val speedTestState: StateFlow<SpeedTestState> get() = speedTestEngine.speedTestState
     val isWifiAvailable: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isWifiAvailable
     val isCellularAvailable: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isCellularAvailable
     val isRoamingActive: StateFlow<Boolean> get() = (networkProvider ?: networkManager).isRoamingActive
@@ -401,14 +395,6 @@ class DownloadRepository(
         } catch (_: Exception) {
             // Safe in test environments without Android service runner
         }
-    }
-
-    fun startSpeedTest() {
-        speedTestEngine.startSpeedTest()
-    }
-
-    fun stopSpeedTest() {
-        speedTestEngine.stopSpeedTest()
     }
 
     suspend fun deleteHistoryItem(itemId: String, deleteFileFromDisk: Boolean): Boolean {

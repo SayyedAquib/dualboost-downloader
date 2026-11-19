@@ -4,8 +4,6 @@ import com.dualboost.downloader.data.ChunkSnapshot
 import com.dualboost.downloader.data.ChunkStatus
 import com.dualboost.downloader.data.DownloadChunk
 import com.dualboost.downloader.data.NetworkInterfaceType
-import com.dualboost.downloader.data.SpeedTestPhase
-import com.dualboost.downloader.data.SpeedTestState
 import com.dualboost.downloader.data.formatEta
 import com.dualboost.downloader.data.formatSpeed
 import com.dualboost.downloader.data.formatSpeedComponents
@@ -153,46 +151,5 @@ class FormatAndTelemetryEdgeCasesTest {
         assertEquals(0.75f, snapshot.progress, 0.001f)
         assertEquals(NetworkInterfaceType.WIFI, snapshot.networkType)
         assertEquals(ChunkStatus.DOWNLOADING, snapshot.status)
-    }
-
-    // --- SpeedTestState.Completed & Boost Model Tests ---
-
-    @Test
-    fun testSpeedTestStateCompleted_BoostCalculationAndCompatibilityGetters() {
-        val completed = SpeedTestState.Completed(
-            wifiSpeedMBps = 15.5f,
-            cellularSpeedMBps = 25.0f,
-            dualBoostSpeedMBps = 40.5f,
-            boostGainPercent = 62
-        )
-
-        assertEquals(15.5f, completed.wifiSpeedMBps, 0.01f)
-        assertEquals(15.5f, completed.wifiSpeedMbps, 0.01f)
-
-        assertEquals(25.0f, completed.cellularSpeedMBps, 0.01f)
-        assertEquals(25.0f, completed.cellularSpeedMbps, 0.01f)
-
-        assertEquals(40.5f, completed.dualBoostSpeedMBps, 0.01f)
-        assertEquals(40.5f, completed.dualBoostSpeedMbps, 0.01f)
-
-        assertEquals(62, completed.boostGainPercent)
-    }
-
-    @Test
-    fun testSpeedTestStateRunning_ProgressAndPhase() {
-        val running = SpeedTestState.Running(
-            phase = SpeedTestPhase.TESTING_DUALBOOST,
-            currentSpeedMBps = 32.4f,
-            overallProgress = 0.85f,
-            wifiSpeedMBps = 14.0f,
-            cellularSpeedMBps = 18.4f
-        )
-
-        assertEquals(SpeedTestPhase.TESTING_DUALBOOST, running.phase)
-        assertEquals(32.4f, running.currentSpeedMBps, 0.01f)
-        assertEquals(32.4f, running.currentSpeedMbps, 0.01f)
-        assertEquals(0.85f, running.overallProgress, 0.001f)
-        assertEquals(14.0f, running.wifiSpeedMBps, 0.01f)
-        assertEquals(18.4f, running.cellularSpeedMBps, 0.01f)
     }
 }

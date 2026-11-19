@@ -2,7 +2,6 @@ package com.dualboost.downloader
 
 import app.cash.turbine.test
 import com.dualboost.downloader.data.DownloadState
-import com.dualboost.downloader.data.SpeedTestState
 import com.dualboost.downloader.ui.DEFAULT_PRESETS
 import com.dualboost.downloader.ui.MainViewModel
 import kotlinx.coroutines.runBlocking
@@ -163,16 +162,6 @@ class MainViewModelTest {
     }
 
     @Test
-    fun testSpeedTest_StateFlowAndSafeExecution_WhenRepositoryNull() {
-        val viewModel = MainViewModel(repository = null)
-        assertTrue("Speed test state must default to Idle", viewModel.speedTestState.value is SpeedTestState.Idle)
-        // Calling start/stop without repository must be safe and not crash
-        viewModel.startSpeedTest()
-        viewModel.stopSpeedTest()
-        assertTrue("Speed test state must remain Idle", viewModel.speedTestState.value is SpeedTestState.Idle)
-    }
-
-    @Test
     fun testTurbine_UrlInputStream_EmitsAccurateSequence() = runBlocking {
         val viewModel = MainViewModel(repository = null)
         viewModel.urlInput.test {
@@ -195,17 +184,6 @@ class MainViewModelTest {
             assertEquals(preset, awaitItem()) // 2. Preset selected
             viewModel.clearUrl()
             assertNull(awaitItem()) // 3. Cleared
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun testTurbine_SpeedTestStateStream_RemainsIdleWithoutRepository() = runBlocking {
-        val viewModel = MainViewModel(repository = null)
-        viewModel.speedTestState.test {
-            assertEquals(SpeedTestState.Idle, awaitItem())
-            viewModel.startSpeedTest()
-            expectNoEvents()
             cancelAndIgnoreRemainingEvents()
         }
     }
