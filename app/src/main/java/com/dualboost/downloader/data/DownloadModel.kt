@@ -10,7 +10,17 @@ enum class ChunkStatus {
     PENDING,
     DOWNLOADING,
     COMPLETED,
-    FAILED
+    FAILED;
+
+    fun canTransitionTo(next: ChunkStatus): Boolean {
+        if (this == next) return true
+        return when (this) {
+            PENDING -> next == DOWNLOADING
+            DOWNLOADING -> next == COMPLETED || next == PENDING || next == FAILED
+            COMPLETED -> next == PENDING // Controlled batch rollback on connection drop
+            FAILED -> next == PENDING || next == DOWNLOADING
+        }
+    }
 }
 
 data class DownloadChunk(
@@ -38,6 +48,20 @@ data class DownloadChunk(
     }
 
     val totalBytes: Long get() = (endByte - startByte) + 1
+
+    /**
+     * Atomically guards and executes valid state transitions for this chunk.
+     */
+    fun transitionTo(newStatus: ChunkStatus, network: NetworkInterfaceType? = null): Boolean {
+        if (!status.canTransitionTo(newStatus)) {
+            return false
+        }
+        status = newStatus
+        if (network != null) {
+            assignedNetwork = network
+        }
+        return true
+    }
 }
 
 data class ChunkSnapshot(
@@ -108,6 +132,26 @@ sealed class DownloadState {
         val isCustomUserAgent: Boolean = false,
         val timeoutBadge: String = ""
     ) : DownloadState()
+}
+
+/**
+ * Validates explicit state transitions between [DownloadState] instances.
+ * Prevents race condition clobbering across asynchronous coroutines.
+ */
+object DownloadStateValidator {
+    fun isValidTransition(from: DownloadState, to: DownloadState): Boolean {
+        if (from::class == to::class) return true
+        return when (from) {
+            is DownloadState.Idle -> to is DownloadState.Probing || to is DownloadState.Downloading || to is DownloadState.Paused || to is DownloadState.Failed || to is DownloadState.ThreatDetected
+            is DownloadState.Probing -> to is DownloadState.Downloading || to is DownloadState.ThreatDetected || to is DownloadState.Failed || to is DownloadState.Paused || to is DownloadState.Idle
+            is DownloadState.Downloading -> to is DownloadState.Completed || to is DownloadState.Paused || to is DownloadState.Failed || to is DownloadState.AutoRecovering || to is DownloadState.ThreatDetected || to is DownloadState.Idle
+            is DownloadState.AutoRecovering -> to is DownloadState.Downloading || to is DownloadState.Paused || to is DownloadState.Failed || to is DownloadState.Idle
+            is DownloadState.Paused -> to is DownloadState.Probing || to is DownloadState.Downloading || to is DownloadState.Idle || to is DownloadState.Failed
+            is DownloadState.Completed -> to is DownloadState.Idle || to is DownloadState.Probing || to is DownloadState.Downloading
+            is DownloadState.Failed -> to is DownloadState.Idle || to is DownloadState.Probing || to is DownloadState.Downloading
+            is DownloadState.ThreatDetected -> to is DownloadState.Idle || to is DownloadState.Probing || to is DownloadState.Downloading
+        }
+    }
 }
 
 /**

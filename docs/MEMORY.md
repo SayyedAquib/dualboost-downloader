@@ -1,9 +1,34 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade and security-hardened across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-055 (Production Security Hardening & Zero-Permission Privacy Isolation). The codebase is backed by **410 unit and integration tests across 71 test suites (100% passing green)** with zero failures or regressions. All sensitive preferences are stored using Android Keystore-backed AES-256-GCM encryption, broad telephony permissions have been eliminated, URL encoding bypasses in HTTP headers are blocked via RFC 5987 parsing, and the multi-stage probe engine is protected against state clobbering. Production release APK (`app-release.apk`, ~1.57 MB) compiles cleanly with R8 optimization, resource shrinking, and release signing.
+DualBoost Downloader is 100% production-grade, state-machine formalized, and security-hardened across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-056 (Explicit State Machine Architecture Across Engine, Network, and Scheduling Layers). The codebase is backed by **418 unit and integration tests across 72 test suites (100% passing green)** with zero failures or regressions. All implicit state machines (engine lifecycle, dual-interface circuit breaking, multi-stage probing, chunk transition lifecycle, queue coordination, and multi-network topology) are fully formalized into explicit, typed, and observable domain models. Production release APK (`app-release.apk`, ~1.57 MB) compiles cleanly with R8 optimization, resource shrinking, and release signing.
 
 ## Recently Completed
+- **Explicit State Machine Architecture Across Engine, Network, and Scheduling Layers (ADR-056 / 418 Tests across 72 Suites - 100% Green)**:
+  - **Engine Lifecycle State Machine (`EnginePhase.kt`)**:
+    - Replaced 3 uncoordinated `AtomicBoolean` flags (`isExecuting`, `isPaused`, `isDiscarding`) with explicit `enum class EnginePhase { IDLE, EXECUTING, PAUSED, DISCARDING }`.
+    - Eliminates $2^3 = 8$ uncoordinated states down to 4 deterministic, mutually exclusive states.
+    - Exposed reactively via `_enginePhase: MutableStateFlow<EnginePhase>` with helper predicates `isActive` and `isInterrupted`.
+  - **Dual-Interface Fault-Tolerance Circuit Breaker (`DualInterfaceCircuitBreaker.kt`)**:
+    - Replaced raw integer comparison thresholds (`wifiFailures >= 2`) with an explicit 4-state per-interface circuit breaker: `HEALTHY`, `TRIPPED`, `RECOVERING`, `EXHAUSTED`.
+    - Coordinates automatic chunk shedding to the alternate healthy link upon consecutive failures, half-open recovery probes, and global aggregate states (`BothHealthy`, `SingleInterfaceActive`, `BothTripped`, `BothExhausted`).
+  - **Multi-Stage Range Capability & Desktop Spoofing State Machine (`ProbeStateMachine.kt`)**:
+    - Modeled the multi-stage probe pipeline into explicit states: `STAGE_1_MOBILE_HEAD`, `STAGE_1_MOBILE_RANGE`, `STAGE_2_DESKTOP_SPOOF`, `STAGE_3_CLOUD_SLICER`, and typed terminal outcomes (`TERMINAL_SUCCESS`, `TERMINAL_NON_RANGE`, `TERMINAL_FAILED`).
+    - Decoupled probe state transitions into pure functional evaluators, eliminating probe-pause race conditions.
+  - **Chunk Status Transition Matrix & State Validation (`DownloadModel.kt`)**:
+    - Defined explicit `ChunkStatus.canTransitionTo(newStatus)` transition rules preventing illegal regressions.
+    - Added `DownloadChunk.transitionTo(newStatus)` with illegal transition warnings.
+    - Added `DownloadStateValidator.isValidTransition(from, to)` to guard global `DownloadState` emissions against out-of-order state transitions.
+  - **Download Queue Lifecycle (`QueueModel.kt`, `QueueCoordinator.kt`)**:
+    - Introduced `sealed class QueuePhase { Idle, Running(val activeItemId: String), Paused }`.
+    - Wired `_queuePhase` into `QueueCoordinator`, eliminating ambiguous inferential queue state checking.
+  - **Multi-Network Interface Topology Resolver (`NetworkTopology.kt`)**:
+    - Consolidated 6+ independent boolean state flows (`isWifiAvailable`, `isCellularAvailable`, `isRoamingActive`, `isVpnActive`, `isModemStandbyDetected`) into a single deterministic resolver `NetworkTopology.resolve(...)`.
+    - Exposed `networkTopology: StateFlow<NetworkTopology>` across `NetworkProvider`, `DualNetworkManager`, `DownloadRepository`, and `MainViewModel`.
+  - **Comprehensive State Machine Test Suite (`ExplicitStateMachinesTest.kt`)**:
+    - Added 8 dedicated unit test methods verifying `EnginePhase` exclusivity, `DualInterfaceCircuitBreaker` trip/recover/exhaust transitions, `ProbeStateMachine` progression, `ChunkStatus` transition matrices, `DownloadStateValidator` legality checks, `QueuePhase` state flows, and `NetworkTopology` precedence rules.
+    - Full test suite passed 100% green (`.\gradlew.bat test`, 418 tests across 72 test suites).
+    - Production release APK assembled cleanly via R8 (`.\gradlew.bat assembleRelease`).
 - **Production Security Hardening & Zero-Permission Privacy Isolation (ADR-055 / 410 Tests across 71 Suites - 100% Green)**:
   - **Keystore-Backed Encrypted Preferences (`SecurityPreferences.kt`)**:
     - Migrated `SecurityPreferences` to `EncryptedSharedPreferences` backed by `MasterKey.KeyScheme.AES256_GCM`.
@@ -741,6 +766,7 @@ DualBoost Downloader is 100% production-grade and security-hardened across all A
 - ADR-028: Persistent Download History & File Library with Safe Android FileProvider Actions.
 - ADR-030: Strict Modem State Adherence & Elimination of False 5G Telemetry on LTE Carrier Aggregation.
 - ADR-031: Comprehensive Security Audit Remediation, Download Integrity Lockdown & Lifecycle Hardening.
+- ADR-056: Explicit State Machine Architecture Across Engine, Network, and Scheduling Layers.
 
 ## Operational Guidelines & Communication Rules
 - **Mandatory Adversarial & Test-First Workflow (ADR-031 / Workflow Rule)**:

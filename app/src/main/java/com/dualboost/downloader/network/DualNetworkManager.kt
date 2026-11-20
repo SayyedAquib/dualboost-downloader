@@ -204,6 +204,16 @@ interface NetworkProvider {
         get() = MutableStateFlow(CellularGeneration.FIVE_G)
     val wifiDetails: StateFlow<WifiDetails>
         get() = MutableStateFlow(WifiDetails.DISCONNECTED)
+    val networkTopology: StateFlow<NetworkTopology>
+        get() = MutableStateFlow(
+            NetworkTopology.resolve(
+                isWifiAvailable = isWifiAvailable.value,
+                isCellularAvailable = isCellularAvailable.value,
+                isRoamingActive = isRoamingActive.value,
+                isVpnActive = isVpnActive.value,
+                isModemStandbyDetected = isModemStandbyDetected.value
+            )
+        )
     val isCellularKeepAliveActive: StateFlow<Boolean>
         get() = MutableStateFlow(false)
     fun acquireCellularKeepAlive() {}
@@ -256,6 +266,19 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
 
     private val _cellularGeneration = MutableStateFlow(CellularGeneration.UNKNOWN)
     override val cellularGeneration: StateFlow<CellularGeneration> = _cellularGeneration.asStateFlow()
+
+    private val _networkTopology = MutableStateFlow(NetworkTopology.DISCONNECTED)
+    override val networkTopology: StateFlow<NetworkTopology> = _networkTopology.asStateFlow()
+
+    private fun reevaluateTopology() {
+        _networkTopology.value = NetworkTopology.resolve(
+            isWifiAvailable = _isWifiAvailable.value,
+            isCellularAvailable = _isCellularAvailable.value,
+            isRoamingActive = _isRoamingActive.value,
+            isVpnActive = _isVpnActive.value,
+            isModemStandbyDetected = _isModemStandbyDetected.value
+        )
+    }
 
     @Volatile private var latestOverrideNetworkType = TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE
     @Volatile private var cellularConfig = CellularNetworkConfig.DEFAULT
@@ -353,10 +376,12 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
             val isVpn = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
             _isVpnActive.value = isVpn
+            reevaluateTopology()
         }
 
         override fun onLost(network: Network) {
             _isVpnActive.value = false
+            reevaluateTopology()
         }
     }
 
@@ -374,6 +399,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 })
                 .build()
             _isWifiAvailable.value = true
+            reevaluateTopology()
             connectivityManager?.getNetworkCapabilities(network)?.let { updateWifiSignal(it) }
         }
 
@@ -390,6 +416,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 _isWifiAvailable.value = false
                 _wifiSignalLevel.value = 0
                 _wifiDetails.value = WifiDetails.DISCONNECTED
+                reevaluateTopology()
             }
         }
     }
@@ -409,6 +436,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 .build()
             _isCellularAvailable.value = true
             _isModemStandbyDetected.value = false
+            reevaluateTopology()
             connectivityManager?.getNetworkCapabilities(network)?.let { updateCellularDetails(it) }
         }
 
@@ -434,6 +462,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 if (_isWifiAvailable.value) {
                     _isModemStandbyDetected.value = true
                 }
+                reevaluateTopology()
             }
         }
     }
@@ -509,6 +538,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         val isRoaming = !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING)
         _isRoamingActive.value = isRoaming
         _isModemStandbyDetected.value = false
+        reevaluateTopology()
         detectCarrierName()
         reevaluateCellularGeneration(capabilities)
     }

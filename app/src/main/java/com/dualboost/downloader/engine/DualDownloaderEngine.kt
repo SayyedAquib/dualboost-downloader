@@ -80,14 +80,19 @@ class DualDownloaderEngine(
     private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
 
+    private val _enginePhase = MutableStateFlow(EnginePhase.IDLE)
+    val enginePhase: StateFlow<EnginePhase> = _enginePhase.asStateFlow()
+
+    // Explicit state query convenience properties
+    val isExecuting: Boolean get() = _enginePhase.value == EnginePhase.EXECUTING
+    val isPaused: Boolean get() = _enginePhase.value == EnginePhase.PAUSED
+    val isDiscarding: Boolean get() = _enginePhase.value == EnginePhase.DISCARDING
+
     @Volatile private var downloadJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // Active calls tracking to guarantee instantaneous cancellation upon Pause / Cancel
     private val activeCalls = ConcurrentHashMap.newKeySet<Call>()
-    private val isPaused = AtomicBoolean(false)
-    private val isDiscarding = AtomicBoolean(false)
-    private val isExecuting = AtomicBoolean(false)
     internal val activeCallsCount: Int get() = activeCalls.size
     internal var initialSpeedMBps: Double = 0.0
 
@@ -102,14 +107,14 @@ class DualDownloaderEngine(
     @Volatile private var currentUrl: String? = null
 
     private fun registerActiveCall(call: Call): Boolean {
-        val isJobAlive = downloadJob?.isActive ?: isExecuting.get()
-        if (isPaused.get() || !isJobAlive) {
+        val isJobAlive = downloadJob?.isActive ?: (_enginePhase.value == EnginePhase.EXECUTING)
+        if (_enginePhase.value != EnginePhase.EXECUTING || !isJobAlive) {
             try { call.cancel() } catch (_: Exception) {}
             return false
         }
         activeCalls.add(call)
-        val secondJobAlive = downloadJob?.isActive ?: isExecuting.get()
-        if (isPaused.get() || !secondJobAlive) {
+        val secondJobAlive = downloadJob?.isActive ?: (_enginePhase.value == EnginePhase.EXECUTING)
+        if (_enginePhase.value != EnginePhase.EXECUTING || !secondJobAlive) {
             try { call.cancel() } catch (_: Exception) {}
             activeCalls.remove(call)
             return false
@@ -117,9 +122,18 @@ class DualDownloaderEngine(
         return true
     }
 
+    private fun setDownloadState(newState: DownloadState) {
+        val current = _downloadState.value
+        if (!com.dualboost.downloader.data.DownloadStateValidator.isValidTransition(current, newState)) {
+            Log.w(TAG, "Prevented invalid state transition: ${current::class.simpleName} -> ${newState::class.simpleName}")
+            return
+        }
+        _downloadState.value = newState
+    }
+
     private fun setProbingState(message: String) {
-        if (!isPaused.get() && !isDiscarding.get()) {
-            _downloadState.value = DownloadState.Probing(message)
+        if (_enginePhase.value == EnginePhase.EXECUTING) {
+            setDownloadState(DownloadState.Probing(message))
         }
     }
 
@@ -599,14 +613,12 @@ class DualDownloaderEngine(
         if (previousState is DownloadState.Downloading && currentUrl == sanitizedUrl) return
 
         workerExecutionCounts.clear()
-        isDiscarding.set(false)
-        isPaused.set(true)
+        _enginePhase.value = EnginePhase.PAUSED
         downloadJob?.cancel()
         activeCalls.forEach { try { it.cancel() } catch (_: Exception) {} }
         activeCalls.clear()
 
-        isPaused.set(false)
-        isExecuting.set(true)
+        _enginePhase.value = EnginePhase.EXECUTING
         downloadJob = scope.launch {
             try {
                 networkManager.acquireCellularKeepAlive()
@@ -615,12 +627,12 @@ class DualDownloaderEngine(
             } catch (e: ThreatDetectedException) {
                 Log.w(TAG, "Threat detected during download: ${e.threat.description}")
                 discardDownload(targetDir, e.fileName)
-                _downloadState.value = DownloadState.ThreatDetected(e.threat, e.url, e.fileName)
+                setDownloadState(DownloadState.ThreatDetected(e.threat, e.url, e.fileName))
             } catch (e: CancellationException) {
-                if (!isDiscarding.get()) {
+                if (_enginePhase.value != EnginePhase.DISCARDING) {
                     val lastState = _downloadState.value
                     if (lastState is DownloadState.Downloading) {
-                        _downloadState.value = DownloadState.Paused(
+                        setDownloadState(DownloadState.Paused(
                             fileName = lastState.fileName,
                             filePath = currentOutputFile?.absolutePath ?: "",
                             totalBytes = lastState.totalBytes,
@@ -630,17 +642,19 @@ class DualDownloaderEngine(
                             isDesktopSpoofed = lastState.isDesktopSpoofed,
                             isCloudSlicerActive = lastState.isCloudSlicerActive,
                             isCustomUserAgent = lastState.isCustomUserAgent
-                        )
+                        ))
                     } else if (lastState !is DownloadState.Paused && lastState !is DownloadState.Idle) {
-                        _downloadState.value = DownloadState.Paused(url = currentUrl ?: sanitizedUrl)
+                        setDownloadState(DownloadState.Paused(url = currentUrl ?: sanitizedUrl))
                     }
+                    _enginePhase.value = EnginePhase.PAUSED
                     Log.d(TAG, "Download paused/cancelled")
                 } else {
-                    _downloadState.value = DownloadState.Idle
+                    setDownloadState(DownloadState.Idle)
+                    _enginePhase.value = EnginePhase.IDLE
                     Log.d(TAG, "Download discarded")
                 }
             } catch (e: Exception) {
-                if (isPaused.get() || isDiscarding.get() || e.message?.contains("Canceled", ignoreCase = true) == true) {
+                if (_enginePhase.value.isInterrupted || e.message?.contains("Canceled", ignoreCase = true) == true) {
                     Log.d(TAG, "Download paused/cancelled via socket abort")
                     return@launch
                 }
@@ -651,19 +665,21 @@ class DualDownloaderEngine(
                 } else {
                     e.localizedMessage ?: "Unknown error"
                 }
-                _downloadState.value = DownloadState.Failed(errorMessage, currentUrl ?: sanitizedUrl)
+                _enginePhase.value = EnginePhase.IDLE
+                setDownloadState(DownloadState.Failed(errorMessage, currentUrl ?: sanitizedUrl))
             } finally {
                 thermalStatusProvider.stopListening()
                 networkManager.releaseCellularKeepAlive()
-                isExecuting.set(false)
+                if (_enginePhase.value == EnginePhase.EXECUTING) {
+                    _enginePhase.value = EnginePhase.IDLE
+                }
             }
         }
     }
 
     fun pauseDownload() {
         val lastState = _downloadState.value
-        isPaused.set(true)
-        isExecuting.set(false)
+        _enginePhase.value = EnginePhase.PAUSED
         downloadJob?.cancel()
         activeCalls.forEach { call ->
             try {
@@ -673,7 +689,7 @@ class DualDownloaderEngine(
         activeCalls.clear()
 
         if (lastState is DownloadState.Downloading) {
-            _downloadState.value = DownloadState.Paused(
+            setDownloadState(DownloadState.Paused(
                 fileName = lastState.fileName,
                 filePath = currentOutputFile?.absolutePath ?: "",
                 totalBytes = lastState.totalBytes,
@@ -683,9 +699,9 @@ class DualDownloaderEngine(
                 isDesktopSpoofed = lastState.isDesktopSpoofed,
                 isCloudSlicerActive = lastState.isCloudSlicerActive,
                 isCustomUserAgent = lastState.isCustomUserAgent
-            )
+            ))
         } else if (lastState !is DownloadState.Paused && lastState !is DownloadState.Idle) {
-            _downloadState.value = DownloadState.Paused(url = currentUrl ?: "")
+            setDownloadState(DownloadState.Paused(url = currentUrl ?: ""))
         }
     }
 
@@ -700,9 +716,7 @@ class DualDownloaderEngine(
     }
 
     fun discardDownload(targetDir: File = getDefaultDownloadDir(), fileName: String? = null) {
-        isDiscarding.set(true)
-        isPaused.set(true)
-        isExecuting.set(false)
+        _enginePhase.value = EnginePhase.DISCARDING
         downloadJob?.cancel()
         activeCalls.forEach { call ->
             try { call.cancel() } catch (_: Exception) {}
@@ -743,12 +757,14 @@ class DualDownloaderEngine(
         }
         currentOutputFile = null
         currentUrl = null
-        _downloadState.value = DownloadState.Idle
+        _enginePhase.value = EnginePhase.IDLE
+        setDownloadState(DownloadState.Idle)
     }
 
     fun resetToIdle() {
         if (_downloadState.value is DownloadState.Failed || _downloadState.value is DownloadState.Completed) {
-            _downloadState.value = DownloadState.Idle
+            _enginePhase.value = EnginePhase.IDLE
+            setDownloadState(DownloadState.Idle)
         }
     }
 
@@ -782,40 +798,16 @@ class DualDownloaderEngine(
         }
     }
 
-    private suspend fun executeDownload(
+    internal fun executeProbeSequence(
         url: String,
+        initialFileName: String,
         targetDir: File,
-        forceSequentialMode: Boolean? = null,
-        allowDangerousBypass: Boolean = false,
-        concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT,
-        chunkConfigOverride: ChunkConfig? = null,
-        userAgentConfigOverride: UserAgentConfig? = null,
-        timeoutConfigOverride: TimeoutConfig? = null
-    ) {
-        val activeTimeoutConfig = timeoutConfigOverride ?: this.timeoutConfig
-        val activeUserAgentConfig = userAgentConfigOverride ?: this.userAgentConfig
-        var effectiveUserAgent = activeUserAgentConfig.resolveUserAgentString()
-        var fileName = extractFileName(url)
-        val shouldInspectThreats = !allowDangerousBypass && SecurityPreferences.isThreatGuardEnabled(context)
-
-        // Pre-flight Threat Assessment
-        if (shouldInspectThreats) {
-            val preFlightAssessment = threatEngine.inspectUrlAndHeaders(url, emptyMap(), userReportedName = fileName)
-            if (preFlightAssessment.isThreat) {
-                _downloadState.value = DownloadState.ThreatDetected(preFlightAssessment, url, fileName)
-                return
-            }
-            if (cloudScanner != null) {
-                val cloudAssessment = cloudScanner.checkUrlReputation(url)
-                if (cloudAssessment.isThreat) {
-                    _downloadState.value = DownloadState.ThreatDetected(cloudAssessment, url, fileName)
-                    return
-                }
-            }
-        }
-
+        activeUserAgentConfig: UserAgentConfig,
+        shouldInspectThreats: Boolean
+    ): ProbeResult {
         setProbingState("Connecting and probing server capabilities...")
 
+        var currentStage = ProbeStage.INITIAL_HEAD
         var contentLength: Long = -1L
         var supportsRanges = false
         var etag: String? = null
@@ -823,6 +815,8 @@ class DualDownloaderEngine(
         var isDesktopSpoofed = false
         var isCloudSlicerActive = false
         var effectiveUrl = url
+        var effectiveUserAgent = activeUserAgentConfig.resolveUserAgentString()
+        var fileName = initialFileName
 
         // Check if existing sidecar metadata indicates previous desktop spoofing or cloud slicer
         val initialMetaFile = getMetaFile(targetDir, fileName)
@@ -849,7 +843,9 @@ class DualDownloaderEngine(
         }
 
         // --- STAGE 1: Standard Probe (Mobile by default, or Desktop/Slicer if previously engaged) ---
-        if (isPaused.get() || isDiscarding.get()) return
+        if (_enginePhase.value != EnginePhase.EXECUTING) {
+            return ProbeResult(currentStage, supportsRanges, contentLength, etag, lastModified, fileName, isDesktopSpoofed, isCloudSlicerActive, effectiveUrl, effectiveUserAgent)
+        }
         try {
             val headRequest = if (isCloudSlicerActive) {
                 val secret = SlicerPreferences.getSlicerSecret(context)
@@ -880,19 +876,23 @@ class DualDownloaderEngine(
                         response.header("Content-Disposition")?.let { probeHeaders["Content-Disposition"] = it }
                         val headerAssessment = threatEngine.inspectUrlAndHeaders(effectiveUrl, probeHeaders, userReportedName = fileName)
                         if (headerAssessment.isThreat) {
-                            _downloadState.value = DownloadState.ThreatDetected(headerAssessment, url, fileName)
-                            return
+                            throw ThreatDetectedException(headerAssessment, url, fileName)
                         }
                     }
                 }
             }
+        } catch (e: ThreatDetectedException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "HEAD probe failed (${sanitizeLogMessage(e.message)}), falling back to GET range probe")
         }
 
         // If HEAD didn't yield range or length, test with GET range 0-0
-        if (isPaused.get() || isDiscarding.get()) return
+        if (_enginePhase.value != EnginePhase.EXECUTING) {
+            return ProbeResult(currentStage, supportsRanges, contentLength, etag, lastModified, fileName, isDesktopSpoofed, isCloudSlicerActive, effectiveUrl, effectiveUserAgent)
+        }
         if (contentLength <= 0 || !supportsRanges) {
+            currentStage = ProbeStage.INITIAL_GET_RANGE
             val rangeProbeRequest = if (isCloudSlicerActive) {
                 val secret = SlicerPreferences.getSlicerSecret(context)
                 Request.Builder().url(effectiveUrl).header("Range", "bytes=0-0").apply {
@@ -935,21 +935,23 @@ class DualDownloaderEngine(
                         response.header("Content-Disposition")?.let { probeHeaders["Content-Disposition"] = it }
                         val headerAssessment = threatEngine.inspectUrlAndHeaders(effectiveUrl, probeHeaders, userReportedName = fileName)
                         if (headerAssessment.isThreat) {
-                            _downloadState.value = DownloadState.ThreatDetected(headerAssessment, url, fileName)
-                            return
+                            throw ThreatDetectedException(headerAssessment, url, fileName)
                         }
                     }
                 }
+            } catch (e: ThreatDetectedException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Initial range probe failed: ${sanitizeLogMessage(e.message)}")
             }
         }
 
         // --- STAGE 2: Adaptive Desktop Probe ---
-        // If mobile probe did not unlock byte ranges and we didn't already force desktop, retry with Windows Chrome Desktop headers!
-        if (isPaused.get() || isDiscarding.get()) return
+        if (_enginePhase.value != EnginePhase.EXECUTING) {
+            return ProbeResult(currentStage, supportsRanges, contentLength, etag, lastModified, fileName, isDesktopSpoofed, isCloudSlicerActive, effectiveUrl, effectiveUserAgent)
+        }
         if (!supportsRanges && !forceDesktop) {
-            if (isPaused.get() || isDiscarding.get()) return
+            currentStage = ProbeStage.DESKTOP_SPOOF
             Log.i(TAG, "Server rejected byte ranges on mobile headers. Triggering Stage 2 probe with Windows 11 Desktop spoofing...")
             setProbingState("Adapting desktop mode for multi-channel support...")
 
@@ -1016,12 +1018,13 @@ class DualDownloaderEngine(
         }
 
         // --- STAGE 3: Personal Cloud Slicer Probe ---
-        // If server still rejected byte ranges after Desktop spoofing, check if user configured a personal Cloud Slicer worker
-        if (isPaused.get() || isDiscarding.get()) return
+        if (_enginePhase.value != EnginePhase.EXECUTING) {
+            return ProbeResult(currentStage, supportsRanges, contentLength, etag, lastModified, fileName, isDesktopSpoofed, isCloudSlicerActive, effectiveUrl, effectiveUserAgent)
+        }
         if (!supportsRanges && !isCloudSlicerActive) {
             val slicerUrl = SlicerPreferences.getSlicerUrl(context)
             if (slicerUrl.isNotBlank()) {
-                if (isPaused.get() || isDiscarding.get()) return
+                currentStage = ProbeStage.CLOUD_SLICER
                 val slicerSecret = SlicerPreferences.getSlicerSecret(context)
                 val targetSlicedUrl = SlicerPreferences.buildSlicedUrl(slicerUrl, url, slicerSecret)
                 Log.i(TAG, "Server rejected direct byte ranges. Triggering Stage 3 probe via Personal Cloud Slicer: ${sanitizeUrlForLog(slicerUrl)}")
@@ -1074,7 +1077,77 @@ class DualDownloaderEngine(
             }
         }
 
-        if (isPaused.get() || isDiscarding.get()) return
+        val finalStage = if (supportsRanges && contentLength > 0) {
+            ProbeStage.RESOLVED_DUAL_STREAM
+        } else {
+            ProbeStage.FALLBACK_SINGLE_STREAM
+        }
+
+        return ProbeResult(
+            stage = finalStage,
+            supportsRanges = supportsRanges,
+            contentLength = contentLength,
+            etag = etag,
+            lastModified = lastModified,
+            fileName = fileName,
+            isDesktopSpoofed = isDesktopSpoofed,
+            isCloudSlicerActive = isCloudSlicerActive,
+            effectiveUrl = effectiveUrl,
+            effectiveUserAgent = effectiveUserAgent
+        )
+    }
+
+    private suspend fun executeDownload(
+        url: String,
+        targetDir: File,
+        forceSequentialMode: Boolean? = null,
+        allowDangerousBypass: Boolean = false,
+        concurrencyConfig: ConcurrencyConfig = ConcurrencyConfig.DEFAULT,
+        chunkConfigOverride: ChunkConfig? = null,
+        userAgentConfigOverride: UserAgentConfig? = null,
+        timeoutConfigOverride: TimeoutConfig? = null
+    ) {
+        val activeTimeoutConfig = timeoutConfigOverride ?: this.timeoutConfig
+        val activeUserAgentConfig = userAgentConfigOverride ?: this.userAgentConfig
+        var effectiveUserAgent = activeUserAgentConfig.resolveUserAgentString()
+        var fileName = extractFileName(url)
+        val shouldInspectThreats = !allowDangerousBypass && SecurityPreferences.isThreatGuardEnabled(context)
+
+        // Pre-flight Threat Assessment
+        if (shouldInspectThreats) {
+            val preFlightAssessment = threatEngine.inspectUrlAndHeaders(url, emptyMap(), userReportedName = fileName)
+            if (preFlightAssessment.isThreat) {
+                setDownloadState(DownloadState.ThreatDetected(preFlightAssessment, url, fileName))
+                return
+            }
+            if (cloudScanner != null) {
+                val cloudAssessment = cloudScanner.checkUrlReputation(url)
+                if (cloudAssessment.isThreat) {
+                    setDownloadState(DownloadState.ThreatDetected(cloudAssessment, url, fileName))
+                    return
+                }
+            }
+        }
+
+        val probeResult = executeProbeSequence(
+            url = url,
+            initialFileName = fileName,
+            targetDir = targetDir,
+            activeUserAgentConfig = activeUserAgentConfig,
+            shouldInspectThreats = shouldInspectThreats
+        )
+
+        if (_enginePhase.value != EnginePhase.EXECUTING) return
+
+        val contentLength = probeResult.contentLength
+        val supportsRanges = probeResult.supportsRanges
+        val etag = probeResult.etag
+        val lastModified = probeResult.lastModified
+        fileName = probeResult.fileName
+        val isDesktopSpoofed = probeResult.isDesktopSpoofed
+        val isCloudSlicerActive = probeResult.isCloudSlicerActive
+        val effectiveUrl = probeResult.effectiveUrl
+        effectiveUserAgent = probeResult.effectiveUserAgent
 
         val outputFile = resolveWritableOutputFile(targetDir, fileName, url)
         val actualTargetDir = outputFile.parentFile ?: targetDir
@@ -1219,12 +1292,8 @@ class DualDownloaderEngine(
         )
 
 
-        // Interface Circuit-Breaker consecutive failure counters
-        val wifiFailures = AtomicInteger(0)
-        val cellularFailures = AtomicInteger(0)
-        val chunkFailures = ConcurrentHashMap<Int, AtomicInteger>()
-        val autoRecoveryCycles = AtomicInteger(0)
-        val isPausedDueToExhaustion = AtomicBoolean(false)
+        // Interface Circuit-Breaker explicit state coordinator
+        val circuitBreaker = DualInterfaceCircuitBreaker()
 
         // Speed calculation meters
         var lastWifiBytes = 0L
@@ -1357,7 +1426,7 @@ class DualDownloaderEngine(
 
                                 if (tailBytesReceived == expectedTailBytes) {
                                     queueMutex.withLock {
-                                        straggler.status = ChunkStatus.COMPLETED
+                                        straggler.transitionTo(ChunkStatus.COMPLETED)
                                         straggler.downloadedBytes = straggler.totalBytes
                                         completedIndices.add(straggler.index)
                                         saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize, userAgent = effectiveUserAgent)
@@ -1381,45 +1450,37 @@ class DualDownloaderEngine(
             ) {
                 while (isActive) {
                     // 1. Check if the entire file is already completed or paused due to failure exhaustion
-                    if (isPausedDueToExhaustion.get()) break
+                    if (circuitBreaker.isExhausted()) break
                     val allCompleted = queueMutex.withLock {
                         pendingChunks.all { it.status == ChunkStatus.COMPLETED }
                     }
                     if (allCompleted) break
 
                     // 2. Check interface circuit-breaker
-                    val isCircuitBroken = if (interfaceType == NetworkInterfaceType.WIFI) {
-                        wifiFailures.get() >= 2
+                    val otherHealthy = if (interfaceType == NetworkInterfaceType.WIFI) {
+                        circuitBreaker.evaluateState(NetworkInterfaceType.CELLULAR, false) == CircuitBreakerState.HEALTHY && networkManager.isCellularAvailable.value
                     } else {
-                        cellularFailures.get() >= 2
+                        circuitBreaker.evaluateState(NetworkInterfaceType.WIFI, false) == CircuitBreakerState.HEALTHY && networkManager.isWifiAvailable.value
                     }
 
-                    if (isCircuitBroken) {
-                        val otherHealthy = if (interfaceType == NetworkInterfaceType.WIFI) {
-                            cellularFailures.get() < 2 && networkManager.isCellularAvailable.value
-                        } else {
-                            wifiFailures.get() < 2 && networkManager.isWifiAvailable.value
-                        }
-
-                        if (otherHealthy) {
-                            // Other interface is healthy; back off this interface to avoid holding up chunks
+                    val circuitState = circuitBreaker.evaluateState(interfaceType, otherHealthy)
+                    when (circuitState) {
+                        CircuitBreakerState.HEALTHY -> { /* proceed */ }
+                        CircuitBreakerState.TRIPPED -> {
                             delay(1500)
                             continue
-                        } else {
-                            // SEC-AUDIT M-4: Both interfaces broken/unhealthy! Coordinate AutoRecovering with backoff
+                        }
+                        CircuitBreakerState.RECOVERING -> {
                             var shouldBreak = false
                             queueMutex.withLock {
-                                if (!isPausedDueToExhaustion.get()) {
-                                    val cycle = autoRecoveryCycles.incrementAndGet()
-                                    if (cycle <= 3) {
-                                        _downloadState.value = DownloadState.AutoRecovering(
+                                if (!circuitBreaker.isExhausted()) {
+                                    val cycle = circuitBreaker.attemptCoordinatedRecovery()
+                                    if (cycle != null) {
+                                        setDownloadState(DownloadState.AutoRecovering(
                                             message = "Reconnecting networks...",
                                             retryAttempt = cycle
-                                        )
-                                        wifiFailures.set(0)
-                                        cellularFailures.set(0)
+                                        ))
                                     } else {
-                                        isPausedDueToExhaustion.set(true)
                                         shouldBreak = true
                                     }
                                 } else {
@@ -1427,10 +1488,10 @@ class DualDownloaderEngine(
                                 }
                             }
                             if (shouldBreak) break
-                            val backoff = min(1000L * (1L shl (autoRecoveryCycles.get().coerceAtLeast(1) - 1)), 4000L)
-                            delay(backoff)
+                            delay(circuitBreaker.calculateRecoveryBackoffMs())
                             continue
                         }
+                        CircuitBreakerState.EXHAUSTED -> break
                     }
 
                     // Dynamic Thermal Backoff (Slice 3): shed or throttle cellular load under heat
@@ -1512,8 +1573,7 @@ class DualDownloaderEngine(
                     if (client == null) {
                         queueMutex.withLock {
                             for (c in chunkBatch) {
-                                c.status = ChunkStatus.PENDING
-                                c.assignedNetwork = NetworkInterfaceType.DEFAULT
+                                c.transitionTo(ChunkStatus.PENDING, NetworkInterfaceType.DEFAULT)
                             }
                         }
                         delay(1000)
@@ -1596,11 +1656,7 @@ class DualDownloaderEngine(
                                     if (batchBytesReceived == expectedBatchBytes) {
                                         success = true
                                         // Reset circuit breaker on success
-                                        if (interfaceType == NetworkInterfaceType.WIFI) {
-                                            wifiFailures.set(0)
-                                        } else {
-                                            cellularFailures.set(0)
-                                        }
+                                        circuitBreaker.recordSuccess(interfaceType)
                                     } else {
                                         // Truncated batch! Roll back byte counters
                                         totalDownloadedBytes.addAndGet(-batchBytesReceived)
@@ -1622,16 +1678,10 @@ class DualDownloaderEngine(
                         if (e is CancellationException) throw e
                         if (e is ThreatDetectedException) throw e
                         Log.w(TAG, "Batch ${firstChunk.index}-${lastChunk.index} failed on $interfaceType: ${sanitizeLogMessage(e.message)}")
-                        if (interfaceType == NetworkInterfaceType.WIFI) {
-                            wifiFailures.incrementAndGet()
-                        } else {
-                            cellularFailures.incrementAndGet()
-                        }
+                        circuitBreaker.recordFailure(interfaceType)
                         for (c in chunkBatch) {
-                            val attempts = chunkFailures.computeIfAbsent(c.index) { AtomicInteger(0) }.incrementAndGet()
-                            if (attempts >= activeTimeoutConfig.effectiveMaxChunkRetries) {
+                            if (circuitBreaker.recordChunkFailure(c.index, activeTimeoutConfig.effectiveMaxChunkRetries)) {
                                 Log.w(TAG, "Chunk ${c.index} exceeded retry limit (${activeTimeoutConfig.effectiveMaxChunkRetries}). Escalating to auto-pause.")
-                                isPausedDueToExhaustion.set(true)
                             }
                         }
                     }
@@ -1640,7 +1690,7 @@ class DualDownloaderEngine(
                         if (success) {
                             workerExecutionCounts.computeIfAbsent("${interfaceType.name}_$workerIndex") { AtomicInteger(0) }.incrementAndGet()
                             for (c in chunkBatch) {
-                                c.status = ChunkStatus.COMPLETED
+                                c.transitionTo(ChunkStatus.COMPLETED)
                                 c.downloadedBytes = c.totalBytes
                                 completedIndices.add(c.index)
                             }
@@ -1648,8 +1698,7 @@ class DualDownloaderEngine(
                         } else {
                             // Return all chunks in the batch to pending queue for immediate re-dispatch
                             for (c in chunkBatch) {
-                                c.status = ChunkStatus.PENDING
-                                c.assignedNetwork = NetworkInterfaceType.DEFAULT
+                                c.transitionTo(ChunkStatus.PENDING, NetworkInterfaceType.DEFAULT)
                                 c.downloadedBytes = 0L
                             }
                         }
@@ -1692,7 +1741,7 @@ class DualDownloaderEngine(
             }
             monitorJob.cancel()
 
-            if (isPausedDueToExhaustion.get()) {
+            if (circuitBreaker.isExhausted()) {
                 saveCompletedChunks(metaFile, url, contentLength, completedIndices, etag, lastModified, isDesktopSpoofed, isCloudSlicerActive, effectiveChunkSize, userAgent = effectiveUserAgent)
                 val completedBytes = completedIndices.sumOf { chunkIndex ->
                     val start = chunkIndex * effectiveChunkSize
@@ -1700,7 +1749,7 @@ class DualDownloaderEngine(
                     max(0L, (end - start) + 1)
                 }
                 val progress = if (contentLength > 0) completedBytes.toFloat() / contentLength.toFloat() else 0f
-                _downloadState.value = DownloadState.Paused(
+                setDownloadState(DownloadState.Paused(
                     fileName = fileName,
                     filePath = outputFile.absolutePath,
                     totalBytes = contentLength,
@@ -1710,7 +1759,7 @@ class DualDownloaderEngine(
                     isDesktopSpoofed = isDesktopSpoofed,
                     isCloudSlicerActive = isCloudSlicerActive,
                     isCustomUserAgent = (activeUserAgentConfig.preset != UserAgentPreset.NATIVE && !isDesktopSpoofed)
-                )
+                ))
                 return@coroutineScope
             }
 
@@ -1724,7 +1773,7 @@ class DualDownloaderEngine(
             }
         }
 
-        if (isPausedDueToExhaustion.get()) return
+        if (circuitBreaker.isExhausted()) return
 
         try {
             if (metaFile.exists()) metaFile.delete()
@@ -1756,7 +1805,7 @@ class DualDownloaderEngine(
             averageSpeedMBps = avgSpeed,
             isDualChannel = isDual
         )
-        _downloadState.value = completedState
+        setDownloadState(completedState)
 
         try {
             historyRepository.recordDownload(
@@ -1912,7 +1961,7 @@ class DualDownloaderEngine(
                     averageSpeedMBps = avgSpeed,
                     isDualChannel = false
                 )
-                _downloadState.value = completedState
+                setDownloadState(completedState)
 
                 try {
                     historyRepository.recordDownload(

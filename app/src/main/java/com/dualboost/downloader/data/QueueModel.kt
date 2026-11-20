@@ -11,6 +11,20 @@ enum class QueueItemStatus {
     THREAT_DETECTED
 }
 
+/**
+ * Explicit operational state for the multi-download queue coordinator.
+ */
+sealed class QueuePhase {
+    /** Queue is idle and not actively dispatching items. */
+    object Idle : QueuePhase()
+
+    /** Queue is actively running and managing sequential item progression. */
+    data class Running(val activeItemId: String? = null) : QueuePhase()
+
+    /** Queue has been paused by the user or an error condition. */
+    object Paused : QueuePhase()
+}
+
 data class QueueItem(
     val id: String = UUID.randomUUID().toString(),
     val url: String,

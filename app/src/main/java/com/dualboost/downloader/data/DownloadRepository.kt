@@ -246,6 +246,7 @@ class DownloadRepository(
     val cellularSignalLevel: StateFlow<Int> get() = (networkProvider ?: networkManager).cellularSignalLevel
     val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> get() = (networkProvider ?: networkManager).cellularGeneration
     val wifiDetails: StateFlow<com.dualboost.downloader.network.WifiDetails> get() = (networkProvider ?: networkManager).wifiDetails
+    val networkTopology: StateFlow<com.dualboost.downloader.network.NetworkTopology> get() = (networkProvider ?: networkManager).networkTopology
     val thermalStatus: StateFlow<Int> get() = (thermalStatusProviderOverride ?: downloaderEngine.thermalStatusProvider).thermalStatus
     val historyItems: StateFlow<List<DownloadHistoryItem>> get() = historyRepository.historyItems
 
