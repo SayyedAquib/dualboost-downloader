@@ -4,6 +4,7 @@ import com.dualboost.downloader.data.NetworkInterfaceType
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Explicit state model for the DualBoost network interface circuit breaker.
@@ -14,6 +15,9 @@ enum class CircuitBreakerState {
 
     /** Interface has tripped due to consecutive failures, traffic diverts to peer interface. */
     TRIPPED,
+
+    /** Cooldown elapsed after trip; allows a single trial request to verify if connection recovered. */
+    HALF_OPEN,
 
     /** Both interfaces have tripped; coordinated reconnection & exponential backoff is active. */
     RECOVERING,
@@ -28,7 +32,9 @@ enum class CircuitBreakerState {
  */
 class DualInterfaceCircuitBreaker(
     val failureThreshold: Int = 2,
-    val maxRecoveryCycles: Int = 3
+    val maxRecoveryCycles: Int = 3,
+    val cooldownBaseMs: Long = 5000L,
+    val maxCooldownMs: Long = 30000L
 ) {
     private val wifiFailures = AtomicInteger(0)
     private val cellularFailures = AtomicInteger(0)
@@ -36,26 +42,73 @@ class DualInterfaceCircuitBreaker(
     private val recoveryCycles = AtomicInteger(0)
     private val isExhausted = AtomicBoolean(false)
 
+    private val lastTripTimeWifi = AtomicLong(0L)
+    private val lastTripTimeCellular = AtomicLong(0L)
+    private val tripCountWifi = AtomicInteger(0)
+    private val tripCountCellular = AtomicInteger(0)
+
     fun isExhausted(): Boolean = isExhausted.get()
 
     fun recordSuccess(interfaceType: NetworkInterfaceType) {
         when (interfaceType) {
-            NetworkInterfaceType.WIFI -> wifiFailures.set(0)
-            NetworkInterfaceType.CELLULAR -> cellularFailures.set(0)
+            NetworkInterfaceType.WIFI -> {
+                wifiFailures.set(0)
+                tripCountWifi.set(0)
+            }
+            NetworkInterfaceType.CELLULAR -> {
+                cellularFailures.set(0)
+                tripCountCellular.set(0)
+            }
             NetworkInterfaceType.DEFAULT -> {
                 wifiFailures.set(0)
                 cellularFailures.set(0)
+                tripCountWifi.set(0)
+                tripCountCellular.set(0)
             }
         }
     }
 
-    fun recordFailure(interfaceType: NetworkInterfaceType): CircuitBreakerState {
+    fun recordFailure(
+        interfaceType: NetworkInterfaceType,
+        currentTimeMs: Long = System.currentTimeMillis()
+    ): CircuitBreakerState {
         val failures = when (interfaceType) {
-            NetworkInterfaceType.WIFI -> wifiFailures.incrementAndGet()
-            NetworkInterfaceType.CELLULAR -> cellularFailures.incrementAndGet()
-            NetworkInterfaceType.DEFAULT -> wifiFailures.incrementAndGet()
+            NetworkInterfaceType.WIFI -> {
+                val f = wifiFailures.incrementAndGet()
+                if (f >= failureThreshold) {
+                    lastTripTimeWifi.set(currentTimeMs)
+                    tripCountWifi.incrementAndGet()
+                }
+                f
+            }
+            NetworkInterfaceType.CELLULAR -> {
+                val f = cellularFailures.incrementAndGet()
+                if (f >= failureThreshold) {
+                    lastTripTimeCellular.set(currentTimeMs)
+                    tripCountCellular.incrementAndGet()
+                }
+                f
+            }
+            NetworkInterfaceType.DEFAULT -> {
+                val f = wifiFailures.incrementAndGet()
+                if (f >= failureThreshold) {
+                    lastTripTimeWifi.set(currentTimeMs)
+                    tripCountWifi.incrementAndGet()
+                }
+                f
+            }
         }
         return if (failures >= failureThreshold) CircuitBreakerState.TRIPPED else CircuitBreakerState.HEALTHY
+    }
+
+    fun calculateCooldownMs(interfaceType: NetworkInterfaceType): Long {
+        val count = when (interfaceType) {
+            NetworkInterfaceType.WIFI -> tripCountWifi.get()
+            NetworkInterfaceType.CELLULAR -> tripCountCellular.get()
+            NetworkInterfaceType.DEFAULT -> tripCountWifi.get()
+        }.coerceAtLeast(1)
+        val factor = 1L shl (count - 1).coerceAtMost(5)
+        return (cooldownBaseMs * factor).coerceAtMost(maxCooldownMs)
     }
 
     fun recordChunkFailure(chunkIndex: Int, maxRetries: Int): Boolean {
@@ -69,7 +122,8 @@ class DualInterfaceCircuitBreaker(
 
     fun evaluateState(
         interfaceType: NetworkInterfaceType,
-        isOtherHealthyAndAvailable: Boolean
+        isOtherHealthyAndAvailable: Boolean,
+        currentTimeMs: Long = System.currentTimeMillis()
     ): CircuitBreakerState {
         if (isExhausted.get()) return CircuitBreakerState.EXHAUSTED
 
@@ -80,7 +134,19 @@ class DualInterfaceCircuitBreaker(
         }
 
         if (!isTripped) return CircuitBreakerState.HEALTHY
-        if (isOtherHealthyAndAvailable) return CircuitBreakerState.TRIPPED
+        if (isOtherHealthyAndAvailable) {
+            val lastTrip = when (interfaceType) {
+                NetworkInterfaceType.WIFI -> lastTripTimeWifi.get()
+                NetworkInterfaceType.CELLULAR -> lastTripTimeCellular.get()
+                NetworkInterfaceType.DEFAULT -> lastTripTimeWifi.get()
+            }
+            val cooldown = calculateCooldownMs(interfaceType)
+            return if (currentTimeMs - lastTrip >= cooldown) {
+                CircuitBreakerState.HALF_OPEN
+            } else {
+                CircuitBreakerState.TRIPPED
+            }
+        }
         return CircuitBreakerState.RECOVERING
     }
 
@@ -115,6 +181,10 @@ class DualInterfaceCircuitBreaker(
         cellularFailures.set(0)
         chunkFailures.clear()
         recoveryCycles.set(0)
+        tripCountWifi.set(0)
+        tripCountCellular.set(0)
+        lastTripTimeWifi.set(0L)
+        lastTripTimeCellular.set(0L)
         isExhausted.set(false)
     }
 }

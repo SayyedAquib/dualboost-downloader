@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Binder
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -25,6 +26,7 @@ class DownloadForegroundService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var wakeLock: PowerManager.WakeLock? = null
     private var wakeLockRenewalJob: Job? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     lateinit var repository: com.dualboost.downloader.data.DownloadRepository
         private set
@@ -62,7 +64,7 @@ class DownloadForegroundService : Service() {
             } else null
 
             networkManager.acquireCellularKeepAlive()
-            acquireWakeLock()
+            acquireLocks()
             startForegroundNotification("Initializing download...")
             val currentState = downloaderEngine.downloadState.value
             val targetUrl = url ?: (currentState as? DownloadState.Paused)?.url
@@ -79,14 +81,14 @@ class DownloadForegroundService : Service() {
                 downloaderEngine.pauseDownload()
             }
             networkManager.releaseCellularKeepAlive()
-            releaseWakeLock()
+            releaseLocks()
         } else if (action == ACTION_CANCEL_DOWNLOAD) {
             val currentState = downloaderEngine.downloadState.value
             if (currentState !is DownloadState.Idle && currentState !is DownloadState.Paused) {
                 downloaderEngine.pauseDownload()
             }
             networkManager.releaseCellularKeepAlive()
-            releaseWakeLock()
+            releaseLocks()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         } else if (action == ACTION_DISCARD_DOWNLOAD) {
@@ -95,7 +97,7 @@ class DownloadForegroundService : Service() {
                 ?: (currentState as? DownloadState.Paused)?.fileName
             downloaderEngine.discardDownload(fileName = fileName)
             networkManager.releaseCellularKeepAlive()
-            releaseWakeLock()
+            releaseLocks()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -108,7 +110,7 @@ class DownloadForegroundService : Service() {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
-                "DualBoost:DownloadWakeLock"
+                WAKE_LOCK_TAG
             ).apply {
                 setReferenceCounted(false)
             }
@@ -138,6 +140,51 @@ class DownloadForegroundService : Service() {
                 wakeLock?.release()
             }
         } catch (_: Exception) {}
+    }
+
+    private fun acquireWifiLock() {
+        if (wifiLock == null) {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            wifiLock = try {
+                val lockMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                } else {
+                    @Suppress("DEPRECATION")
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                }
+                wifiManager?.createWifiLock(
+                    lockMode,
+                    WIFI_LOCK_TAG
+                )?.apply {
+                    setReferenceCounted(false)
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+        try {
+            if (wifiLock?.isHeld == false) {
+                wifiLock?.acquire()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun releaseWifiLock() {
+        try {
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun acquireLocks() {
+        acquireWakeLock()
+        acquireWifiLock()
+    }
+
+    private fun releaseLocks() {
+        releaseWakeLock()
+        releaseWifiLock()
     }
 
     private fun observeDownloadState() {
@@ -195,7 +242,7 @@ class DownloadForegroundService : Service() {
                     }
                     is DownloadState.Completed -> {
                         networkManager.releaseCellularKeepAlive()
-                        releaseWakeLock()
+                        releaseLocks()
                         updateNotification(
                             title = "Download Complete!",
                             content = "${state.fileName} (${formatBytes(state.totalBytes)})",
@@ -209,7 +256,7 @@ class DownloadForegroundService : Service() {
                     }
                     is DownloadState.ThreatDetected -> {
                         networkManager.releaseCellularKeepAlive()
-                        releaseWakeLock()
+                        releaseLocks()
                         updateNotification(
                             title = "🛑 Threat Detected: Download Blocked",
                             content = "${state.suggestedFilename}: ${state.threat.description}",
@@ -223,7 +270,7 @@ class DownloadForegroundService : Service() {
                     }
                     is DownloadState.Failed -> {
                         networkManager.releaseCellularKeepAlive()
-                        releaseWakeLock()
+                        releaseLocks()
                         updateNotification(
                             title = "Download Failed",
                             content = state.error,
@@ -237,7 +284,7 @@ class DownloadForegroundService : Service() {
                     }
                     is DownloadState.Paused -> {
                         networkManager.releaseCellularKeepAlive()
-                        releaseWakeLock()
+                        releaseLocks()
                         updateNotification(
                             title = "Download Paused",
                             content = "${state.fileName} (Tap Resume to continue)",
@@ -248,7 +295,7 @@ class DownloadForegroundService : Service() {
                         )
                     }
                     is DownloadState.Idle -> {
-                        releaseWakeLock()
+                        releaseLocks()
                     }
                 }
             }
@@ -392,7 +439,7 @@ class DownloadForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         networkManager.releaseCellularKeepAlive()
-        releaseWakeLock()
+        releaseLocks()
         stateJob?.cancel()
         serviceScope.cancel()
         // Do NOT call networkManager.stopListening() here; networkManager is an application-scoped singleton
@@ -402,7 +449,7 @@ class DownloadForegroundService : Service() {
         super.onTimeout(startId, fgsType)
         android.util.Log.w("DownloadFGService", "Foreground service execution time limit reached (fgsType $fgsType). Pausing download cleanly.")
         downloaderEngine.pauseDownload()
-        releaseWakeLock()
+        releaseLocks()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -421,6 +468,9 @@ class DownloadForegroundService : Service() {
     companion object {
         const val CHANNEL_ID = "dualboost_download_channel"
         const val NOTIFICATION_ID = 1001
+
+        const val WAKE_LOCK_TAG = "DualBoost:DownloadWakeLock"
+        const val WIFI_LOCK_TAG = "DualBoost:DownloadWifiLock"
 
         const val ACTION_START_DOWNLOAD = "com.dualboost.ACTION_START_DOWNLOAD"
         const val ACTION_CANCEL_DOWNLOAD = "com.dualboost.ACTION_CANCEL_DOWNLOAD"

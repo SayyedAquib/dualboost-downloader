@@ -1466,6 +1466,13 @@ class DualDownloaderEngine(
                     val circuitState = circuitBreaker.evaluateState(interfaceType, otherHealthy)
                     when (circuitState) {
                         CircuitBreakerState.HEALTHY -> { /* proceed */ }
+                        CircuitBreakerState.HALF_OPEN -> {
+                            // Only allow primary worker 0 to attempt a single trial probe chunk; secondary workers pause
+                            if (workerIndex > 0) {
+                                delay(1000)
+                                continue
+                            }
+                        }
                         CircuitBreakerState.TRIPPED -> {
                             delay(1500)
                             continue
@@ -1536,7 +1543,7 @@ class DualDownloaderEngine(
                     // 3. Dynamic Contiguous Chunk Batching (Slice 2)
                     val currentSpeed = if (interfaceType == NetworkInterfaceType.WIFI) wifiSpeedMBps else cellularSpeedMBps
                     val speed = if (currentSpeed > 0.0) currentSpeed else initialSpeedMBps
-                    val batchCount = calculateBatchSize(speed)
+                    val batchCount = if (circuitState == CircuitBreakerState.HALF_OPEN) 1 else calculateBatchSize(speed)
 
                     val chunkBatch: List<DownloadChunk> = queueMutex.withLock {
                         claimSequentialPendingChunks(pendingChunks, batchCount, interfaceType, isSequential, isMp4)

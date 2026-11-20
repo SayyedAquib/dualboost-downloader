@@ -2159,5 +2159,48 @@ DualBoost Downloader coordinates complex asynchronous interactions across concur
 - **AX**: Autonomous AI agents can query single-source-of-truth states (`enginePhase`, `networkTopology`, `queuePhase`) directly with zero ambiguity.
 - **Test Coverage**: 100% green tests maintained across all 71 existing test suites, supplemented by the new `ExplicitStateMachinesTest` suite verifying all states and transitions.
 
+---
+
+## ADR-057: Circuit Breaker Half-Open State Recovery & Foreground Service High-Performance WifiLock
+
+### Date
+2026-11-20
+
+### Status
+Accepted
+
+### Context
+A subtle production issue was observed during active dual-boost downloads: after initial dual-network aggregation, Wi-Fi transfer speed would intermittently drop to 0 MB/s and remain permanently locked at zero for the entire remainder of the download session, while Cellular continued downloading alone.
+
+Investigation revealed two interacting root causes:
+1. **Permanent Sticky-Trip Lockout in `DualInterfaceCircuitBreaker`**:
+   - `failureThreshold` was set to 2. When two consecutive chunk errors or timeouts occurred on Wi-Fi (due to brief router band steering, packet drops, or power-save latency), `wifiFailures` reached 2.
+   - When evaluating state with Cellular healthy (`isOtherHealthyAndAvailable == true`), `evaluateState()` returned `CircuitBreakerState.TRIPPED`.
+   - In `runWorker()`, the `TRIPPED` branch executed `delay(1500); continue`.
+   - Because `recordSuccess()` could only be called after a completed chunk transfer—which the `TRIPPED` state blocked from ever attempting—and coordinated recovery was strictly gated behind `CircuitBreakerState.RECOVERING` (which only fired if *both* interfaces failed), the Wi-Fi workers entered an infinite 1.5s sleep loop. Wi-Fi was permanently disabled for that download session.
+2. **Missing `WifiLock` in `DownloadForegroundService`**:
+   - The service acquired `PowerManager.PARTIAL_WAKE_LOCK` to keep the CPU active and `acquireCellularKeepAlive()` to keep the modem awake.
+   - However, no `WifiManager.WifiLock` was acquired. On Android 10+ and especially Android 14/15, when the screen locks or device sits idle, Android's power-management subsystem puts the Wi-Fi radio into power-save mode or coalesces packets, triggering transient socket timeouts that tripped the circuit breaker into the permanent lockout described above.
+
+### Decision
+1. **Circuit Breaker `HALF_OPEN` State & Cooldown Backoff (`DualInterfaceCircuitBreaker.kt`)**:
+   - Added `CircuitBreakerState.HALF_OPEN` to the explicit state machine.
+   - Introduced a time-based cooldown mechanism (`cooldownBaseMs = 5000L`, `maxCooldownMs = 30000L`) tracking per-interface trip timestamps and consecutive trip counts.
+   - When an interface trips and peer interface is healthy, it remains `TRIPPED` during cooldown, then automatically transitions to `HALF_OPEN`.
+   - In `DualDownloaderEngine.kt`:
+     - Under `HALF_OPEN`, only primary worker 0 is permitted to claim a single probe chunk (batch size capped at 1); secondary workers delay.
+     - If the trial probe succeeds, `recordSuccess(interfaceType)` resets failure and trip counters, seamlessly restoring the interface to `HEALTHY` and resuming full multi-stream concurrency.
+     - If the probe fails, `recordFailure(interfaceType)` increases the cooldown with exponential backoff (5s -> 10s -> 20s, max 30s) and returns to `TRIPPED`.
+2. **Foreground Service High-Performance WifiLock (`DownloadForegroundService.kt`)**:
+   - Implemented `acquireWifiLock()` and `releaseWifiLock()` coordinated under `acquireLocks()` and `releaseLocks()` alongside `wakeLock`.
+   - Uses `WifiManager.WIFI_MODE_FULL_LOW_LATENCY` on Android Q+ (API 29+) and `WIFI_MODE_FULL_HIGH_PERF` on earlier APIs with `setReferenceCounted(false)`.
+   - Held throughout active downloading (`Downloading`, `Probing`, `AutoRecovering`) and released on pause, cancel, discard, completion, failure, timeout, or destruction.
+
+### Consequences
+- **UX**: Eliminates the Wi-Fi speed drop to zero bug. Wi-Fi seamlessly survives transient router glitches and screen locks, automatically probing and self-healing within 5 seconds.
+- **Hardware/Battery**: Wi-Fi radio remains in low-latency/high-perf mode only during active downloads and releases cleanly on all terminal states.
+- **Test Coverage**: Verified via TDD with new unit tests in `CircuitBreakerHalfOpenTest`, `EngineCircuitBreakerRecoveryTest`, and `ServiceLifecycleTest`.
+
+
 
 

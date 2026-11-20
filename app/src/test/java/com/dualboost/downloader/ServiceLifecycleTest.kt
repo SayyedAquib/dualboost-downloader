@@ -16,6 +16,8 @@ class ServiceLifecycleTest {
         assertEquals("extra_download_url", DownloadForegroundService.EXTRA_URL)
         assertEquals("dualboost_download_channel", DownloadForegroundService.CHANNEL_ID)
         assertEquals(1001, DownloadForegroundService.NOTIFICATION_ID)
+        assertEquals("DualBoost:DownloadWifiLock", DownloadForegroundService.WIFI_LOCK_TAG)
+        assertEquals("DualBoost:DownloadWakeLock", DownloadForegroundService.WAKE_LOCK_TAG)
     }
 
     @Test
