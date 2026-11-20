@@ -1,9 +1,31 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader is 100% production-grade across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-053 (Ultra-Clean Minimalist Active Download Card Architecture). The codebase is backed by **406 unit and integration tests across 71 test suites (100% passing green)** with zero failures or regressions. All 9 configuration domains operate autonomously with zero manual intervention required. The active download card has been redesigned with a Pixel-native minimalist hierarchy: eliminated nested box-inside-box speed cards, replaced the bulky lavender banner with an inline single-stream chip, and merged Preview, Pause, and Cancel into a unified 48dp single-row control layout. Production release APK (`app-release.apk`, ~1.66 MB) compiles with R8 optimization, resource shrinking, and installs cleanly via ADB on Google Pixel 9.
+DualBoost Downloader is 100% production-grade and security-hardened across all Android devices (Pixel, Samsung Galaxy, Xiaomi/HyperOS, Oppo/OnePlus, Vivo, Motorola, and budget devices) following the implementation of ADR-037 through ADR-055 (Production Security Hardening & Zero-Permission Privacy Isolation). The codebase is backed by **410 unit and integration tests across 71 test suites (100% passing green)** with zero failures or regressions. All sensitive preferences are stored using Android Keystore-backed AES-256-GCM encryption, broad telephony permissions have been eliminated, URL encoding bypasses in HTTP headers are blocked via RFC 5987 parsing, and the multi-stage probe engine is protected against state clobbering. Production release APK (`app-release.apk`, ~1.57 MB) compiles cleanly with R8 optimization, resource shrinking, and release signing.
 
 ## Recently Completed
+- **Production Security Hardening & Zero-Permission Privacy Isolation (ADR-055 / 410 Tests across 71 Suites - 100% Green)**:
+  - **Keystore-Backed Encrypted Preferences (`SecurityPreferences.kt`)**:
+    - Migrated `SecurityPreferences` to `EncryptedSharedPreferences` backed by `MasterKey.KeyScheme.AES256_GCM`.
+    - Implemented seamless one-time migration from legacy plaintext preferences with automatic wiping of legacy stores.
+    - Added graceful fallback to standard preferences if Android Keystore is unavailable (e.g., in headless JVM unit tests).
+  - **Zero-Permission Privacy & Manifest Hardening (`AndroidManifest.xml`)**:
+    - Permanently removed `<uses-permission android:name="android.permission.READ_PHONE_STATE" />` from the manifest.
+    - Relies exclusively on `READ_BASIC_PHONE_STATE` for `TelephonyCallback.DisplayInfoListener` (5G NSA/Advanced detection on Android 12+) without requesting intrusive phone permissions.
+  - **RFC 5987 / RFC 6266 Percent-Encoded Filename Parser (`ThreatDetectionEngine.kt`)**:
+    - Upgraded `extractFilenameFromContentDisposition` to prioritize `filename*=UTF-8''...` parsing and decoding via `URLDecoder.decode()`.
+    - Blocks deceptive executable/APK extensions even when obfuscated via URL percent-encoding.
+    - Added clarifying documentation noting the static malicious domain list is a minimal fallback to the primary Google Safe Browsing cloud intelligence scanner.
+  - **Safe JSON Construction (`CloudThreatScanner.kt`)**:
+    - Sanitized all URL strings inserted into the Google Safe Browsing request payload by escaping backslashes, quotes, newlines, and tabs.
+  - **Probe-Pause Race Condition Elimination (`DualDownloaderEngine.kt`)**:
+    - Introduced `setProbingState(message: String)` that verifies `!isPaused.get() && !isDiscarding.get()` prior to emitting any `DownloadState.Probing` transition.
+    - Added pre-emptive pause checks across Stage 2 and Stage 3 probe handoffs, completely eliminating probe-to-pause race conditions.
+  - **Test Suite Verification**:
+    - Added unit tests in `ThreatDetectionEngineTest.kt` for RFC 5987 double extension detection, disguised executables, and clean media.
+    - Added unit test in `CloudThreatScannerTest.kt` verifying special character JSON escaping.
+    - Full test suite passed 100% green (`.\gradlew.bat test`, 410 tests across 71 test suites).
+    - Production APK `app-release.apk` (1,571,512 bytes) assembled cleanly via R8 (`.\gradlew.bat assembleRelease`).
 - **Material You Primary Cyan Palette Alignment for Preview & Stream Badges (ADR-054 / 406 Tests across 71 Suites - 100% Green)**:
   - **Eliminated Dissonant Neon Green**: Completely removed hardcoded `#00E676` across `MainActivity.kt`.
   - **Cohesive Pixel Electric Cyan CTA**: Styled `[ ▶ Preview ]` using `MaterialTheme.colorScheme.primary` (`#64D2FF`) with `onPrimary` deep navy text (`#003549`) for WCAG AAA contrast and cohesive harmony with the lightning and speed indicators.

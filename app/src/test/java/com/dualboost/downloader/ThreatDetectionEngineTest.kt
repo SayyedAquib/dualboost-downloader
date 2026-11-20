@@ -123,4 +123,52 @@ class ThreatDetectionEngineTest {
         assertTrue("Known adware domain must be flagged", assessment.isThreat)
         assertEquals(ThreatType.KNOWN_MALICIOUS_DOMAIN, assessment.threatType)
     }
+
+    @Test
+    fun detectsDisguisedApkDoubleExtension_Rfc5987ContentDisposition() {
+        val url = "https://safe-cdn.example.com/download/stream"
+        val headers = mapOf(
+            "Content-Disposition" to "attachment; filename*=UTF-8''Mirzapur%20Season%203.mkv.apk"
+        )
+        val assessment = engine.inspectUrlAndHeaders(
+            url = url,
+            headers = headers,
+            userReportedName = "Mirzapur Season 3.mkv"
+        )
+
+        assertTrue("RFC 5987 encoded double extension must be detected", assessment.isThreat)
+        assertEquals(ThreatType.DOUBLE_EXTENSION, assessment.threatType)
+        assertEquals(ThreatSeverity.CRITICAL, assessment.severity)
+    }
+
+    @Test
+    fun detectsDisguisedExecutable_Rfc5987ContentDisposition() {
+        val url = "https://safe-cdn.example.com/download/stream"
+        val headers = mapOf(
+            "Content-Disposition" to "attachment; filename*=UTF-8''Setup%20Patch.exe"
+        )
+        val assessment = engine.inspectUrlAndHeaders(
+            url = url,
+            headers = headers,
+            userReportedName = null
+        )
+
+        assertTrue("RFC 5987 encoded executable must be detected", assessment.isThreat)
+        assertEquals(ThreatType.DISGUISED_EXECUTABLE, assessment.threatType)
+    }
+
+    @Test
+    fun passesCleanMedia_Rfc5987ContentDisposition() {
+        val url = "https://safe-cdn.example.com/download/stream"
+        val headers = mapOf(
+            "Content-Disposition" to "attachment; filename*=UTF-8''Movie%202026.mp4"
+        )
+        val assessment = engine.inspectUrlAndHeaders(
+            url = url,
+            headers = headers,
+            userReportedName = "Movie 2026.mp4"
+        )
+
+        assertFalse("Clean RFC 5987 media filename must pass", assessment.isThreat)
+    }
 }

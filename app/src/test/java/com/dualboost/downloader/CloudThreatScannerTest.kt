@@ -109,4 +109,24 @@ class CloudThreatScannerTest {
 
         assertFalse("Network or server failure must gracefully fall back to clean", result.isThreat)
     }
+
+    @Test
+    fun escapesSpecialCharactersInTargetUrlWithoutMalformedJson() = runBlocking {
+        mockWebServer.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+
+        val scanner = CloudThreatScanner(
+            okHttpClient = okHttpClient,
+            apiKeyProvider = { "valid-api-key-12345" },
+            apiEndpointOverride = mockWebServer.url("/v4/threatMatches:find").toString()
+        )
+
+        // URL containing quote and backslash that would break naive string interpolation
+        val trickyUrl = "https://example.com/test?param=\"value\"\\sub"
+        scanner.checkUrlReputation(trickyUrl)
+
+        val recordedRequest = mockWebServer.takeRequest()
+        val bodyString = recordedRequest.body.readUtf8()
+        assertTrue("Escaped quote should be present", bodyString.contains("\\\"value\\\""))
+        assertTrue("Escaped backslash should be present", bodyString.contains("\\\\sub"))
+    }
 }

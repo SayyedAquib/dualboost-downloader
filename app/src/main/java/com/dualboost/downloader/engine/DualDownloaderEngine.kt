@@ -117,6 +117,12 @@ class DualDownloaderEngine(
         return true
     }
 
+    private fun setProbingState(message: String) {
+        if (!isPaused.get() && !isDiscarding.get()) {
+            _downloadState.value = DownloadState.Probing(message)
+        }
+    }
+
     private val CHUNK_SIZE = 4 * 1024 * 1024L // 4 MB base chunks
 
     internal fun calculateBatchSize(speedMBps: Double): Int {
@@ -808,7 +814,7 @@ class DualDownloaderEngine(
             }
         }
 
-        _downloadState.value = DownloadState.Probing("Connecting and probing server capabilities...")
+        setProbingState("Connecting and probing server capabilities...")
 
         var contentLength: Long = -1L
         var supportsRanges = false
@@ -943,8 +949,9 @@ class DualDownloaderEngine(
         // If mobile probe did not unlock byte ranges and we didn't already force desktop, retry with Windows Chrome Desktop headers!
         if (isPaused.get() || isDiscarding.get()) return
         if (!supportsRanges && !forceDesktop) {
+            if (isPaused.get() || isDiscarding.get()) return
             Log.i(TAG, "Server rejected byte ranges on mobile headers. Triggering Stage 2 probe with Windows 11 Desktop spoofing...")
-            _downloadState.value = DownloadState.Probing("Adapting desktop mode for multi-channel support...")
+            setProbingState("Adapting desktop mode for multi-channel support...")
 
             var desktopRanges = false
             var desktopLength = contentLength
@@ -1014,10 +1021,11 @@ class DualDownloaderEngine(
         if (!supportsRanges && !isCloudSlicerActive) {
             val slicerUrl = SlicerPreferences.getSlicerUrl(context)
             if (slicerUrl.isNotBlank()) {
+                if (isPaused.get() || isDiscarding.get()) return
                 val slicerSecret = SlicerPreferences.getSlicerSecret(context)
                 val targetSlicedUrl = SlicerPreferences.buildSlicedUrl(slicerUrl, url, slicerSecret)
                 Log.i(TAG, "Server rejected direct byte ranges. Triggering Stage 3 probe via Personal Cloud Slicer: ${sanitizeUrlForLog(slicerUrl)}")
-                _downloadState.value = DownloadState.Probing("Connecting to Personal Cloud Slicer...")
+                setProbingState("Connecting to Personal Cloud Slicer...")
 
                 var slicerRanges = false
                 var slicerLength = contentLength

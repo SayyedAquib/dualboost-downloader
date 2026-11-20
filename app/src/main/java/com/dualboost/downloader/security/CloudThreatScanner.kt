@@ -66,6 +66,12 @@ class CloudThreatScanner(
     }
 
     private fun buildRequestBody(targetUrl: String): String {
+        val safeUrl = targetUrl
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
         return """
             {
               "client": {
@@ -77,7 +83,7 @@ class CloudThreatScanner(
                 "platformTypes": ["ANDROID", "ANY_PLATFORM"],
                 "threatEntryTypes": ["URL"],
                 "threatEntries": [
-                  {"url": "$targetUrl"}
+                  {"url": "$safeUrl"}
                 ]
               }
             }

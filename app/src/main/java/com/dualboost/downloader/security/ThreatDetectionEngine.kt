@@ -2,6 +2,8 @@ package com.dualboost.downloader.security
 
 import java.io.File
 import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Locale
 
@@ -26,6 +28,8 @@ class ThreatDetectionEngine {
             "application/x-sh"
         )
 
+        // Static fallback blocklist — intentionally minimal; primary threat intelligence
+        // is provided by Google Safe Browsing (CloudThreatScanner) when an API key is configured.
         private val KNOWN_MALICIOUS_DOMAINS = setOf(
             "apk-serve.net",
             "track-install.apk-serve.net",
@@ -203,8 +207,19 @@ class ThreatDetectionEngine {
 
     private fun extractFilenameFromContentDisposition(cd: String?): String? {
         if (cd.isNullOrBlank()) return null
-        val match = Regex("""filename\*?=['"]?(?:UTF-8'')?([^'";]+)['"]?""", RegexOption.IGNORE_CASE).find(cd)
-        return match?.groupValues?.getOrNull(1)?.trim()
+
+        // Try RFC 5987 extended form first: filename*=UTF-8''percent%20encoded%20name.apk
+        val rfc5987Match = Regex("""filename\*\s*=\s*([^']+)''([^;\s]+)""", RegexOption.IGNORE_CASE).find(cd)
+        if (rfc5987Match != null) {
+            val encoded = rfc5987Match.groupValues.getOrNull(2)?.trim() ?: ""
+            return runCatching {
+                URLDecoder.decode(encoded, StandardCharsets.UTF_8.name())
+            }.getOrElse { encoded }
+        }
+
+        // Fallback: simple quoted or unquoted form: filename="name.apk" or filename=name.apk
+        val simpleMatch = Regex("""filename\s*=\s*['"]?([^'";]+)['"]?""", RegexOption.IGNORE_CASE).find(cd)
+        return simpleMatch?.groupValues?.getOrNull(1)?.trim()
     }
 
     private fun collectCandidateFilenames(
