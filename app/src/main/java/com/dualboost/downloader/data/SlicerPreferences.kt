@@ -5,8 +5,10 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.dualboost.downloader.security.CredentialStorageMode
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.WeakHashMap
 
 object SlicerPreferences {
 
@@ -16,9 +18,27 @@ object SlicerPreferences {
     private const val KEY_SLICER_URL = "cloud_slicer_url"
     private const val KEY_SLICER_SECRET = "cloud_slicer_secret"
 
-    // SEC-AUDIT C-1: Android Keystore-backed AES-256 encrypted credential storage
+    private data class CachedPrefs(
+        val prefs: SharedPreferences,
+        val mode: CredentialStorageMode
+    )
+
+    private val prefsCache = WeakHashMap<Context, CachedPrefs>()
+
+    @Volatile
+    var lastStorageMode: CredentialStorageMode = CredentialStorageMode.UNINITIALIZED
+        private set
+
+    // SEC-AUDIT C-1: Android Keystore-backed AES-256 encrypted credential storage (cached per Context)
+    @Synchronized
     private fun getPrefs(context: Context): SharedPreferences {
-        return try {
+        val cacheKey = context.applicationContext ?: context
+        prefsCache[cacheKey]?.let {
+            lastStorageMode = it.mode
+            return it.prefs
+        }
+
+        val resolved = try {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
@@ -31,12 +51,18 @@ object SlicerPreferences {
             )
             // One-time migration from legacy plaintext SharedPreferences
             migrateLegacyPrefs(context, encPrefs)
-            encPrefs
+            CachedPrefs(encPrefs, CredentialStorageMode.KEYSTORE_ENCRYPTED)
         } catch (e: Exception) {
             // Fallback to standard SharedPreferences if Keystore is broken (rare)
             Log.e(TAG, "EncryptedSharedPreferences init failed, falling back: ${e.message}")
-            context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+            CachedPrefs(
+                context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE),
+                CredentialStorageMode.FALLBACK_PLAINTEXT
+            )
         }
+        prefsCache[cacheKey] = resolved
+        lastStorageMode = resolved.mode
+        return resolved.prefs
     }
 
     private fun migrateLegacyPrefs(context: Context, encPrefs: SharedPreferences) {

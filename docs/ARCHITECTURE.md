@@ -281,38 +281,38 @@ sequenceDiagram
   - Dynamic Transport Resumption: Timeouts operate at the transport layer, allowing resumed downloads to adopt new profile parameters dynamically (enabling users to transition into Resilient mode when moving to unstable networks).
   - UI Presentation: `SettingsBottomSheet.kt` provides a dedicated Network Timeouts & Failover card with profile chips, custom parameter steppers, 1-tap Reset, active summary preview, and an active status badge (`⚡ Fast Failover`, `⚡ Resilient Mode`, `⚡ Custom Timeouts`) in `MainActivity.kt`.
 
-## Explicit State Machine Architecture (ADR-056)
-To elevate User Experience (UX), Developer Experience (DX), and Agent/AI Experience (AX), DualBoost Downloader models all critical lifecycle, network, fault-tolerance, and scheduling systems as explicit state machines rather than ad-hoc boolean flags or implicit state counters:
+## Explicit State Machine Architecture (ADR-056 & ADR-059)
+To elevate User Experience (UX), Developer Experience (DX), and Agent/AI Experience (AX), DualBoost Downloader models all lifecycle, network, thermal, security, queue, foreground-service, and Compose UI flows as explicit, mutually exclusive state machines with transition guards rather than loose boolean flags or implicit counters:
 
-1. **Engine Lifecycle State Machine (`EnginePhase`)**:
-   - `enum class EnginePhase { IDLE, EXECUTING, PAUSED, DISCARDING }`
-   - Completely replaces uncoordinated loose `AtomicBoolean` flags (`isExecuting`, `isPaused`, `isDiscarding`). Eliminates $2^3 = 8$ uncoordinated states down to 4 deterministic, mutually exclusive states.
-   - Provides reactive observation via `_enginePhase: MutableStateFlow<EnginePhase>` and domain helper predicates (`isActive`, `isInterrupted`).
+1. **Engine Lifecycle & Resumption (`EnginePhase`, `sessionGeneration`, `ResumeDecision`)**:
+   - `enum class EnginePhase { IDLE, EXECUTING, PAUSED, DISCARDING }` with an explicit `canTransitionTo(next)` guard matrix (e.g., `DISCARDING` must settle in `IDLE` before starting a new transfer).
+   - Monotonic `sessionGeneration: AtomicLong` tokens isolate active downloads from delayed `CancellationException` / `finally` cleanup in previously cancelled jobs, and synchronized `setDownloadState` transitions pass through `DownloadStateValidator`.
+   - `ResumeDecision` (`FreshStart`, `Resumable(meta)`, `Invalidated(reason, shouldCleanArtifacts)`) replaces scattered booleans with 6 explicit `ResumeInvalidationReason` codes.
 
-2. **Dual-Interface Fault-Tolerance Circuit Breaker (`DualInterfaceCircuitBreaker`)**:
-   - Explicit 4-state per-interface model (`CircuitBreakerState`): `HEALTHY`, `TRIPPED`, `RECOVERING`, `EXHAUSTED`.
-   - Replaced loose integer comparison counters (`wifiFailures >= 2`).
-   - Global circuit aggregate state (`BothHealthy`, `SingleInterfaceActive(activeInterface)`, `BothTripped`, `BothExhausted`) coordinates automatic chunk shedding to the alternate healthy link, half-open recovery probes, and failover backoff without terminating active downloads.
+2. **Dual-Interface Circuit Breaker (`DualInterfaceCircuitBreaker`, `CircuitBreakerSnapshot`)**:
+   - 5-state per-interface model (`CircuitBreakerState`): `HEALTHY`, `TRIPPED`, `HALF_OPEN`, `RECOVERING`, `EXHAUSTED`.
+   - `evaluateInterfaceOnly` and `isInterfaceCapable` preserve `HALF_OPEN` capability independently of peer cooldown status, preventing misclassifying a `HALF_OPEN` peer as unavailable.
+   - `CircuitBreakerSnapshot` + `CircuitBreakerAggregateState` (`BothHealthy`, `FailoverActive`, `BothTripped`, `Exhausted`) stream composite fault state to the repository and UI.
 
-3. **Range Capability & Desktop Spoofing Sequence (`ProbeStateMachine`)**:
-   - Formalized multi-stage server probe pipeline (`ProbeStage`): `STAGE_1_MOBILE_HEAD` -> `STAGE_1_MOBILE_RANGE` -> `STAGE_2_DESKTOP_SPOOF` -> `STAGE_3_CLOUD_SLICER` -> `TERMINAL_SUCCESS` / `TERMINAL_NON_RANGE` / `TERMINAL_FAILED`.
-   - Pure functional transition mechanics and typed outcomes (`ProbeResult.Success`, `ProbeResult.NonRangeSingleStream`, `ProbeResult.Failed`) eliminate cross-stage race conditions and probe-pause collisions.
+3. **Range Capability & Threat-Inspected Probe Pipeline (`ProbeStage`, `ProbeStateMachine`)**:
+   - `ProbeStage`: `INITIAL_HEAD` -> `INITIAL_GET_RANGE` -> `DESKTOP_SPOOF` -> `CLOUD_SLICER` -> terminal `RESOLVED_DUAL_STREAM` / `FALLBACK_SINGLE_STREAM` / `ABORTED`, with `canTransitionTo(next)` guards and pure functional next-stage evaluators in `ProbeStateMachine`.
+   - Security threat header inspection (`ThreatDetectionEngine.inspectHeaders`) executes across every stage including `DESKTOP_SPOOF` and `CLOUD_SLICER`.
 
-4. **Chunk Status Transitions & Global State Validation (`ChunkStatus` & `DownloadStateValidator`)**:
-   - Strict transition table enforced on `ChunkStatus`:
-     - `PENDING -> CLAIMED | SKIPPED`
-     - `CLAIMED -> DOWNLOADING | PENDING (retry)`
-     - `DOWNLOADING -> COMPLETED | PENDING (error backoff) | FAILED`
-     - Terminal: `COMPLETED`, `SKIPPED`, `FAILED`
-   - `DownloadStateValidator`: Enforces formal transition rules for `DownloadState` emissions (e.g. prohibiting invalid jumps like `Idle -> Completed` or `Paused -> Completed`), logging warnings and protecting reactive UI subscribers from out-of-order state blips.
+4. **Transfer, Channel Mode & Thermal Control (`DownloadState`, `DownloadChannelMode`, `StreamReadiness`, `ThermalLevel`, `ThermalThrottlePolicy`)**:
+   - `ChunkStatus.canTransitionTo(next)` and `DownloadStateValidator.isValidTransition(from, to)` enforce legal transfer progressions (including `AutoRecovering -> ThreatDetected` and `Paused -> ThreatDetected`).
+   - `DownloadChannelMode` (`DUAL_CHANNEL`, `SINGLE_STREAM_WIFI`, `SINGLE_STREAM_CELLULAR`) and `StreamReadiness` (`DISABLED`, `BUFFERING`, `READY`) move channel/playback inference out of Compose UI.
+   - `ThermalLevel` + `ThermalThrottlePolicy` (`UNRESTRICTED`, `CAP_CELLULAR_SINGLE`, `OFFLOAD_CELLULAR_TO_WIFI`, `EMERGENCY_SINGLE_CELLULAR`) map hardware heat levels cleanly to cellular scheduling limits.
 
-5. **Download Queue Lifecycle (`QueuePhase`)**:
-   - `sealed class QueuePhase { Idle, Running(val activeItemId: String), Paused }`
-   - Eliminates ambiguity in `QueueCoordinator` where queue state had to be inferred by cross-referencing item lists with active engine states.
+5. **Network & Service Lifecycle (`NetworkTopology`, `NetworkListenerState`, `CellularKeepAliveState`, `ServiceExecutionPhase`, `ServiceLockState`, `ServiceCommand`, `NotificationThrottler`)**:
+   - `DualNetworkManager` governs listener registration via idempotent `NetworkListenerState` (`STOPPED`, `LISTENING`) and cellular radio pinning via synchronized `CellularKeepAliveState` (`IDLE`, `REQUESTING`, `ACTIVE`, `FAILED`).
+   - `NetworkTopology` exposes `showsVpnBanner` and `showsRoamingBanner` predicates.
+   - `DownloadForegroundService` uses `ServiceExecutionPhase` (`STOPPED`, `FOREGROUND_ACTIVE`, `PAUSED`, `TERMINATING`), `ServiceLockState` (`RELEASED`, `ACQUIRED`), typed `ServiceCommand.fromIntent` (preserving `EXTRA_ALLOW_BYPASS` and active settings configs across service restarts), API 26+ `PendingIntent.getForegroundService` for Resume, and production `NotificationThrottler`.
 
-6. **Network Interface Topology (`NetworkTopology`)**:
-   - `enum class NetworkTopology { DISCONNECTED, WIFI_ONLY, CELLULAR_ONLY, DUAL_CHANNEL, ROAMING_SAFEGUARD, VPN_TUNNEL, MODEM_STANDBY }`
-   - Consolidates 6+ independent boolean state flows (`isWifiAvailable`, `isCellularAvailable`, `isRoamingActive`, `isVpnActive`, `isModemStandbyDetected`) into a single deterministic resolver `NetworkTopology.resolve(...)` across `NetworkProvider`, `DualNetworkManager`, `DownloadRepository`, and `MainViewModel`.
+6. **Queue, Sniffer, Security, History & Compose UI (`QueuePhase`, `MediaSnifferEngine`, `CredentialStorageMode`, `HistoryFileStatus`, `SocialIntakeState`, `MainUiState`)**:
+   - `QueueCoordinator` uses `_queuePhase: StateFlow<QueuePhase>` (`Idle`, `Running(activeItemId)`, `Paused`) as its single source of truth, cleanly handles empty queues, resumes `PAUSED` items, and recovers orphaned `DOWNLOADING` queue records to `PAUSED` during `DownloadQueueRepository.loadQueue()`.
+   - `MediaSnifferEngine` serializes state updates with `synchronized(lock)` and emits `SniffOutcome` (`Detected`, `Ignored(SniffIgnoreReason)`).
+   - `SecurityPreferences` & `SlicerPreferences` cache keystores per `Context` (`WeakHashMap`) with `CredentialStorageMode`; `DownloadHistoryRepository` resolves `HistoryFileStatus` (`LocalFile`, `MediaStoreContent`, `Missing`).
+   - `MainUiState.kt` replaces loose Activity/ViewModel flags with `ClipboardSuggestionState`, tri-state `SequentialStreamMode` (`AUTO`, `FORCE_ON`, `FORCE_OFF`) + `SequentialStreamUiState`, `BatteryGuidanceState` (refreshed in `onResume()`), `MainDialogState`, and `PrimaryActionUiState`; `SocialIntakeState.canTransitionTo` + `socialResolveJob` cancellation keep social resolution race-free and retryable.
 
 ## Constraints
 - Server must support HTTP Range requests (either via standard mobile headers, desktop browser spoofing, or Personal Cloud Slicer) for dual-channel acceleration.

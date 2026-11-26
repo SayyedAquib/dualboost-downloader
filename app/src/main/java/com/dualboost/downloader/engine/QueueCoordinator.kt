@@ -3,7 +3,6 @@ package com.dualboost.downloader.engine
 import android.util.Log
 import com.dualboost.downloader.data.DownloadQueueRepository
 import com.dualboost.downloader.data.DownloadState
-import com.dualboost.downloader.data.QueueItem
 import com.dualboost.downloader.data.QueueItemStatus
 import com.dualboost.downloader.data.QueuePhase
 import kotlinx.coroutines.CoroutineScope
@@ -17,9 +16,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Coordinates execution of the Multi-Download Queue.
- * Automatically claims the next QUEUED item when an active download completes or fails,
- * while managing concurrency limits (1 or 2 active transfers) and pause/resume lifecycle.
+ * Coordinates execution of the Multi-Download Queue using [QueuePhase] as the single source of truth.
+ * Automatically claims the next dispatchable item when an active download completes, fails, or is blocked,
+ * while preventing stuck states on empty queues, external pauses, or discards.
  */
 class QueueCoordinator(
     private val queueRepository: DownloadQueueRepository,
@@ -37,11 +36,20 @@ class QueueCoordinator(
     private val _maxConcurrentDownloads = MutableStateFlow(1)
     val maxConcurrentDownloads: StateFlow<Int> = _maxConcurrentDownloads.asStateFlow()
 
-    private var activeItemId: String? = null
     private var observerJob: Job? = null
 
     init {
         startObservingDownloadState()
+    }
+
+    private fun setQueuePhaseLocked(next: QueuePhase) {
+        val current = _queuePhase.value
+        if (!current.canTransitionTo(next)) {
+            Log.w(TAG, "Blocked invalid QueuePhase transition: $current -> $next")
+            return
+        }
+        _queuePhase.value = next
+        _isQueueActive.value = next.isRunning
     }
 
     private fun startObservingDownloadState() {
@@ -55,9 +63,12 @@ class QueueCoordinator(
 
     private suspend fun handleDownloadStateChange(state: DownloadState) {
         mutex.withLock {
-            val currentActiveId = activeItemId ?: return
+            val currentActiveId = _queuePhase.value.currentActiveItemId ?: return
             val items = queueRepository.queueItems.value
-            val activeItem = items.firstOrNull { it.id == currentActiveId } ?: return
+            if (items.none { it.id == currentActiveId }) {
+                setQueuePhaseLocked(QueuePhase.Idle)
+                return
+            }
 
             when (state) {
                 is DownloadState.Downloading -> {
@@ -69,62 +80,54 @@ class QueueCoordinator(
                 }
                 is DownloadState.Completed -> {
                     queueRepository.updateStatusSync(currentActiveId, QueueItemStatus.COMPLETED)
-                    activeItemId = null
-                    if (_isQueueActive.value) {
-                        val dispatched = dispatchNextQueuedItemLocked()
-                        if (!dispatched) {
-                            _queuePhase.value = QueuePhase.Idle
-                            _isQueueActive.value = false
-                        }
-                    } else {
-                        _queuePhase.value = QueuePhase.Idle
-                    }
+                    advanceOrFinishLocked()
                 }
                 is DownloadState.Failed -> {
                     queueRepository.updateStatusSync(currentActiveId, QueueItemStatus.FAILED, errorMessage = state.error)
-                    activeItemId = null
-                    if (_isQueueActive.value) {
-                        val dispatched = dispatchNextQueuedItemLocked()
-                        if (!dispatched) {
-                            _queuePhase.value = QueuePhase.Idle
-                            _isQueueActive.value = false
-                        }
-                    } else {
-                        _queuePhase.value = QueuePhase.Idle
-                    }
+                    advanceOrFinishLocked()
                 }
                 is DownloadState.ThreatDetected -> {
                     val threatTypeName = state.threat.threatType?.name ?: "UNKNOWN"
                     val threatMsg = "[VIRUS BLOCKED: $threatTypeName] ${state.threat.description}"
                     queueRepository.updateStatusSync(currentActiveId, QueueItemStatus.THREAT_DETECTED, errorMessage = threatMsg)
-                    activeItemId = null
-                    if (_isQueueActive.value) {
-                        val dispatched = dispatchNextQueuedItemLocked()
-                        if (!dispatched) {
-                            _queuePhase.value = QueuePhase.Idle
-                            _isQueueActive.value = false
-                        }
-                    } else {
-                        _queuePhase.value = QueuePhase.Idle
-                    }
+                    advanceOrFinishLocked()
                 }
                 is DownloadState.Paused -> {
-                    if (!_isQueueActive.value) {
-                        queueRepository.updateStatusSync(currentActiveId, QueueItemStatus.PAUSED)
-                        _queuePhase.value = QueuePhase.Paused
-                    }
+                    queueRepository.updateStatusSync(currentActiveId, QueueItemStatus.PAUSED)
+                    setQueuePhaseLocked(QueuePhase.Paused)
                 }
-                else -> { /* Probing, Idle, AutoRecovering handled seamlessly */ }
+                is DownloadState.Idle -> {
+                    queueRepository.updateStatusSync(currentActiveId, QueueItemStatus.PAUSED)
+                    setQueuePhaseLocked(QueuePhase.Paused)
+                }
+                else -> { /* Probing, AutoRecovering handled seamlessly */ }
             }
+        }
+    }
+
+    private suspend fun advanceOrFinishLocked() {
+        if (!_queuePhase.value.isRunning) {
+            setQueuePhaseLocked(QueuePhase.Idle)
+            return
+        }
+        _queuePhase.value = QueuePhase.Running(activeItemId = null)
+        val dispatched = dispatchNextQueuedItemLocked()
+        if (!dispatched) {
+            setQueuePhaseLocked(QueuePhase.Idle)
         }
     }
 
     fun startQueue() {
         scope.launch {
             mutex.withLock {
-                _isQueueActive.value = true
-                _queuePhase.value = QueuePhase.Running(activeItemId)
-                dispatchNextQueuedItemLocked()
+                if (_queuePhase.value is QueuePhase.Running && _queuePhase.value.currentActiveItemId != null) {
+                    return@withLock
+                }
+                setQueuePhaseLocked(QueuePhase.Running(activeItemId = null))
+                val dispatched = dispatchNextQueuedItemLocked()
+                if (!dispatched) {
+                    setQueuePhaseLocked(QueuePhase.Idle)
+                }
             }
         }
     }
@@ -132,13 +135,11 @@ class QueueCoordinator(
     fun pauseQueue() {
         scope.launch {
             mutex.withLock {
-                _isQueueActive.value = false
-                _queuePhase.value = QueuePhase.Paused
-                val currentActiveId = activeItemId
+                val currentActiveId = _queuePhase.value.currentActiveItemId
+                setQueuePhaseLocked(QueuePhase.Paused)
                 if (currentActiveId != null) {
                     dispatcher.pauseDownload()
                     queueRepository.updateStatusSync(currentActiveId, QueueItemStatus.PAUSED)
-                    activeItemId = null
                 }
             }
         }
@@ -154,14 +155,17 @@ class QueueCoordinator(
     }
 
     private suspend fun dispatchNextQueuedItemLocked(): Boolean {
-        if (!_isQueueActive.value) return false
-        if (activeItemId != null) return true
+        val phase = _queuePhase.value
+        if (phase !is QueuePhase.Running) return false
+        if (phase.activeItemId != null) return true
 
         val items = queueRepository.queueItems.value
-        val nextItem = items.firstOrNull { it.status == QueueItemStatus.QUEUED } ?: return false
+        val nextItem = items.firstOrNull { it.status == QueueItemStatus.QUEUED }
+            ?: items.firstOrNull { it.status == QueueItemStatus.PAUSED }
+            ?: return false
 
-        activeItemId = nextItem.id
-        _queuePhase.value = QueuePhase.Running(activeItemId)
+        _queuePhase.value = QueuePhase.Running(activeItemId = nextItem.id)
+        _isQueueActive.value = true
         queueRepository.updateStatusSync(nextItem.id, QueueItemStatus.DOWNLOADING)
         dispatcher.startDownload(nextItem.url, forceSequentialMode = nextItem.isSequentialMode)
         return true

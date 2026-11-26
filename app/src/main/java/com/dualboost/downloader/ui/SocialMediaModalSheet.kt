@@ -29,7 +29,8 @@ fun SocialMediaModalSheet(
     wifiDetails: com.dualboost.downloader.network.WifiDetails = com.dualboost.downloader.network.WifiDetails.DISCONNECTED,
     onDismiss: () -> Unit,
     onDownload: (url: String, quality: MediaQuality) -> Unit,
-    onEnqueue: (url: String, quality: MediaQuality) -> Unit
+    onEnqueue: (url: String, quality: MediaQuality) -> Unit,
+    onRetry: (url: String, quality: MediaQuality) -> Unit = { _, _ -> }
 ) {
     if (state is SocialIntakeState.Idle) return
 
@@ -322,12 +323,74 @@ fun SocialMediaModalSheet(
                         color = MaterialTheme.colorScheme.error
                     )
                     Spacer(modifier = Modifier.height(20.dp))
-                    Button(
-                        onClick = onDismiss,
-                        shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Dismiss")
+                    if (state.platform != null) {
+                        val dismissInteraction = remember { MutableInteractionSource() }
+                        val retryInteraction = remember { MutableInteractionSource() }
+                        ButtonGroup(
+                            overflowIndicator = { menuState -> ButtonGroupDefaults.OverflowIndicator(menuState) },
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            customItem(
+                                buttonGroupContent = {
+                                    OutlinedButton(
+                                        onClick = onDismiss,
+                                        shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                        interactionSource = dismissInteraction,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .animateWidth(dismissInteraction, compressionLimit = 8.dp)
+                                    ) {
+                                        Text("Dismiss", maxLines = 1)
+                                    }
+                                },
+                                menuContent = { menuState ->
+                                    DropdownMenuItem(
+                                        text = { Text("Dismiss") },
+                                        onClick = {
+                                            menuState.dismiss()
+                                            onDismiss()
+                                        }
+                                    )
+                                }
+                            )
+                            customItem(
+                                buttonGroupContent = {
+                                    Button(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onRetry(state.url, state.attemptedQuality)
+                                        },
+                                        shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                        interactionSource = retryInteraction,
+                                        modifier = Modifier
+                                            .weight(1.2f)
+                                            .animateWidth(retryInteraction, compressionLimit = 8.dp)
+                                    ) {
+                                        Icon(painter = painterResource(DualBoostIcons.Refresh), contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Retry", maxLines = 1)
+                                    }
+                                },
+                                menuContent = { menuState ->
+                                    DropdownMenuItem(
+                                        text = { Text("Retry") },
+                                        onClick = {
+                                            menuState.dismiss()
+                                            onRetry(state.url, state.attemptedQuality)
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = onDismiss,
+                            shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Dismiss")
+                        }
                     }
                 }
 

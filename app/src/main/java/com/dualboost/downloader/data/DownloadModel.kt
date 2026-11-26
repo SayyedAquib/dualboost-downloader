@@ -1,9 +1,57 @@
 package com.dualboost.downloader.data
 
+import com.dualboost.downloader.engine.ProbeStage
+
 enum class NetworkInterfaceType {
     WIFI,
     CELLULAR,
     DEFAULT
+}
+
+/**
+ * Explicit transport channel mode for active downloads.
+ * Replaces UI-side inference from `supportsRanges` and byte counters.
+ */
+enum class DownloadChannelMode(val displayLabel: String) {
+    DUAL_CHANNEL("Aggregated Bandwidth"),
+    SINGLE_STREAM_WIFI("Single-Stream • Wi-Fi Only"),
+    SINGLE_STREAM_CELLULAR("Single-Stream • Cellular Only");
+
+    val isDualChannel: Boolean get() = this == DUAL_CHANNEL
+
+    companion object {
+        fun resolve(
+            supportsRanges: Boolean,
+            wifiDownloadedBytes: Long,
+            cellularDownloadedBytes: Long
+        ): DownloadChannelMode {
+            if (supportsRanges) return DUAL_CHANNEL
+            return if (cellularDownloadedBytes > 0L && wifiDownloadedBytes == 0L) {
+                SINGLE_STREAM_CELLULAR
+            } else {
+                SINGLE_STREAM_WIFI
+            }
+        }
+    }
+}
+
+/**
+ * Explicit sequential playback readiness state for video transfers.
+ */
+enum class StreamReadiness {
+    DISABLED,
+    BUFFERING,
+    READY;
+
+    companion object {
+        fun resolve(isSequentialMode: Boolean, isPlayable: Boolean): StreamReadiness {
+            return when {
+                !isSequentialMode -> DISABLED
+                isPlayable -> READY
+                else -> BUFFERING
+            }
+        }
+    }
 }
 
 enum class ChunkStatus {
@@ -73,7 +121,10 @@ data class ChunkSnapshot(
 
 sealed class DownloadState {
     object Idle : DownloadState()
-    data class Probing(val message: String) : DownloadState()
+    data class Probing(
+        val message: String,
+        val stage: ProbeStage = ProbeStage.INITIAL_HEAD
+    ) : DownloadState()
     data class Downloading(
         val fileName: String,
         val totalBytes: Long,
@@ -102,6 +153,10 @@ sealed class DownloadState {
         val wifiSpeedMbps: Double get() = wifiSpeedMBps
         val cellularSpeedMbps: Double get() = cellularSpeedMBps
         val totalSpeedMbps: Double get() = totalSpeedMBps
+        val channelMode: DownloadChannelMode
+            get() = DownloadChannelMode.resolve(supportsRanges, wifiDownloadedBytes, cellularDownloadedBytes)
+        val streamReadiness: StreamReadiness
+            get() = StreamReadiness.resolve(isSequentialMode, isPlayable)
     }
     data class Completed(
         val fileName: String,
@@ -132,6 +187,15 @@ sealed class DownloadState {
         val isCustomUserAgent: Boolean = false,
         val timeoutBadge: String = ""
     ) : DownloadState()
+
+    val isTransferInProgress: Boolean
+        get() = this is Probing || this is Downloading || this is AutoRecovering
+
+    val blocksConcurrentStart: Boolean
+        get() = this is Probing || this is Downloading
+
+    val isTerminal: Boolean
+        get() = this is Completed || this is Failed || this is ThreatDetected
 }
 
 /**
@@ -145,8 +209,8 @@ object DownloadStateValidator {
             is DownloadState.Idle -> to is DownloadState.Probing || to is DownloadState.Downloading || to is DownloadState.Paused || to is DownloadState.Failed || to is DownloadState.ThreatDetected
             is DownloadState.Probing -> to is DownloadState.Downloading || to is DownloadState.ThreatDetected || to is DownloadState.Failed || to is DownloadState.Paused || to is DownloadState.Idle
             is DownloadState.Downloading -> to is DownloadState.Completed || to is DownloadState.Paused || to is DownloadState.Failed || to is DownloadState.AutoRecovering || to is DownloadState.ThreatDetected || to is DownloadState.Idle
-            is DownloadState.AutoRecovering -> to is DownloadState.Downloading || to is DownloadState.Paused || to is DownloadState.Failed || to is DownloadState.Idle
-            is DownloadState.Paused -> to is DownloadState.Probing || to is DownloadState.Downloading || to is DownloadState.Idle || to is DownloadState.Failed
+            is DownloadState.AutoRecovering -> to is DownloadState.Downloading || to is DownloadState.Paused || to is DownloadState.Failed || to is DownloadState.ThreatDetected || to is DownloadState.Idle
+            is DownloadState.Paused -> to is DownloadState.Probing || to is DownloadState.Downloading || to is DownloadState.Idle || to is DownloadState.Failed || to is DownloadState.ThreatDetected
             is DownloadState.Completed -> to is DownloadState.Idle || to is DownloadState.Probing || to is DownloadState.Downloading
             is DownloadState.Failed -> to is DownloadState.Idle || to is DownloadState.Probing || to is DownloadState.Downloading
             is DownloadState.ThreatDetected -> to is DownloadState.Idle || to is DownloadState.Probing || to is DownloadState.Downloading

@@ -53,7 +53,19 @@ class DownloadQueueRepository(
                 return
             }
             val items = QueueItem.parseList(content)
-            _queueItems.value = items
+            var recoveredStaleActive = false
+            val sanitized = items.map { item ->
+                if (item.status == QueueItemStatus.DOWNLOADING) {
+                    recoveredStaleActive = true
+                    item.copy(status = QueueItemStatus.PAUSED)
+                } else {
+                    item
+                }
+            }
+            _queueItems.value = sanitized
+            if (recoveredStaleActive) {
+                saveToDiskLocked(sanitized)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load download queue: ${e.message}", e)
             _queueItems.value = emptyList()
@@ -87,7 +99,12 @@ class DownloadQueueRepository(
             val index = current.indexOfFirst { it.id == id }
             if (index != -1) {
                 val old = current[index]
-                current[index] = old.copy(status = status, errorMessage = errorMessage ?: old.errorMessage)
+                if (!old.status.canTransitionTo(status)) {
+                    Log.w(TAG, "Blocked invalid QueueItemStatus transition for $id: ${old.status} -> $status")
+                    return
+                }
+                val clearedError = if (status == QueueItemStatus.QUEUED || status == QueueItemStatus.DOWNLOADING) null else (errorMessage ?: old.errorMessage)
+                current[index] = old.copy(status = status, errorMessage = clearedError)
                 _queueItems.value = current
                 saveToDiskLocked(current)
             }

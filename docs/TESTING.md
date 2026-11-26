@@ -523,6 +523,25 @@ End-to-end and component UI testing on Android devices is performed using Google
   - `testCellularUi_HeroCardFormatting`: Validates title formatting with and without carrier names (`5G Cellular (Jio)` vs `4G LTE Cellular (Airtel)`).
   - `testCellularUi_BadgeFormatting`: Validates status badge formatting for active transfers.
 
+### End-to-End Explicit State Machines Phase 2 Suite (`ADR-059`)
+- **ExplicitStateMachinesPhase2Test** (11 tests):
+  - `enginePhase_enforcesGuardMatrix`: Verifies `EnginePhase.canTransitionTo` prevents illegal direct transitions such as `DISCARDING -> EXECUTING`.
+  - `probeStateMachine_transitionsCleanlyAcrossAllStages`: Verifies pure `ProbeStateMachine` stage progression and `ABORTED` cancellation handling.
+  - `circuitBreaker_treatsHalfOpenPeerAsCapableAndEmitsCompositeSnapshot`: Verifies `HALF_OPEN` peer capability preservation (`isInterfaceCapable`) and composite `CircuitBreakerSnapshot` emissions.
+  - `thermalPolicy_mapsSeverityAndWifiAvailabilityDeterministically`: Verifies `ThermalLevel` and `ThermalThrottlePolicy` scheduling rules across light, moderate, and severe heat states.
+  - `resumeDecision_evaluatesValidatorsAndInvalidationReasons`: Verifies `ResumeDecision.evaluate` across `FreshStart`, `Resumable`, and all `ResumeInvalidationReason` branches.
+  - `downloadModel_channelModeReadinessAndValidatorGuards`: Verifies `DownloadChannelMode`, `StreamReadiness`, and `DownloadStateValidator` transitions (`AutoRecovering -> ThreatDetected`, `Paused -> ThreatDetected`).
+  - `networkAndServiceStateMachines_validateTransitions`: Verifies `NetworkListenerState`, `CellularKeepAliveState`, `NetworkTopology` banner flags, `ServiceExecutionPhase`, `ServiceLockState`, and `ServiceCommand`.
+  - `queueStateMachines_validateStatusAndPhaseTransitions`: Verifies `QueueItemStatus.canTransitionTo` and `QueuePhase` invariants.
+  - `mediaSniffer_reportsExplicitOutcomesAndHandlesConcurrentTraffic`: Verifies `SniffOutcome` classification and multi-threaded synchronization in `MediaSnifferEngine`.
+  - `historyAndCredentialEnums_resolveAccurately`: Verifies `CredentialStorageMode` entries and `DownloadHistoryRepository.resolveFileStatus`.
+  - `uiStateMachines_resolveClipboardSequentialBatteryDialogAndPrimaryCta`: Verifies `ClipboardSuggestionState`, `SequentialStreamMode`/`SequentialStreamUiState`, `BatteryGuidanceState`, `MainDialogState`, `PrimaryActionUiState`, and `SocialIntakeState.canTransitionTo`.
+- **Upgraded Existing Suites** (+6 new tests across Phase 2 fixes):
+  - `NotificationThrottlerTest` (2 tests): Switched from a local mock inner class to testing production `NotificationThrottler` directly.
+  - `QueueCoordinatorTest` (+3 tests -> 6 tests total): Added empty-queue `Idle` verification, external `Paused` notification handling + `PAUSED` item resumption, and cold-start recovery of crashed `DOWNLOADING` queue entries.
+  - `SocialIntakeViewModelTest` (+2 tests -> 5 tests total): Added `dismissSocialIntake()` in-flight coroutine cancellation test and `retrySocialResolution` recovery test.
+  - `EngineThreatInterceptionTest` (+1 test -> 5 tests total): Added `desktopSpoofProbeHeadersThreat_blocksDownloadOnMaliciousMime` covering Stage 2 threat inspection.
+
 ## API Testing
 - Verify HTTP 206 response validation.
 - Verify fallback behavior when a mock server returns HTTP 200 (server ignored Range header).
@@ -549,8 +568,8 @@ End-to-end and component UI testing on Android devices is performed using Google
 
 ## Required Checks
 Before marking any development task complete:
-1. `.\gradlew.bat test` passes with 0 failures (408 tests across 72 suites).
-2. `.\gradlew.bat connectedAndroidTest` passes with 0 failures on connected Pixel hardware (13/13 UI tests).
+1. `.\gradlew.bat test` passes with 0 failures (425 tests across 73 suites).
+2. `.\gradlew.bat connectedAndroidTest` passes with 0 failures on connected Pixel hardware (13/13 UI tests; instrumentation compilation verified via `compileDebugAndroidTestKotlin`).
 3. `.\gradlew.bat assembleRelease` produces a valid R8-minified APK.
 4. Lint checks pass without blocking errors: `.\gradlew.bat lint`.
 

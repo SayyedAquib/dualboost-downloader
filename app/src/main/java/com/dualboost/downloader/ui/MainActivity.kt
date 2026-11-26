@@ -51,7 +51,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.dualboost.downloader.data.DownloadChannelMode
 import com.dualboost.downloader.data.DownloadState
+import com.dualboost.downloader.data.StreamReadiness
+import com.dualboost.downloader.social.SocialIntakeState
 import com.dualboost.downloader.ui.theme.DualBoostIcons
 import com.dualboost.downloader.ui.theme.DualBoostTheme
 import com.dualboost.downloader.ui.theme.ExpressiveTooltipIconButton
@@ -103,6 +106,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkClipboardMetadata()
+        viewModel.refreshBatteryGuidance()
     }
 
     // SEC-AUDIT-02: Zero-toast privacy-preserving metadata check (does not access clipboard payload bytes)
@@ -258,23 +262,21 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
-    var showCancelConfirmDialog by remember { mutableStateOf(false) }
-    var pendingCancelFileName by remember { mutableStateOf<String?>(null) }
-    var showExitDownloadConfirmDialog by remember { mutableStateOf(false) }
 
     val downloadState by viewModel.downloadState.collectAsState()
     val socialIntakeState by viewModel.socialIntakeState.collectAsState()
-    val isAnySheetOrDialogActive = socialIntakeState !is com.dualboost.downloader.social.SocialIntakeState.Idle ||
-            showCancelConfirmDialog ||
-            showExitDownloadConfirmDialog
-    val isDownloadRunning = downloadState is DownloadState.Downloading || downloadState is DownloadState.Probing
+    val dialogState by viewModel.dialogState.collectAsState()
+    val isAnySheetOrDialogActive = socialIntakeState !is SocialIntakeState.Idle ||
+            dialogState !is MainDialogState.None ||
+            downloadState is DownloadState.ThreatDetected
+    val isDownloadRunning = downloadState.isTransferInProgress
 
     BackHandler(enabled = isAnySheetOrDialogActive || isDownloadRunning) {
         when {
-            socialIntakeState !is com.dualboost.downloader.social.SocialIntakeState.Idle -> viewModel.dismissSocialIntake()
-            showCancelConfirmDialog -> showCancelConfirmDialog = false
-            showExitDownloadConfirmDialog -> showExitDownloadConfirmDialog = false
-            isDownloadRunning -> showExitDownloadConfirmDialog = true
+            socialIntakeState !is SocialIntakeState.Idle -> viewModel.dismissSocialIntake()
+            dialogState !is MainDialogState.None -> viewModel.dismissDialog()
+            downloadState is DownloadState.ThreatDetected -> viewModel.resetToIdle()
+            isDownloadRunning -> viewModel.openBackgroundExitDialog()
         }
     }
     val wifiAvailable by viewModel.isWifiAvailable.collectAsState()
@@ -284,16 +286,16 @@ fun MainScreen(
     val cellularGeneration by viewModel.cellularGeneration.collectAsState()
     val cellularNetworkConfig by viewModel.cellularNetworkConfig.collectAsState()
     val wifiDetails by viewModel.wifiDetails.collectAsState()
-    val showBatteryGuidance by viewModel.showBatteryGuidance.collectAsState()
+    val batteryGuidanceState by viewModel.batteryGuidanceState.collectAsState()
+    val networkTopology by viewModel.networkTopology.collectAsState()
     val isVpnActive by viewModel.isVpnActive.collectAsState()
     val isRoamingActive by viewModel.isRoamingActive.collectAsState()
     val cellularCarrierName by viewModel.cellularCarrierName.collectAsState()
     val isModemStandbyDetected by viewModel.isModemStandbyDetected.collectAsState()
 
     val urlInput by viewModel.urlInput.collectAsState()
-    val hasClipboardContent by viewModel.hasClipboardContent.collectAsState()
-    val detectedClipboardUrl by viewModel.detectedClipboardUrl.collectAsState()
-    val isSequentialRequested by viewModel.isSequentialStreamRequested.collectAsState()
+    val clipboardSuggestionState by viewModel.clipboardSuggestionState.collectAsState()
+    val sequentialStreamMode by viewModel.sequentialStreamMode.collectAsState()
 
     // Haptic feedback on completion
     LaunchedEffect(downloadState) {
@@ -382,7 +384,7 @@ fun MainScreen(
 
             // OEM Battery Optimization Guidance Banner (Slice 3)
             AnimatedVisibility(
-                visible = showBatteryGuidance,
+                visible = batteryGuidanceState.shouldShowBanner,
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
@@ -459,9 +461,9 @@ fun MainScreen(
                 }
             }
 
-            // VPN Active Status Banner (Slice 2)
+            // VPN Active Status Banner (driven by NetworkTopology)
             AnimatedVisibility(
-                visible = isVpnActive,
+                visible = networkTopology.showsVpnBanner || isVpnActive,
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
@@ -500,9 +502,9 @@ fun MainScreen(
                 }
             }
 
-            // Data Roaming Guard Banner (Slice 1)
+            // Data Roaming Guard Banner (driven by NetworkTopology + safety guard)
             AnimatedVisibility(
-                visible = isRoamingActive,
+                visible = networkTopology.showsRoamingBanner || isRoamingActive,
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
@@ -601,10 +603,11 @@ fun MainScreen(
 
                     // SEC-AUDIT-02: Smart Context Pill Banner (Privacy-Conscious Clipboard Suggestion)
                     AnimatedVisibility(
-                        visible = (hasClipboardContent || !detectedClipboardUrl.isNullOrBlank()) && urlInput.isBlank(),
+                        visible = clipboardSuggestionState.isVisible && urlInput.isBlank(),
                         enter = expandVertically() + fadeIn(),
                         exit = shrinkVertically() + fadeOut()
                     ) {
+                        val clipboardUrl = (clipboardSuggestionState as? ClipboardSuggestionState.UrlDetected)?.url
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
@@ -623,7 +626,7 @@ fun MainScreen(
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Icon(
-                                        painter = painterResource(if (!detectedClipboardUrl.isNullOrBlank()) DualBoostIcons.Link else DualBoostIcons.ContentPaste),
+                                        painter = painterResource(if (clipboardUrl != null) DualBoostIcons.Link else DualBoostIcons.ContentPaste),
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                         modifier = Modifier.size(18.dp)
@@ -631,12 +634,12 @@ fun MainScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column {
                                         Text(
-                                            text = if (!detectedClipboardUrl.isNullOrBlank()) "Link detected in clipboard" else "Clipboard text available",
+                                            text = if (clipboardUrl != null) "Link detected in clipboard" else "Clipboard text available",
                                             style = MaterialTheme.typography.labelSmallEmphasized,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                         Text(
-                                            text = detectedClipboardUrl ?: "Tap 'Paste' to import URL",
+                                            text = clipboardUrl ?: "Tap 'Paste' to import URL",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                                             maxLines = 1,
@@ -649,7 +652,7 @@ fun MainScreen(
                                     Button(
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            if (!detectedClipboardUrl.isNullOrBlank()) {
+                                            if (clipboardUrl != null) {
                                                 viewModel.acceptClipboardUrl()
                                             } else {
                                                 onPasteFromClipboard()
@@ -731,14 +734,8 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // Watch While Downloading (Sequential Video Streaming via Expressive ListItem)
-                    val isAutoVideoUrl = isSequentialRequested == null && com.dualboost.downloader.engine.DualDownloaderEngine.isVideoFile(urlInput)
-                    val isSequentialActive = isSequentialRequested == true || (isSequentialRequested == null && isAutoVideoUrl)
-                    val statusText = when {
-                        isSequentialRequested == true -> "On • Downloads in order to preview early"
-                        isSequentialRequested == false -> "Off • Maximum speed for files & games"
-                        isAutoVideoUrl -> "Video detected • Ready to watch while downloading"
-                        else -> "Auto • Activates automatically for video links"
-                    }
+                    val seqUi = SequentialStreamUiState.resolve(sequentialStreamMode, urlInput)
+                    val isSequentialActive = seqUi.isEffectiveSequential
 
                     ListItem(
                         checked = isSequentialActive,
@@ -771,11 +768,31 @@ fun MainScreen(
                             }
                         },
                         supportingContent = {
-                            Text(
-                                text = statusText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column {
+                                Text(
+                                    text = seqUi.statusText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (seqUi.isManualOverride) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Surface(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            viewModel.resetSequentialStreamToAuto()
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
+                                    ) {
+                                        Text(
+                                            text = "Reset to Auto",
+                                            style = MaterialTheme.typography.labelSmallEmphasized,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
                         },
                         trailingContent = {
                             Switch(
@@ -820,8 +837,7 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // Action Button
-                    val isEnabled = viewModel.isStartButtonEnabled(downloadState, urlInput)
-                    val isPaused = downloadState is DownloadState.Paused
+                    val primaryAction = PrimaryActionUiState.resolve(downloadState, urlInput)
                     Button(
                         onClick = {
                             if (urlInput.isNotBlank()) {
@@ -833,7 +849,7 @@ fun MainScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
-                        enabled = isEnabled,
+                        enabled = primaryAction.isEnabled,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
@@ -841,17 +857,13 @@ fun MainScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                painter = painterResource(if (isPaused) DualBoostIcons.PlayArrow else DualBoostIcons.Bolt),
+                                painter = painterResource(if (primaryAction.isResumeStyle) DualBoostIcons.PlayArrow else DualBoostIcons.Bolt),
                                 contentDescription = null,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = when (downloadState) {
-                                    is DownloadState.Probing -> "Probing Server..."
-                                    is DownloadState.Paused -> "Resume Download"
-                                    else -> "Boost Download"
-                                },
+                                text = primaryAction.label,
                                 style = MaterialTheme.typography.titleMediumEmphasized
                             )
                         }
@@ -978,9 +990,10 @@ fun MainScreen(
                                             }
                                         }
 
-                                        if (state.isSequentialMode) {
+                                        val streamReadiness = state.streamReadiness
+                                        if (streamReadiness != StreamReadiness.DISABLED) {
                                             Spacer(modifier = Modifier.height(4.dp))
-                                            val isReady = state.isPlayable
+                                            val isReady = streamReadiness == StreamReadiness.READY
                                             val badgeBgColor = if (isReady) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f)
                                             val badgeBorderColor = if (isReady) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
                                             val badgeContentColor = if (isReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer
@@ -1011,8 +1024,25 @@ fun MainScreen(
                                             }
                                         }
 
+                                        if (state.timeoutBadge.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f))
+                                            ) {
+                                                Text(
+                                                    text = state.timeoutBadge,
+                                                    style = MaterialTheme.typography.labelSmallEmphasized,
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+
                                         // Compact Single-Stream Status Chip
-                                        if (!state.supportsRanges) {
+                                        val channelMode = state.channelMode
+                                        if (!channelMode.isDualChannel) {
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Surface(
                                                 shape = RoundedCornerShape(8.dp),
@@ -1030,8 +1060,13 @@ fun MainScreen(
                                                         modifier = Modifier.size(12.dp)
                                                     )
                                                     Spacer(modifier = Modifier.width(4.dp))
+                                                    val singleStreamText = if (channelMode == DownloadChannelMode.SINGLE_STREAM_CELLULAR) {
+                                                        "Single-Stream • ${cellularGeneration.detailLabel}"
+                                                    } else {
+                                                        channelMode.displayLabel
+                                                    }
                                                     Text(
-                                                        text = "Single-Stream • ${if (state.cellularDownloadedBytes > 0L && state.wifiDownloadedBytes == 0L) cellularGeneration.detailLabel else "Wi-Fi Only"}",
+                                                        text = singleStreamText,
                                                         style = MaterialTheme.typography.labelSmallEmphasized,
                                                         color = MaterialTheme.colorScheme.onTertiaryContainer
                                                     )
@@ -1127,8 +1162,9 @@ fun MainScreen(
                                 Spacer(modifier = Modifier.height(10.dp))
 
                                 // Compact Inline Network Chips (Wi-Fi & Cellular)
-                                val isWifiInactiveInSingleStream = !state.supportsRanges && state.wifiDownloadedBytes == 0L && state.cellularDownloadedBytes > 0L
-                                val isCellularInactiveInSingleStream = !state.supportsRanges && state.cellularDownloadedBytes == 0L
+                                val activeChannelMode = state.channelMode
+                                val isWifiInactiveInSingleStream = activeChannelMode == DownloadChannelMode.SINGLE_STREAM_CELLULAR
+                                val isCellularInactiveInSingleStream = activeChannelMode == DownloadChannelMode.SINGLE_STREAM_WIFI
                                 val cellTypeLabel = cellularGeneration.fullDisplayName
 
                                 Row(
@@ -1278,8 +1314,7 @@ fun MainScreen(
                                             OutlinedButton(
                                                 onClick = {
                                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                    pendingCancelFileName = state.fileName
-                                                    showCancelConfirmDialog = true
+                                                    viewModel.openCancelOrDiscardDialog(fileName = state.fileName, isPaused = false)
                                                 },
                                                 shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
                                                 interactionSource = cancelInteraction,
@@ -1303,8 +1338,7 @@ fun MainScreen(
                                                 text = { Text("Cancel") },
                                                 onClick = {
                                                     menuState.dismiss()
-                                                    pendingCancelFileName = state.fileName
-                                                    showCancelConfirmDialog = true
+                                                    viewModel.openCancelOrDiscardDialog(fileName = state.fileName, isPaused = false)
                                                 }
                                             )
                                         }
@@ -1691,7 +1725,7 @@ fun MainScreen(
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
                                                     )
                                                 }
-                                            } else if (state.isDesktopSpoofed) {
+                                             } else if (state.isDesktopSpoofed) {
                                                 Spacer(modifier = Modifier.height(2.dp))
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
@@ -1701,6 +1735,20 @@ fun MainScreen(
                                                         text = "⚡ Desktop Mode",
                                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
                                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                                    )
+                                                }
+                                            }
+                                            if (state.timeoutBadge.isNotBlank()) {
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.75f)
+                                                ) {
+                                                    Text(
+                                                        text = state.timeoutBadge,
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+                                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
                                                     )
                                                 }
@@ -1788,8 +1836,7 @@ fun MainScreen(
                                             OutlinedButton(
                                                 onClick = {
                                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                    pendingCancelFileName = state.fileName
-                                                    showCancelConfirmDialog = true
+                                                    viewModel.openCancelOrDiscardDialog(fileName = state.fileName, isPaused = true)
                                                 },
                                                 shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
                                                 interactionSource = discardInteraction,
@@ -1810,8 +1857,7 @@ fun MainScreen(
                                                 text = { Text("Discard") },
                                                 onClick = {
                                                     menuState.dismiss()
-                                                    pendingCancelFileName = state.fileName
-                                                    showCancelConfirmDialog = true
+                                                    viewModel.openCancelOrDiscardDialog(fileName = state.fileName, isPaused = true)
                                                 }
                                             )
                                         }
@@ -1828,65 +1874,123 @@ fun MainScreen(
         }
     }
 
-    if (showCancelConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showCancelConfirmDialog = false
-                pendingCancelFileName = null
-            },
-            icon = {
-                Icon(
-                    painter = painterResource(DualBoostIcons.Warning),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(32.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = "Cancel Download?",
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    textAlign = TextAlign.Center
-                )
-            },
-            text = {
-                Text(
-                    text = "Are you sure you want to cancel and delete this download? All downloaded data will be removed.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        viewModel.discardDownload(pendingCancelFileName)
-                        showCancelConfirmDialog = false
-                        pendingCancelFileName = null
-                    },
-                    shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError
+    when (val activeDialog = dialogState) {
+        MainDialogState.None -> Unit
+        is MainDialogState.ConfirmCancelOrDiscard -> {
+            val isPausedDialog = activeDialog.isPaused
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissDialog() },
+                icon = {
+                    Icon(
+                        painter = painterResource(DualBoostIcons.Warning),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(32.dp)
                     )
-                ) {
-                    Text("Yes, Cancel", style = MaterialTheme.typography.labelLargeEmphasized)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showCancelConfirmDialog = false
-                        pendingCancelFileName = null
-                    },
-                    shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp)
-                ) {
-                    Text("Keep Downloading")
-                }
-            },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.large
-        )
+                },
+                title = {
+                    Text(
+                        text = if (isPausedDialog) "Discard Paused Download?" else "Cancel Download?",
+                        style = MaterialTheme.typography.titleMediumEmphasized,
+                        textAlign = TextAlign.Center
+                    )
+                },
+                text = {
+                    Text(
+                        text = if (isPausedDialog) {
+                            "Are you sure you want to discard this paused download? All partial data on disk will be deleted."
+                        } else {
+                            "Are you sure you want to cancel and delete this download? All downloaded data will be removed."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.confirmCancelOrDiscard()
+                        },
+                        shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                    ) {
+                        Text(
+                            text = if (isPausedDialog) "Yes, Discard" else "Yes, Cancel",
+                            style = MaterialTheme.typography.labelLargeEmphasized
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { viewModel.dismissDialog() },
+                        shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp)
+                    ) {
+                        Text(if (isPausedDialog) "Keep Paused" else "Keep Downloading")
+                    }
+                },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = MaterialTheme.shapes.large
+            )
+        }
+        MainDialogState.ConfirmBackgroundExit -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissDialog() },
+                icon = {
+                    Icon(
+                        painter = painterResource(DualBoostIcons.Download),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Download In Progress",
+                        style = MaterialTheme.typography.titleMediumEmphasized,
+                        textAlign = TextAlign.Center
+                    )
+                },
+                text = {
+                    Text(
+                        text = "A transfer is actively downloading in the foreground. Would you like to minimize to background and keep downloading, or cancel the transfer?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.dismissDialog()
+                            (context as? android.app.Activity)?.moveTaskToBack(true)
+                        },
+                        shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp)
+                    ) {
+                        Text("Minimize to Background")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.dismissDialog()
+                            viewModel.discardDownload()
+                        },
+                        shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+                    ) {
+                        Text("Cancel Download")
+                    }
+                },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = MaterialTheme.shapes.large
+            )
+        }
     }
 
     val currentThreatState = downloadState as? DownloadState.ThreatDetected
@@ -1899,62 +2003,6 @@ fun MainScreen(
         )
     }
 
-    if (showExitDownloadConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showExitDownloadConfirmDialog = false },
-            icon = {
-                Icon(
-                    painter = painterResource(DualBoostIcons.Download),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = "Download In Progress",
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    textAlign = TextAlign.Center
-                )
-            },
-            text = {
-                Text(
-                    text = "A transfer is actively downloading in the foreground. Would you like to minimize to background and keep downloading, or cancel the transfer?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showExitDownloadConfirmDialog = false
-                        (context as? android.app.Activity)?.moveTaskToBack(true)
-                    },
-                    shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp)
-                ) {
-                    Text("Minimize to Background")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = {
-                        showExitDownloadConfirmDialog = false
-                        viewModel.discardDownload()
-                    },
-                    shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
-                ) {
-                    Text("Cancel Download")
-                }
-            },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.large
-        )
-    }
-
     if (socialIntakeState !is com.dualboost.downloader.social.SocialIntakeState.Idle) {
         SocialMediaModalSheet(
             state = socialIntakeState,
@@ -1962,7 +2010,8 @@ fun MainScreen(
             wifiDetails = wifiDetails,
             onDismiss = { viewModel.dismissSocialIntake() },
             onDownload = { url, quality -> viewModel.startSocialDownload(url, quality) },
-            onEnqueue = { url, quality -> viewModel.enqueueSocialDownload(url, quality) }
+            onEnqueue = { url, quality -> viewModel.enqueueSocialDownload(url, quality) },
+            onRetry = { url, quality -> viewModel.retrySocialResolution(url, quality) }
         )
     }
 }

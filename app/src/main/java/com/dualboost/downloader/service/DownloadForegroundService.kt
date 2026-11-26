@@ -7,17 +7,21 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.os.Binder
 import android.net.wifi.WifiManager
+import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.engine.DualDownloaderEngine
 import com.dualboost.downloader.network.DualNetworkManager
 import com.dualboost.downloader.ui.MainActivity
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 
 class DownloadForegroundService : Service() {
@@ -38,11 +42,17 @@ class DownloadForegroundService : Service() {
     private lateinit var notificationManager: NotificationManager
     private var stateJob: Job? = null
 
+    private val _servicePhase = MutableStateFlow(ServiceExecutionPhase.STOPPED)
+    val servicePhase: StateFlow<ServiceExecutionPhase> = _servicePhase.asStateFlow()
+
+    private val _lockState = MutableStateFlow(ServiceLockState.RELEASED)
+    val lockState: StateFlow<ServiceLockState> = _lockState.asStateFlow()
+
+    private val notificationThrottler = NotificationThrottler(throttleIntervalMs = 1000L)
+
     inner class LocalBinder : Binder() {
         fun getService(): DownloadForegroundService = this@DownloadForegroundService
     }
-
-    private var lastNotificationTime = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -55,53 +65,106 @@ class DownloadForegroundService : Service() {
         observeDownloadState()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-        if (action == ACTION_START_DOWNLOAD || action == ACTION_RESUME_DOWNLOAD) {
-            val url = intent?.getStringExtra(EXTRA_URL)
-            val forceSeq = if (intent?.hasExtra(EXTRA_FORCE_SEQUENTIAL) == true) {
-                intent.getBooleanExtra(EXTRA_FORCE_SEQUENTIAL, false)
-            } else null
+    private fun transitionServicePhase(next: ServiceExecutionPhase) {
+        val current = _servicePhase.value
+        if (!current.canTransitionTo(next)) {
+            Log.w(TAG, "Unexpected ServiceExecutionPhase transition: $current -> $next")
+        }
+        _servicePhase.value = next
+    }
 
-            networkManager.acquireCellularKeepAlive()
-            acquireLocks()
-            startForegroundNotification("Initializing download...")
-            val currentState = downloaderEngine.downloadState.value
-            val targetUrl = url ?: (currentState as? DownloadState.Paused)?.url
-            if (!targetUrl.isNullOrBlank() && currentState !is DownloadState.Downloading && currentState !is DownloadState.Probing) {
-                downloaderEngine.startDownload(
-                    url = targetUrl,
-                    forceSequentialMode = forceSeq,
-                    concurrencyConfig = repository.concurrencyConfig.value
-                )
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (val command = ServiceCommand.fromIntent(intent)) {
+            is ServiceCommand.StartOrResume -> handleStartOrResume(command)
+            is ServiceCommand.Pause -> handlePauseCommand()
+            is ServiceCommand.Cancel -> handleCancelCommand()
+            is ServiceCommand.Discard -> handleDiscardCommand()
+            is ServiceCommand.SystemTimeout -> handleTimeoutCommand()
+            is ServiceCommand.Unknown -> {
+                Log.w(TAG, "Ignoring unknown service command: ${command.action}")
             }
-        } else if (action == ACTION_PAUSE_DOWNLOAD) {
-            val currentState = downloaderEngine.downloadState.value
-            if (currentState !is DownloadState.Idle && currentState !is DownloadState.Paused) {
-                downloaderEngine.pauseDownload()
-            }
-            networkManager.releaseCellularKeepAlive()
-            releaseLocks()
-        } else if (action == ACTION_CANCEL_DOWNLOAD) {
-            val currentState = downloaderEngine.downloadState.value
-            if (currentState !is DownloadState.Idle && currentState !is DownloadState.Paused) {
-                downloaderEngine.pauseDownload()
-            }
-            networkManager.releaseCellularKeepAlive()
-            releaseLocks()
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-        } else if (action == ACTION_DISCARD_DOWNLOAD) {
-            val currentState = downloaderEngine.downloadState.value
-            val fileName = (currentState as? DownloadState.Downloading)?.fileName
-                ?: (currentState as? DownloadState.Paused)?.fileName
-            downloaderEngine.discardDownload(fileName = fileName)
-            networkManager.releaseCellularKeepAlive()
-            releaseLocks()
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
         }
         return START_NOT_STICKY
+    }
+
+    private fun handleStartOrResume(command: ServiceCommand.StartOrResume) {
+        val currentState = downloaderEngine.downloadState.value
+        val targetUrl = command.url ?: (currentState as? DownloadState.Paused)?.url
+        if (targetUrl.isNullOrBlank()) {
+            Log.w(TAG, "StartOrResume received with empty URL; stopping service cleanly.")
+            transitionServicePhase(ServiceExecutionPhase.TERMINATING)
+            releaseServiceResources()
+            stopSelf()
+            return
+        }
+
+        transitionServicePhase(ServiceExecutionPhase.FOREGROUND_ACTIVE)
+        acquireServiceResources()
+        startForegroundNotification("Initializing download...")
+
+        if (!currentState.blocksConcurrentStart) {
+            downloaderEngine.startDownload(
+                url = targetUrl,
+                forceSequentialMode = command.forceSequential,
+                allowDangerousBypass = command.allowDangerousBypass,
+                concurrencyConfig = repository.concurrencyConfig.value,
+                chunkConfig = repository.chunkConfig.value,
+                userAgentConfig = repository.userAgentConfig.value,
+                timeoutConfig = repository.timeoutConfig.value
+            )
+        }
+    }
+
+    private fun handlePauseCommand() {
+        val currentState = downloaderEngine.downloadState.value
+        if (currentState.isTransferInProgress) {
+            downloaderEngine.pauseDownload()
+        }
+        transitionServicePhase(ServiceExecutionPhase.PAUSED)
+        releaseServiceResources()
+        stopForeground(STOP_FOREGROUND_DETACH)
+    }
+
+    private fun handleCancelCommand() {
+        val currentState = downloaderEngine.downloadState.value
+        if (currentState.isTransferInProgress) {
+            downloaderEngine.pauseDownload()
+        }
+        transitionServicePhase(ServiceExecutionPhase.TERMINATING)
+        releaseServiceResources()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun handleDiscardCommand() {
+        val currentState = downloaderEngine.downloadState.value
+        val fileName = (currentState as? DownloadState.Downloading)?.fileName
+            ?: (currentState as? DownloadState.Paused)?.fileName
+        transitionServicePhase(ServiceExecutionPhase.TERMINATING)
+        downloaderEngine.discardDownload(fileName = fileName)
+        releaseServiceResources()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun handleTimeoutCommand() {
+        transitionServicePhase(ServiceExecutionPhase.PAUSED)
+        downloaderEngine.pauseDownload()
+        releaseServiceResources()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun acquireServiceResources() {
+        networkManager.acquireCellularKeepAlive()
+        acquireLocks()
+        _lockState.value = ServiceLockState.ACQUIRED
+    }
+
+    private fun releaseServiceResources() {
+        networkManager.releaseCellularKeepAlive()
+        releaseLocks()
+        _lockState.value = ServiceLockState.RELEASED
     }
 
     // SEC-AUDIT L-3: WakeLock with auto-renewal for downloads exceeding 30 minutes
@@ -125,7 +188,7 @@ class DownloadForegroundService : Service() {
             while (isActive) {
                 delay(25 * 60 * 1000L) // Renew 5 minutes before expiry
                 val state = downloaderEngine.downloadState.value
-                if (state is DownloadState.Downloading || state is DownloadState.Probing || state is DownloadState.AutoRecovering) {
+                if (state.isTransferInProgress) {
                     wakeLock?.acquire(30 * 60 * 1000L)
                 }
             }
@@ -194,8 +257,7 @@ class DownloadForegroundService : Service() {
                 val now = System.currentTimeMillis()
                 when (state) {
                     is DownloadState.Downloading -> {
-                        if (now - lastNotificationTime >= 1000L) {
-                            lastNotificationTime = now
+                        if (notificationThrottler.shouldDispatch(now, isTerminalOrLifecycle = false)) {
                             val previewPending = if (state.isPlayable && state.filePath.isNotBlank()) {
                                 createPreviewPendingIntent(state.filePath)
                             } else null
@@ -224,25 +286,29 @@ class DownloadForegroundService : Service() {
                         }
                     }
                     is DownloadState.Probing -> {
-                        lastNotificationTime = now
-                        updateNotification(
-                            title = "DualBoost Downloader",
-                            content = state.message,
-                            progress = 0,
-                            indeterminate = true
-                        )
+                        if (notificationThrottler.shouldDispatch(now, isTerminalOrLifecycle = true)) {
+                            updateNotification(
+                                title = "DualBoost Downloader",
+                                content = state.message,
+                                progress = 0,
+                                indeterminate = true
+                            )
+                        }
                     }
                     is DownloadState.AutoRecovering -> {
-                        updateNotification(
-                            title = "Reconnecting Networks...",
-                            content = "${state.message} (Attempt ${state.retryAttempt})",
-                            progress = 0,
-                            indeterminate = true
-                        )
+                        if (notificationThrottler.shouldDispatch(now, isTerminalOrLifecycle = true)) {
+                            updateNotification(
+                                title = "Reconnecting Networks...",
+                                content = "${state.message} (Attempt ${state.retryAttempt})",
+                                progress = 0,
+                                indeterminate = true
+                            )
+                        }
                     }
                     is DownloadState.Completed -> {
-                        networkManager.releaseCellularKeepAlive()
-                        releaseLocks()
+                        transitionServicePhase(ServiceExecutionPhase.TERMINATING)
+                        releaseServiceResources()
+                        notificationThrottler.shouldDispatch(now, isTerminalOrLifecycle = true)
                         updateNotification(
                             title = "Download Complete!",
                             content = "${state.fileName} (${formatBytes(state.totalBytes)})",
@@ -255,8 +321,9 @@ class DownloadForegroundService : Service() {
                         stopSelf()
                     }
                     is DownloadState.ThreatDetected -> {
-                        networkManager.releaseCellularKeepAlive()
-                        releaseLocks()
+                        transitionServicePhase(ServiceExecutionPhase.TERMINATING)
+                        releaseServiceResources()
+                        notificationThrottler.shouldDispatch(now, isTerminalOrLifecycle = true)
                         updateNotification(
                             title = "🛑 Threat Detected: Download Blocked",
                             content = "${state.suggestedFilename}: ${state.threat.description}",
@@ -269,8 +336,9 @@ class DownloadForegroundService : Service() {
                         stopSelf()
                     }
                     is DownloadState.Failed -> {
-                        networkManager.releaseCellularKeepAlive()
-                        releaseLocks()
+                        transitionServicePhase(ServiceExecutionPhase.TERMINATING)
+                        releaseServiceResources()
+                        notificationThrottler.shouldDispatch(now, isTerminalOrLifecycle = true)
                         updateNotification(
                             title = "Download Failed",
                             content = state.error,
@@ -283,8 +351,9 @@ class DownloadForegroundService : Service() {
                         stopSelf()
                     }
                     is DownloadState.Paused -> {
-                        networkManager.releaseCellularKeepAlive()
-                        releaseLocks()
+                        transitionServicePhase(ServiceExecutionPhase.PAUSED)
+                        releaseServiceResources()
+                        notificationThrottler.shouldDispatch(now, isTerminalOrLifecycle = true)
                         updateNotification(
                             title = "Download Paused",
                             content = "${state.fileName} (Tap Resume to continue)",
@@ -293,9 +362,11 @@ class DownloadForegroundService : Service() {
                             isPaused = true,
                             canControl = true
                         )
+                        stopForeground(STOP_FOREGROUND_DETACH)
                     }
                     is DownloadState.Idle -> {
-                        releaseLocks()
+                        releaseServiceResources()
+                        notificationThrottler.reset()
                     }
                 }
             }
@@ -397,9 +468,15 @@ class DownloadForegroundService : Service() {
                 val resumeIntent = Intent(this, DownloadForegroundService::class.java).apply {
                     action = ACTION_RESUME_DOWNLOAD
                 }
-                val resumePending = PendingIntent.getService(
-                    this, 1, resumeIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
+                val resumePending = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    PendingIntent.getForegroundService(
+                        this, 1, resumeIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                    )
+                } else {
+                    PendingIntent.getService(
+                        this, 1, resumeIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                    )
+                }
                 builder.addAction(android.R.drawable.ic_media_play, "Resume", resumePending)
             } else {
                 val pauseIntent = Intent(this, DownloadForegroundService::class.java).apply {
@@ -438,8 +515,8 @@ class DownloadForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        networkManager.releaseCellularKeepAlive()
-        releaseLocks()
+        transitionServicePhase(ServiceExecutionPhase.STOPPED)
+        releaseServiceResources()
         stateJob?.cancel()
         serviceScope.cancel()
         // Do NOT call networkManager.stopListening() here; networkManager is an application-scoped singleton
@@ -447,11 +524,8 @@ class DownloadForegroundService : Service() {
 
     override fun onTimeout(startId: Int, fgsType: Int) {
         super.onTimeout(startId, fgsType)
-        android.util.Log.w("DownloadFGService", "Foreground service execution time limit reached (fgsType $fgsType). Pausing download cleanly.")
-        downloaderEngine.pauseDownload()
-        releaseLocks()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        Log.w(TAG, "Foreground service execution time limit reached (fgsType $fgsType). Pausing download cleanly.")
+        handleTimeoutCommand()
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -466,6 +540,7 @@ class DownloadForegroundService : Service() {
     }
 
     companion object {
+        private const val TAG = "DownloadFGService"
         const val CHANNEL_ID = "dualboost_download_channel"
         const val NOTIFICATION_ID = 1001
 
@@ -479,6 +554,7 @@ class DownloadForegroundService : Service() {
         const val ACTION_DISCARD_DOWNLOAD = "com.dualboost.ACTION_DISCARD_DOWNLOAD"
         const val EXTRA_URL = "extra_download_url"
         const val EXTRA_FORCE_SEQUENTIAL = "extra_force_sequential"
+        const val EXTRA_ALLOW_BYPASS = "EXTRA_ALLOW_BYPASS"
 
         fun formatNotificationSpeedContent(
             wifiSpeedMBps: Double,
@@ -492,4 +568,3 @@ class DownloadForegroundService : Service() {
         }
     }
 }
-

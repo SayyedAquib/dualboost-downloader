@@ -163,5 +163,12 @@ To prevent inverted contrast regressions (e.g. black-on-dark in light mode, whit
 - **Multi-Instance Redundancy**: The resolver must support a pool of backup instances to guarantee high availability when public services undergo maintenance or rate limiting.
 - **Zero APK Dependency Bloat**: Stream resolution must extract pre-merged video+audio streams, avoiding the need for heavy native FFmpeg binary wrappers.
 
+## Explicit State Machine & Service Isolation Rules (`ADR-059`)
+- **Single-Source-of-Truth State Machines**: NEVER replace explicit `enum` / `sealed class` state machines (`EnginePhase`, `QueuePhase`, `ProbeStage`, `ServiceExecutionPhase`, `MainDialogState`, `PrimaryActionUiState`, `SequentialStreamMode`) with loosely paired booleans or mutable counters.
+- **Monotonic Session Guards**: Asynchronous transfer jobs inside `DualDownloaderEngine` must check `sessionGeneration` before mutating shared state, releasing cellular listeners, or transitioning `EnginePhase` in `catch` / `finally` blocks, and must emit UI states exclusively through `DownloadStateValidator`.
+- **Stage-Complete Threat & Bypass Propagation**: Every fallback probe stage (`INITIAL_HEAD`, `INITIAL_GET_RANGE`, `DESKTOP_SPOOF`, `CLOUD_SLICER`) must run `ThreatDetectionEngine.inspectHeaders(...)` when threat guard is enabled, and `DownloadRepository` / `DownloadForegroundService` must preserve `EXTRA_ALLOW_BYPASS` and user configuration overrides across process/service boundaries.
+- **Per-Context Keystore Caching**: Preference singletons (`SecurityPreferences`, `SlicerPreferences`) must cache initialized `EncryptedSharedPreferences` instances per `Context` and never reconstruct `MasterKey` inside per-chunk hot paths.
+
+
 
 

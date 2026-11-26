@@ -5,6 +5,16 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.util.WeakHashMap
+
+/**
+ * Explicit encryption state for credential and preference persistence.
+ */
+enum class CredentialStorageMode {
+    UNINITIALIZED,
+    KEYSTORE_ENCRYPTED,
+    FALLBACK_PLAINTEXT
+}
 
 /**
  * Manages configuration and persistent user preferences for
@@ -23,9 +33,27 @@ object SecurityPreferences {
     private const val KEY_THREAT_GUARD_ENABLED = "threat_guard_enabled"
     private const val KEY_SAFE_BROWSING_API_KEY = "safe_browsing_api_key"
 
-    // SEC-AUDIT C-1: Use Android Keystore-backed AES-256-GCM encryption
+    private data class CachedPrefs(
+        val prefs: SharedPreferences,
+        val mode: CredentialStorageMode
+    )
+
+    private val prefsCache = WeakHashMap<Context, CachedPrefs>()
+
+    @Volatile
+    var lastStorageMode: CredentialStorageMode = CredentialStorageMode.UNINITIALIZED
+        private set
+
+    // SEC-AUDIT C-1: Use Android Keystore-backed AES-256-GCM encryption (cached per Context)
+    @Synchronized
     private fun getPrefs(context: Context): SharedPreferences {
-        return try {
+        val cacheKey = context.applicationContext ?: context
+        prefsCache[cacheKey]?.let {
+            lastStorageMode = it.mode
+            return it.prefs
+        }
+
+        val resolved = try {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
@@ -38,13 +66,19 @@ object SecurityPreferences {
             )
             // One-time migration from legacy plaintext SharedPreferences
             migrateLegacyPrefs(context, encPrefs)
-            encPrefs
+            CachedPrefs(encPrefs, CredentialStorageMode.KEYSTORE_ENCRYPTED)
         } catch (e: Throwable) {
             // Graceful fallback: if Keystore is broken or in headless JVM unit tests,
             // fall back to standard prefs to avoid crashing the security system entirely.
             Log.e(TAG, "EncryptedSharedPreferences init failed, falling back: ${e.message}")
-            context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+            CachedPrefs(
+                context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE),
+                CredentialStorageMode.FALLBACK_PLAINTEXT
+            )
         }
+        prefsCache[cacheKey] = resolved
+        lastStorageMode = resolved.mode
+        return resolved.prefs
     }
 
     private fun migrateLegacyPrefs(context: Context, encPrefs: SharedPreferences) {

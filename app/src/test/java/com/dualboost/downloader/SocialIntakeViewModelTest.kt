@@ -9,10 +9,12 @@ import com.dualboost.downloader.social.SocialMediaAsset
 import com.dualboost.downloader.social.SocialMediaResolver
 import com.dualboost.downloader.social.SocialPlatform
 import com.dualboost.downloader.ui.MainViewModel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -105,5 +107,90 @@ class SocialIntakeViewModelTest {
 
         viewModel.dismissSocialIntake()
         assertEquals(SocialIntakeState.Idle, viewModel.socialIntakeState.value)
+    }
+
+    @Test
+    fun dismissSocialIntake_cancelsInFlightResolutionBeforeLateCompletion() = testScope.runTest {
+        val deferred = CompletableDeferred<Result<SocialMediaAsset>>()
+        val delayedResolver = object : SocialMediaResolver() {
+            override suspend fun resolve(url: String, quality: MediaQuality): Result<SocialMediaAsset> {
+                return deferred.await()
+            }
+        }
+        val viewModel = MainViewModel(
+            repository = null,
+            socialResolverOverride = delayedResolver,
+            coroutineScopeOverride = this
+        )
+
+        val tiktokUrl = "https://www.tiktok.com/@user/video/987654"
+        viewModel.checkAndPrepareSocialLink(tiktokUrl)
+        viewModel.startSocialDownload(tiktokUrl, MediaQuality.HD_720)
+        runCurrent()
+        assertTrue(viewModel.socialIntakeState.value is SocialIntakeState.Resolving)
+
+        viewModel.dismissSocialIntake()
+        assertEquals(SocialIntakeState.Idle, viewModel.socialIntakeState.value)
+
+        // Late completion after dismissal must be ignored
+        deferred.complete(
+            Result.success(
+                SocialMediaAsset(
+                    originalUrl = tiktokUrl,
+                    platform = SocialPlatform.TIKTOK,
+                    title = "Clip",
+                    streamUrl = "https://cdn.tiktok.com/video.mp4",
+                    suggestedFilename = "clip.mp4"
+                )
+            )
+        )
+        advanceUntilIdle()
+
+        assertEquals(SocialIntakeState.Idle, viewModel.socialIntakeState.value)
+        assertEquals("", viewModel.urlInput.value)
+    }
+
+    @Test
+    fun retrySocialResolution_transitionsFromErrorBackToResolved() = testScope.runTest {
+        var attempt = 0
+        val flakyResolver = object : SocialMediaResolver() {
+            override suspend fun resolve(url: String, quality: MediaQuality): Result<SocialMediaAsset> {
+                attempt++
+                return if (attempt == 1) {
+                    Result.failure(IllegalStateException("Temporary network error"))
+                } else {
+                    Result.success(
+                        SocialMediaAsset(
+                            originalUrl = url,
+                            platform = SocialPlatform.YOUTUBE,
+                            title = "Recovered Video",
+                            streamUrl = "https://cdn.googlevideo.com/recovered.mp4",
+                            suggestedFilename = "recovered.mp4"
+                        )
+                    )
+                }
+            }
+        }
+        val viewModel = MainViewModel(
+            repository = null,
+            socialResolverOverride = flakyResolver,
+            coroutineScopeOverride = this
+        )
+
+        val ytUrl = "https://youtube.com/watch?v=abc12345"
+        viewModel.checkAndPrepareSocialLink(ytUrl)
+        viewModel.startSocialDownload(ytUrl, MediaQuality.HD_720)
+        advanceUntilIdle()
+
+        val errorState = viewModel.socialIntakeState.value as? SocialIntakeState.Error
+        assertNotNull(errorState)
+        assertEquals(SocialPlatform.YOUTUBE, errorState?.platform)
+        assertEquals(MediaQuality.HD_720, errorState?.attemptedQuality)
+
+        viewModel.retrySocialResolution(ytUrl, errorState!!.attemptedQuality)
+        advanceUntilIdle()
+
+        assertEquals(SocialIntakeState.Idle, viewModel.socialIntakeState.value)
+        assertEquals("https://cdn.googlevideo.com/recovered.mp4", viewModel.urlInput.value)
     }
 }

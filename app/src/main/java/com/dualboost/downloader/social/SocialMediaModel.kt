@@ -37,5 +37,20 @@ sealed class SocialIntakeState {
         val platform: SocialPlatform,
         val availableQualities: List<MediaQuality> = listOf(MediaQuality.MAX, MediaQuality.HD_720, MediaQuality.AUDIO_ONLY)
     ) : SocialIntakeState()
-    data class Error(val url: String, val message: String) : SocialIntakeState()
+    data class Error(
+        val url: String,
+        val message: String,
+        val platform: SocialPlatform? = null,
+        val attemptedQuality: MediaQuality = MediaQuality.MAX
+    ) : SocialIntakeState()
+
+    fun canTransitionTo(next: SocialIntakeState): Boolean {
+        if (this::class == next::class) return true
+        return when (this) {
+            is Idle -> next is Ready || next is Resolving
+            is Ready -> next is Idle || next is Resolving
+            is Resolving -> next is Idle || next is Error || next is Ready
+            is Error -> next is Idle || next is Resolving || next is Ready
+        }
+    }
 }

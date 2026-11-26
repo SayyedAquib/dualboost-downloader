@@ -247,6 +247,11 @@ class DownloadRepository(
     val cellularGeneration: StateFlow<com.dualboost.downloader.network.CellularGeneration> get() = (networkProvider ?: networkManager).cellularGeneration
     val wifiDetails: StateFlow<com.dualboost.downloader.network.WifiDetails> get() = (networkProvider ?: networkManager).wifiDetails
     val networkTopology: StateFlow<com.dualboost.downloader.network.NetworkTopology> get() = (networkProvider ?: networkManager).networkTopology
+    val listenerState: StateFlow<com.dualboost.downloader.network.NetworkListenerState> get() = (networkProvider ?: networkManager).listenerState
+    val cellularKeepAliveState: StateFlow<com.dualboost.downloader.network.CellularKeepAliveState> get() = (networkProvider ?: networkManager).cellularKeepAliveState
+    val enginePhase: StateFlow<com.dualboost.downloader.engine.EnginePhase> get() = downloaderEngine.enginePhase
+    val circuitBreakerSnapshot: StateFlow<com.dualboost.downloader.engine.CircuitBreakerSnapshot> get() = downloaderEngine.circuitBreakerSnapshot
+    val queuePhase: StateFlow<QueuePhase> get() = queueCoordinator.queuePhase
     val thermalStatus: StateFlow<Int> get() = (thermalStatusProviderOverride ?: downloaderEngine.thermalStatusProvider).thermalStatus
     val historyItems: StateFlow<List<DownloadHistoryItem>> get() = historyRepository.historyItems
 
@@ -254,10 +259,18 @@ class DownloadRepository(
     val workerTestStatus: StateFlow<WorkerTestStatus> = _workerTestStatus.asStateFlow()
 
     suspend fun testWorkerConnectivity(rawUrl: String, secretKey: String): WorkerTestStatus {
+        if (_workerTestStatus.value is WorkerTestStatus.Testing) {
+            return _workerTestStatus.value
+        }
+        val cleanBase = rawUrl.trim().trimEnd('/')
+        if (cleanBase.isBlank()) {
+            val emptyErr = WorkerTestStatus.Error("Worker URL cannot be empty")
+            _workerTestStatus.value = emptyErr
+            return emptyErr
+        }
         _workerTestStatus.value = WorkerTestStatus.Testing
         val result = withContext(Dispatchers.IO) {
             try {
-                val cleanBase = rawUrl.trim().trimEnd('/')
                 val healthUrl = if (cleanBase.endsWith("/health")) cleanBase else "$cleanBase/health"
 
                 val client = networkProvider?.getDefaultClient() ?: OkHttpClient.Builder()
@@ -363,7 +376,7 @@ class DownloadRepository(
                     if (forceSequentialMode != null) {
                         putExtra(DownloadForegroundService.EXTRA_FORCE_SEQUENTIAL, forceSequentialMode)
                     }
-                    putExtra("EXTRA_ALLOW_BYPASS", allowDangerousBypass)
+                    putExtra(DownloadForegroundService.EXTRA_ALLOW_BYPASS, allowDangerousBypass)
                 }
                 ContextCompat.startForegroundService(context, intent)
                 return
@@ -378,7 +391,7 @@ class DownloadRepository(
         downloaderEngine.pauseDownload()
         try {
             val intent = Intent(context, DownloadForegroundService::class.java).apply {
-                action = DownloadForegroundService.ACTION_CANCEL_DOWNLOAD
+                action = DownloadForegroundService.ACTION_PAUSE_DOWNLOAD
             }
             context.startService(intent)
         } catch (_: Exception) {

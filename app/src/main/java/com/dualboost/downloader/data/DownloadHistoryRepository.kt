@@ -163,22 +163,43 @@ class DownloadHistoryRepository(
     }
 
     /**
+     * Explicit storage availability state for a completed download history record.
+     */
+    sealed class HistoryFileStatus {
+        data class LocalFile(val file: File) : HistoryFileStatus()
+        data class MediaStoreContent(val uri: Uri) : HistoryFileStatus()
+        object Missing : HistoryFileStatus()
+
+        val isPresent: Boolean
+            get() = this !is Missing
+    }
+
+    /**
+     * Resolves whether the physical file exists locally, is reachable via MediaStore URI, or is missing.
+     */
+    fun resolveFileStatus(item: DownloadHistoryItem): HistoryFileStatus {
+        val file = File(item.filePath)
+        if (file.exists() && file.length() > 0) return HistoryFileStatus.LocalFile(file)
+        if (!item.contentUriString.isNullOrBlank()) {
+            return try {
+                val uri = Uri.parse(item.contentUriString)
+                val resolver = context.contentResolver ?: return HistoryFileStatus.Missing
+                resolver.openFileDescriptor(uri, "r")?.use {
+                    HistoryFileStatus.MediaStoreContent(uri)
+                } ?: HistoryFileStatus.Missing
+            } catch (_: Exception) {
+                HistoryFileStatus.Missing
+            }
+        }
+        return HistoryFileStatus.Missing
+    }
+
+    /**
      * Checks if the physical file for a given history item exists on disk,
      * or is accessible via its published MediaStore Content URI.
      */
     fun isFilePresent(item: DownloadHistoryItem): Boolean {
-        val file = File(item.filePath)
-        if (file.exists() && file.length() > 0) return true
-        if (!item.contentUriString.isNullOrBlank()) {
-            return try {
-                val uri = Uri.parse(item.contentUriString)
-                val resolver = context.contentResolver ?: return false
-                resolver.openFileDescriptor(uri, "r")?.use { true } ?: false
-            } catch (_: Exception) {
-                false
-            }
-        }
-        return false
+        return resolveFileStatus(item).isPresent
     }
 
     private fun isSafeHistoryDeletePath(file: File): Boolean {

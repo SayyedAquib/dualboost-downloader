@@ -70,6 +70,10 @@ class QueueCoordinatorTest {
         fun emitFailed(error: String, url: String) {
             _downloadState.value = DownloadState.Failed(error = error, url = url)
         }
+
+        fun emitPaused() {
+            _downloadState.value = DownloadState.Paused()
+        }
     }
 
     @Before
@@ -209,5 +213,77 @@ class QueueCoordinatorTest {
         assertEquals(1, dispatcher.pauseCalledCount)
         assertEquals(QueueItemStatus.PAUSED, repo.queueItems.value.first().status)
         coordinator.stop()
+    }
+
+    @Test
+    fun testQueueCoordinator_StartEmptyQueue_RemainsIdle() = testScope.runTest {
+        val repo = DownloadQueueRepository(queueFileOverride = queueFile, ioDispatcher = testDispatcher)
+        val dispatcher = MockDownloadDispatcher()
+
+        val coordinator = QueueCoordinator(
+            queueRepository = repo,
+            dispatcher = dispatcher,
+            scope = this
+        )
+        activeCoordinator = coordinator
+
+        coordinator.startQueue()
+        advanceUntilIdle()
+
+        assertFalse(coordinator.isQueueActive.value)
+        assertEquals(com.dualboost.downloader.data.QueuePhase.Idle, coordinator.queuePhase.value)
+        assertTrue(dispatcher.startedUrls.isEmpty())
+        coordinator.stop()
+    }
+
+    @Test
+    fun testQueueCoordinator_ExternalPauseTransitionsPhaseToPausedAndResumesLater() = testScope.runTest {
+        val repo = DownloadQueueRepository(queueFileOverride = queueFile, ioDispatcher = testDispatcher)
+        val dispatcher = MockDownloadDispatcher()
+
+        repo.enqueue(QueueItem(url = "https://example.com/movie.mp4", fileName = "movie.mp4"))
+        advanceUntilIdle()
+
+        val coordinator = QueueCoordinator(
+            queueRepository = repo,
+            dispatcher = dispatcher,
+            scope = this
+        )
+        activeCoordinator = coordinator
+
+        coordinator.startQueue()
+        advanceUntilIdle()
+        assertTrue(coordinator.queuePhase.value is com.dualboost.downloader.data.QueuePhase.Running)
+
+        // External pause (e.g., from notification action) must transition queue to Paused cleanly
+        dispatcher.emitPaused()
+        advanceUntilIdle()
+        assertEquals(com.dualboost.downloader.data.QueuePhase.Paused, coordinator.queuePhase.value)
+        assertFalse(coordinator.isQueueActive.value)
+        assertEquals(QueueItemStatus.PAUSED, repo.queueItems.value.first().status)
+
+        // Restarting queue must dispatch the PAUSED item rather than ignoring it
+        coordinator.startQueue()
+        advanceUntilIdle()
+        assertEquals(2, dispatcher.startedUrls.size)
+        assertEquals(QueueItemStatus.DOWNLOADING, repo.queueItems.value.first().status)
+        coordinator.stop()
+    }
+
+    @Test
+    fun testQueueRepository_LoadQueueRecoversCrashedDownloadingItems() = testScope.runTest {
+        val repo = DownloadQueueRepository(queueFileOverride = queueFile, ioDispatcher = testDispatcher)
+        val crashedItem = QueueItem(
+            id = "crash-1",
+            url = "https://example.com/interrupted.iso",
+            fileName = "interrupted.iso",
+            status = QueueItemStatus.DOWNLOADING
+        )
+        queueFile.writeText(QueueItem.serializeList(listOf(crashedItem)))
+
+        repo.loadQueue()
+        val loaded = repo.queueItems.value
+        assertEquals(1, loaded.size)
+        assertEquals(QueueItemStatus.PAUSED, loaded.first().status)
     }
 }

@@ -1,9 +1,22 @@
 # Project Memory
 
 ## Current Status
-DualBoost Downloader runs on **Compose Material 3 `1.5.0`** (`composeBom = "2026.11.01"`, `compileSdk = 37.1`, `AGP 9.5.3` with built-in Kotlin, `Gradle 9.6.0`) with bundled **Material Symbols Rounded** vector icons (`DualBoostIcons.kt`) following ADR-058, alongside ADR-057's state-machine and `WifiLock` resilience. The codebase is backed by **408 unit and integration tests across 72 test suites (100% passing green)**, **13/13 connected Jetpack Compose instrumentation tests passing on Pixel 9 (`Android 17`)**, clean `lint` verification (0 errors), and a verified R8-minified production release APK (`app-release.apk`, 1,896,297 bytes) installed and launched on device.
+DualBoost Downloader runs on **Compose Material 3 `1.5.0`** (`composeBom = "2026.11.01"`, `compileSdk = 37.1`, `AGP 9.5.3` with built-in Kotlin, `Gradle 9.6.0`) with bundled **Material Symbols Rounded** vector icons (`DualBoostIcons.kt`) and **End-to-End Explicit State Machines** (`ADR-056`, `ADR-059`). The codebase is backed by **425 unit and integration tests across 73 test suites (0 failures, 0 skipped)**, clean instrumentation test compilation (`compileDebugAndroidTestKotlin`), clean `lint` verification (0 errors), and a verified R8-minified production release APK (`app-release.apk`, `1,912,681` bytes) **installed and launched cleanly on device `53201VDAQ00067` (`PID 30717`)**. *(Note: `connectedAndroidTest` was not run during this session; baseline Pixel 9 UI suite stood at `13/13` passing.)*
 
 ## Recently Completed
+- **End-to-End Explicit State Machine Formalization & Lifecycle Hardening (ADR-059 / 425 Unit Tests across 73 Suites - 100% Green)**:
+  - **Engine, Probe, Resume, Thermal & Circuit Breaker State Machines**:
+    - Added `EnginePhase.canTransitionTo` guard matrix, monotonic `sessionGeneration` token cleanup isolation, `@Synchronized` validator-backed state emission, `DownloadChannelMode`, and `StreamReadiness`.
+    - Completed pure `ProbeStateMachine` transitions + `ProbeStage.ABORTED`/`isTerminal`/`canTransitionTo`, and closed Stage 2 (`DESKTOP_SPOOF`) & Stage 3 (`CLOUD_SLICER`) threat header inspection gaps.
+    - Formalized `ResumeDecision` + `ResumeInvalidationReason` (`ResumeStateMachine.kt`), `ThermalLevel` + `ThermalThrottlePolicy` (`ThermalStatusProvider.kt`), and `CircuitBreakerSnapshot` + `CircuitBreakerAggregateState` + `isInterfaceCapable` (`DualInterfaceCircuitBreaker.kt`, preserving independent `HALF_OPEN` peer capability).
+  - **Network, Service & Notification Lifecycle**:
+    - Added `NetworkListenerState`, `CellularKeepAliveState`, and topology banner flags to `NetworkTopology.kt` & `DualNetworkManager.kt`.
+    - Created `ServiceStateMachine.kt` (`ServiceExecutionPhase`, `ServiceLockState`, `ServiceCommand.fromIntent`, production `NotificationThrottler`), wired `EXTRA_ALLOW_BYPASS`, API 26+ `PendingIntent.getForegroundService` Resume intents, and active configs into `DownloadForegroundService.kt`, and fixed `DownloadRepository.pauseDownload()` to dispatch `ACTION_PAUSE_DOWNLOAD` rather than canceling.
+  - **Queue, Sniffer, Keystore Cache, History & Social/Compose UI State Machines**:
+    - Made `_queuePhase` single source of truth in `QueueCoordinator`, handled empty queues, external pauses, and `PAUSED` item resumption, added `QueueItemStatus.canTransitionTo`, and recovered interrupted `DOWNLOADING` queue records to `PAUSED` on cold start.
+    - Synchronized `MediaSnifferEngine` + added `SniffOutcome`/`SniffIgnoreReason`; cached keystores per `Context` with `CredentialStorageMode` in `SecurityPreferences`/`SlicerPreferences`; added `HistoryFileStatus` in `DownloadHistoryRepository`.
+    - Created `MainUiState.kt` (`ClipboardSuggestionState`, tri-state `SequentialStreamMode` with `Reset to Auto`, `BatteryGuidanceState` refreshed in `onResume()`, `MainDialogState`, `PrimaryActionUiState`) and added `SocialIntakeState.canTransitionTo`, retry actions in `SocialMediaModalSheet.kt`, and coroutine job cancellation in `MainViewModel.dismissSocialIntake()` (plus null-safe `Build.MANUFACTURER` handling in `SystemPowerExemptionChecker`).
+  - **Verification**: Executed `.\gradlew.bat test compileDebugAndroidTestKotlin lint assembleRelease --console=plain` — 425/425 unit tests passed across 73 suites (including new `ExplicitStateMachinesPhase2Test`, upgraded production `NotificationThrottlerTest`, and expanded `QueueCoordinatorTest`, `SocialIntakeViewModelTest`, `EngineThreatInterceptionTest`), `lint` passed (0 errors), instrumentation tests compiled cleanly, and `app-release.apk` (`1,912,681` bytes) assembled cleanly.
 - **Compose Material 3 `1.5.0`, Expressive Components & Material Symbols Migration (ADR-058 / 408 Unit Tests + 13 Pixel 9 UI Tests - 100% Green)**:
   - **Build Toolchain & SDK Upgrade**:
     - Installed Android SDK `platforms/android-37.1` and `build-tools/37.0.0` (required by Material 3 `1.5.0` / Compose UI `1.13.0` AAR metadata).
@@ -787,6 +800,7 @@ DualBoost Downloader runs on **Compose Material 3 `1.5.0`** (`composeBom = "2026
 - ADR-030: Strict Modem State Adherence & Elimination of False 5G Telemetry on LTE Carrier Aggregation.
 - ADR-031: Comprehensive Security Audit Remediation, Download Integrity Lockdown & Lifecycle Hardening.
 - ADR-056: Explicit State Machine Architecture Across Engine, Network, and Scheduling Layers.
+- ADR-059: End-to-End Explicit State Machine Formalization & Lifecycle Hardening (Phase 2).
 
 ## Operational Guidelines & Communication Rules
 - **Mandatory Adversarial & Test-First Workflow (ADR-031 / Workflow Rule)**:

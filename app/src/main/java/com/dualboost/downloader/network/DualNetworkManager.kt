@@ -214,6 +214,12 @@ interface NetworkProvider {
                 isModemStandbyDetected = isModemStandbyDetected.value
             )
         )
+    val listenerState: StateFlow<NetworkListenerState>
+        get() = MutableStateFlow(NetworkListenerState.STOPPED)
+    val cellularKeepAliveState: StateFlow<CellularKeepAliveState>
+        get() = MutableStateFlow(
+            if (isCellularKeepAliveActive.value) CellularKeepAliveState.ACTIVE else CellularKeepAliveState.IDLE
+        )
     val isCellularKeepAliveActive: StateFlow<Boolean>
         get() = MutableStateFlow(false)
     fun acquireCellularKeepAlive() {}
@@ -304,6 +310,12 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         val caps = cm.getNetworkCapabilities(net) ?: return
         reevaluateCellularGeneration(caps)
     }
+
+    private val _listenerState = MutableStateFlow(NetworkListenerState.STOPPED)
+    override val listenerState: StateFlow<NetworkListenerState> = _listenerState.asStateFlow()
+
+    private val _cellularKeepAliveState = MutableStateFlow(CellularKeepAliveState.IDLE)
+    override val cellularKeepAliveState: StateFlow<CellularKeepAliveState> = _cellularKeepAliveState.asStateFlow()
 
     private val _isCellularKeepAliveActive = MutableStateFlow(false)
     override val isCellularKeepAliveActive: StateFlow<Boolean> = _isCellularKeepAliveActive.asStateFlow()
@@ -588,6 +600,8 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
 
     fun startListening() {
         val cm = connectivityManager ?: return
+        if (!_listenerState.value.canTransitionTo(NetworkListenerState.LISTENING)) return
+        _listenerState.value = NetworkListenerState.LISTENING
 
         // Explicitly request Wi-Fi interface (with registerNetworkCallback fallback)
         val wifiRequest = NetworkRequest.Builder()
@@ -666,8 +680,10 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
         }
     }
 
+    @Synchronized
     override fun acquireCellularKeepAlive() {
-        if (_isCellularKeepAliveActive.value) return
+        if (_cellularKeepAliveState.value.isActiveOrPending || _isCellularKeepAliveActive.value) return
+        _cellularKeepAliveState.value = CellularKeepAliveState.REQUESTING
         _isCellularKeepAliveActive.value = true
         Log.d(TAG, "Acquiring on-demand cellular keep-alive request for active transfer")
         try {
@@ -677,6 +693,7 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 .build()
             val cb = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
+                    _cellularKeepAliveState.value = CellularKeepAliveState.ACTIVE
                     cellularCallback.onAvailable(network)
                 }
                 override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
@@ -685,16 +702,25 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
                 override fun onLost(network: Network) {
                     cellularCallback.onLost(network)
                 }
+                override fun onUnavailable() {
+                    _cellularKeepAliveState.value = CellularKeepAliveState.FAILED
+                    _isCellularKeepAliveActive.value = false
+                }
             }
             activeCellularCallback = cb
             connectivityManager?.requestNetwork(cellularRequest, cb)
         } catch (e: Exception) {
             Log.w(TAG, "Could not acquire on-demand cellular request", e)
+            activeCellularCallback = null
+            _cellularKeepAliveState.value = CellularKeepAliveState.FAILED
+            _isCellularKeepAliveActive.value = false
         }
     }
 
+    @Synchronized
     override fun releaseCellularKeepAlive() {
-        if (!_isCellularKeepAliveActive.value) return
+        if (_cellularKeepAliveState.value == CellularKeepAliveState.IDLE && !_isCellularKeepAliveActive.value) return
+        _cellularKeepAliveState.value = CellularKeepAliveState.IDLE
         _isCellularKeepAliveActive.value = false
         Log.d(TAG, "Releasing on-demand cellular keep-alive request (allowing modem sleep)")
         activeCellularCallback?.let { cb ->
@@ -708,6 +734,8 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
     }
 
     fun stopListening() {
+        if (!_listenerState.value.canTransitionTo(NetworkListenerState.STOPPED)) return
+        _listenerState.value = NetworkListenerState.STOPPED
         releaseCellularKeepAlive()
         hasReceivedDisplayInfo = false
         try {
@@ -727,6 +755,16 @@ class DualNetworkManager(private val context: Context) : NetworkProvider {
             } catch (_: Exception) {}
             telephonyCallback = null
         }
+
+        wifiNetwork = null
+        cellularNetwork = null
+        _isWifiAvailable.value = false
+        _isCellularAvailable.value = false
+        _isVpnActive.value = false
+        _isRoamingActive.value = false
+        _isModemStandbyDetected.value = false
+        _wifiDetails.value = WifiDetails.DISCONNECTED
+        reevaluateTopology()
     }
 
     override fun getWifiClient(): OkHttpClient? {

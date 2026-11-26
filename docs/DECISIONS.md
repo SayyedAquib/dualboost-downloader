@@ -2241,6 +2241,41 @@ Inspecting Google Maven AAR metadata (`material3-android:1.5.0` and `compose-bom
 - **Build & Compatibility**: Project compiles cleanly against Android 37.1 (`AGP 9.5.3` / `Gradle 9.6.0`) with zero Material 3 deprecation warnings and reduced icon bloat after dropping `material-icons-extended`.
 - **Test Coverage**: Verified by `ThemeContrastTest` (`testMaterial3ExpressiveMotionScheme_ProvidesDistinctSpringSpecs`), `MainComposeUiTest` (`13/13` instrumentation tests passing on Pixel 9 Android 17, including `testProbingAndAutoRecoveringStates_RenderWithMaterialExpressiveTheme` and updated assertions aligned with streamlined telemetry UI), `408` unit tests across `72` suites, `lint` (0 errors), and R8 release APK packaging (`app-release.apk`, `1,896,297` bytes) launched cleanly on Pixel 9.
 
+## ADR-059: End-to-End Explicit State Machine Formalization & Lifecycle Hardening (Phase 2)
+
+### Date
+2026-11-26
+
+### Status
+Accepted
+
+### Context
+An end-to-end codebase audit following ADR-056 identified remaining implicit state machines and unguarded transition paths across the engine, foreground service, repository, queue coordinator, thermal throttle logic, circuit breaker, media sniffer, credential stores, history resolver, social intake, ViewModel, and Compose UI:
+1. `DualDownloaderEngine` allowed a previously cancelled job's `catch`/`finally` cleanup to clobber a newer download's state and listeners, bypassed `DownloadStateValidator` on telemetry/single-stream writes, skipped `ThreatDetectionEngine` header checks on Stage 2 (`DESKTOP_SPOOF`) and Stage 3 (`CLOUD_SLICER`) probes, and misclassified `HALF_OPEN` peers as unavailable in worker failover checks.
+2. `DownloadForegroundService` ignored `EXTRA_ALLOW_BYPASS` and custom chunk/User-Agent/timeout settings in `onStartCommand`, and used `PendingIntent.getService` for `ACTION_RESUME_DOWNLOAD` (failing when backgrounded on API 26+).
+3. `DownloadRepository.pauseDownload()` dispatched `ACTION_CANCEL_DOWNLOAD` instead of `ACTION_PAUSE_DOWNLOAD`, killing pause notification restoration.
+4. `QueueCoordinator` maintained redundant mutable state alongside `_queuePhase`, could hang in `Running(null)` on empty queues, skipped `PAUSED` items on resume, and `DownloadQueueRepository.loadQueue()` left crash-interrupted `DOWNLOADING` entries wedged after process restarts.
+5. `SecurityPreferences` / `SlicerPreferences` repeatedly rebuilt `MasterKey` and `EncryptedSharedPreferences` inside 64 KB loop paths; `MediaSnifferEngine` lacked synchronization around list mutations; `MainViewModel.dismissSocialIntake()` left background resolution jobs running; and `MainActivity` relied on uncoordinated local booleans, nullable sequential modes, and stale battery guidance without `onResume()` refresh.
+
+### Decision
+1. **Engine, Probe, Resume & Thermal Explicit State Machines**:
+   - Added `EnginePhase.canTransitionTo(next)`, monotonic `sessionGeneration` cleanup isolation, `@Synchronized` `setDownloadState` validated through `DownloadStateValidator` (expanding `DownloadStateValidator` for `AutoRecovering -> ThreatDetected` and `Paused -> ThreatDetected`), and `DownloadChannelMode` / `StreamReadiness` on `DownloadState.Downloading`.
+   - Completed `ProbeStage` (`isTerminal`, `ABORTED`, `canTransitionTo`) + pure `ProbeStateMachine` transition functions, and added Stage 2 (`DESKTOP_SPOOF`) & Stage 3 (`CLOUD_SLICER`) threat header inspection.
+   - Created `ResumeStateMachine.kt` (`ResumeDecision` & `ResumeInvalidationReason`), `ThermalLevel` & `ThermalThrottlePolicy` in `ThermalStatusProvider.kt`, and `CircuitBreakerSnapshot` / `CircuitBreakerAggregateState` / `evaluateInterfaceOnly` / `isInterfaceCapable` in `DualInterfaceCircuitBreaker.kt` (fixing `HALF_OPEN` independent capability).
+2. **Network & Foreground Service Lifecycle**:
+   - Added `NetworkListenerState` and `CellularKeepAliveState` to `NetworkTopology.kt` / `DualNetworkManager.kt` with idempotent start/stop and synchronized radio keep-alive ownership.
+   - Created `ServiceStateMachine.kt` (`ServiceExecutionPhase`, `ServiceLockState`, `ServiceCommand.fromIntent`, and production `NotificationThrottler`), wired into `DownloadForegroundService.kt` with `EXTRA_ALLOW_BYPASS`, full preferences forwarding, `PendingIntent.getForegroundService` for Resume, and fixed `DownloadRepository.pauseDownload()` to send `ACTION_PAUSE_DOWNLOAD`.
+3. **Queue, Sniffer, Security, History & UI State Machines**:
+   - Unified `QueueCoordinator` around `_queuePhase` as single source of truth, handled empty/external-pause/`Idle` cases, added `QueueItemStatus.canTransitionTo(next)` (allowing `QUEUED -> COMPLETED`), and recovered interrupted `DOWNLOADING` queue records to `PAUSED` on cold start.
+   - Added thread-safe synchronization + `SniffOutcome` / `SniffIgnoreReason` to `MediaSnifferEngine`, `CredentialStorageMode` + per-`Context` `WeakHashMap` caching to `SecurityPreferences` / `SlicerPreferences`, and `HistoryFileStatus` to `DownloadHistoryRepository`.
+   - Created `MainUiState.kt` (`ClipboardSuggestionState`, tri-state `SequentialStreamMode` + `SequentialStreamUiState` with `Reset to Auto`, `BatteryGuidanceState` refreshed in `onResume()`, `MainDialogState`, `PrimaryActionUiState`) and added `SocialIntakeState.canTransitionTo`, retry support (`Error.platform`/`attemptedQuality`), and `socialResolveJob` cancellation on dismissal.
+
+### Consequences
+- **UX**: Threat "Download Anyway" overrides work reliably end-to-end, Pause preserves notification controls, interrupted queues self-recover on startup, users can reset Watch While Downloading back to `Auto`, social links support 1-tap Retry, and background dismissals no longer hijack the UI.
+- **DX & AX**: All implicit boolean/counter combinations are consolidated into documented, exhaustive Kotlin `enum` / `sealed class` machines with explicit `canTransitionTo` guards and observable `StateFlow`s.
+- **Verification**: Verified with `.\gradlew.bat test compileDebugAndroidTestKotlin lint assembleRelease` — `425/425` unit tests passing across `73` suites (0 failures, 0 skipped), instrumentation tests compiling cleanly, `lint` passing with 0 errors, and R8 `app-release.apk` (`1,912,681` bytes) assembled.
+
+
 
 
 

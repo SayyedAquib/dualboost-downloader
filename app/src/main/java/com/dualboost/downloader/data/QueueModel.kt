@@ -8,7 +8,23 @@ enum class QueueItemStatus {
     COMPLETED,
     PAUSED,
     FAILED,
-    THREAT_DETECTED
+    THREAT_DETECTED;
+
+    val isTerminal: Boolean
+        get() = this == COMPLETED || this == FAILED || this == THREAT_DETECTED
+
+    val isDispatchable: Boolean
+        get() = this == QUEUED || this == PAUSED
+
+    fun canTransitionTo(next: QueueItemStatus): Boolean {
+        if (this == next) return true
+        return when (this) {
+            QUEUED -> next == DOWNLOADING || next == COMPLETED || next == PAUSED || next == FAILED || next == THREAT_DETECTED
+            DOWNLOADING -> next == COMPLETED || next == PAUSED || next == FAILED || next == THREAT_DETECTED || next == QUEUED
+            PAUSED -> next == DOWNLOADING || next == QUEUED || next == FAILED
+            COMPLETED, FAILED, THREAT_DETECTED -> next == QUEUED
+        }
+    }
 }
 
 /**
@@ -23,6 +39,21 @@ sealed class QueuePhase {
 
     /** Queue has been paused by the user or an error condition. */
     object Paused : QueuePhase()
+
+    val isRunning: Boolean
+        get() = this is Running
+
+    val currentActiveItemId: String?
+        get() = (this as? Running)?.activeItemId
+
+    fun canTransitionTo(next: QueuePhase): Boolean {
+        if (this::class == next::class) return true
+        return when (this) {
+            is Idle -> next is Running
+            is Running -> next is Idle || next is Paused
+            is Paused -> next is Running || next is Idle
+        }
+    }
 }
 
 data class QueueItem(

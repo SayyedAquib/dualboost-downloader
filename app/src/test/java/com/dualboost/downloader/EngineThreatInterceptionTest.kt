@@ -192,4 +192,51 @@ class EngineThreatInterceptionTest {
         val state = engine.downloadState.value
         assertFalse("State should not be ThreatDetected when bypass is enabled", state is DownloadState.ThreatDetected)
     }
+
+    @Test
+    fun desktopSpoofProbeHeadersThreat_blocksDownloadOnMaliciousMime() = runBlocking {
+        // Mobile Stage 1 probes return a benign MIME without byte-range support so Stage 2 triggers;
+        // Stage 2 Desktop UA returns an executable APK MIME for the requested .mkv video.
+        mockWebServer.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                val ua = request.getHeader("User-Agent") ?: ""
+                return if (ua.contains("Windows NT")) {
+                    MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Length", "10485760")
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Type", "application/vnd.android.package-archive")
+                        .setHeader("Content-Disposition", "attachment; filename=\"movie.mkv\"")
+                } else {
+                    MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Type", "video/x-matroska")
+                }
+            }
+        }
+
+        val engine = DualDownloaderEngine(
+            context = context,
+            networkManager = networkProvider,
+            threatEngineOverride = ThreatDetectionEngine()
+        )
+
+        val url = mockWebServer.url("/video/spoofed.mkv").newBuilder().host("127.0.0.1").build().toString()
+        engine.startDownload(url = url, targetDir = targetDir)
+
+        var state: DownloadState = DownloadState.Idle
+        var timeoutMs = 5000L
+        while (timeoutMs > 0) {
+            state = engine.downloadState.value
+            if (state !is DownloadState.Idle && state !is DownloadState.Probing) {
+                break
+            }
+            delay(50)
+            timeoutMs -= 50
+        }
+
+        assertTrue("Expected Stage 2 Desktop Spoof header inspection to catch ThreatDetected, was $state", state is DownloadState.ThreatDetected)
+        val threatState = state as DownloadState.ThreatDetected
+        assertEquals(ThreatType.MALICIOUS_MIME, threatState.threat.threatType)
+    }
 }

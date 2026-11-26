@@ -1,6 +1,40 @@
 package com.dualboost.downloader.network
 
 /**
+ * Explicit listener lifecycle state for [DualNetworkManager].
+ * Prevents duplicate ConnectivityManager callback registrations and leaks.
+ */
+enum class NetworkListenerState {
+    STOPPED,
+    LISTENING;
+
+    fun canTransitionTo(next: NetworkListenerState): Boolean = this != next
+}
+
+/**
+ * Explicit on-demand cellular radio keep-alive state machine.
+ */
+enum class CellularKeepAliveState {
+    IDLE,
+    REQUESTING,
+    ACTIVE,
+    FAILED;
+
+    val isActiveOrPending: Boolean
+        get() = this == REQUESTING || this == ACTIVE
+
+    fun canTransitionTo(next: CellularKeepAliveState): Boolean {
+        if (this == next) return true
+        return when (this) {
+            IDLE -> next == REQUESTING
+            REQUESTING -> next == ACTIVE || next == FAILED || next == IDLE
+            ACTIVE -> next == IDLE || next == FAILED
+            FAILED -> next == REQUESTING || next == IDLE
+        }
+    }
+}
+
+/**
  * Explicit composite state model representing the aggregated network topology.
  * Synthesizes multiple independent physical network states (Wi-Fi, Cellular, Roaming, VPN, Modem Sleep)
  * into a single unified source of truth for the UI, Foreground Service, Engine, and AI agents.
@@ -58,6 +92,9 @@ enum class NetworkTopology(
         displayName = "Carrier Modem Standby",
         isDualChannelAvailable = false
     );
+
+    val showsVpnBanner: Boolean get() = this == VPN_TUNNEL
+    val showsRoamingBanner: Boolean get() = this == ROAMING_SAFEGUARD
 
     companion object {
         fun resolve(

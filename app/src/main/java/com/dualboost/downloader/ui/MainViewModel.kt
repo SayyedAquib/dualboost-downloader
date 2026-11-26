@@ -10,11 +10,18 @@ import com.dualboost.downloader.DualBoostApp
 import com.dualboost.downloader.data.DownloadHistoryItem
 import com.dualboost.downloader.data.DownloadRepository
 import com.dualboost.downloader.data.DownloadState
+import com.dualboost.downloader.data.QueuePhase
+import com.dualboost.downloader.engine.CircuitBreakerSnapshot
+import com.dualboost.downloader.engine.EnginePhase
+import com.dualboost.downloader.network.CellularKeepAliveState
+import com.dualboost.downloader.network.NetworkListenerState
 import com.dualboost.downloader.social.*
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -99,7 +106,7 @@ class SystemPowerExemptionChecker(private val context: Context?) : PowerExemptio
     }
 
     override fun isAggressiveOem(): Boolean {
-        val manufacturer = Build.MANUFACTURER.lowercase()
+        val manufacturer = (Build.MANUFACTURER ?: "").lowercase()
         return manufacturer in AGGRESSIVE_OEMS
     }
 
@@ -121,62 +128,152 @@ open class MainViewModel(
 
     private val scope: CoroutineScope = coroutineScopeOverride ?: viewModelScope
     private val socialResolver: SocialMediaResolver = socialResolverOverride ?: SocialMediaResolver()
+    private var socialResolveJob: Job? = null
 
     private val _socialIntakeState = MutableStateFlow<SocialIntakeState>(SocialIntakeState.Idle)
     val socialIntakeState: StateFlow<SocialIntakeState> = _socialIntakeState.asStateFlow()
 
+    private fun setSocialIntakeState(next: SocialIntakeState) {
+        val current = _socialIntakeState.value
+        if (current.canTransitionTo(next)) {
+            _socialIntakeState.value = next
+        }
+    }
+
     fun checkAndPrepareSocialLink(url: String): Boolean {
         val platform = SocialMediaDetector.detectPlatform(url) ?: return false
-        _socialIntakeState.value = SocialIntakeState.Ready(
-            originalUrl = url.trim(),
-            platform = platform
+        socialResolveJob?.cancel()
+        socialResolveJob = null
+        setSocialIntakeState(
+            SocialIntakeState.Ready(
+                originalUrl = url.trim(),
+                platform = platform
+            )
         )
         return true
     }
 
     fun dismissSocialIntake() {
-        _socialIntakeState.value = SocialIntakeState.Idle
+        socialResolveJob?.cancel()
+        socialResolveJob = null
+        setSocialIntakeState(SocialIntakeState.Idle)
     }
 
     fun startSocialDownload(url: String, quality: MediaQuality = MediaQuality.MAX) {
         val platform = SocialMediaDetector.detectPlatform(url) ?: return
-        _socialIntakeState.value = SocialIntakeState.Resolving(url, platform)
-        scope.launch {
+        socialResolveJob?.cancel()
+        setSocialIntakeState(SocialIntakeState.Resolving(url, platform))
+        socialResolveJob = scope.launch {
             val result = socialResolver.resolve(url, quality)
+            if (!isActive || _socialIntakeState.value !is SocialIntakeState.Resolving) return@launch
             result.onSuccess { asset ->
-                _socialIntakeState.value = SocialIntakeState.Idle
+                setSocialIntakeState(SocialIntakeState.Idle)
                 _urlInput.value = asset.streamUrl
                 startDownload(asset.streamUrl)
             }.onFailure { err ->
-                _socialIntakeState.value = SocialIntakeState.Error(url, err.message ?: "Failed to resolve media stream")
+                setSocialIntakeState(
+                    SocialIntakeState.Error(
+                        url = url,
+                        message = err.message ?: "Failed to resolve media stream",
+                        platform = platform,
+                        attemptedQuality = quality
+                    )
+                )
             }
         }
     }
 
     fun enqueueSocialDownload(url: String, quality: MediaQuality = MediaQuality.MAX) {
         val platform = SocialMediaDetector.detectPlatform(url) ?: return
-        _socialIntakeState.value = SocialIntakeState.Resolving(url, platform)
-        scope.launch {
+        socialResolveJob?.cancel()
+        setSocialIntakeState(SocialIntakeState.Resolving(url, platform))
+        socialResolveJob = scope.launch {
             val result = socialResolver.resolve(url, quality)
+            if (!isActive || _socialIntakeState.value !is SocialIntakeState.Resolving) return@launch
             result.onSuccess { asset ->
-                _socialIntakeState.value = SocialIntakeState.Idle
+                setSocialIntakeState(SocialIntakeState.Idle)
                 enqueueDownload(
                     url = asset.streamUrl,
                     fileName = asset.suggestedFilename,
                     isSequentialMode = !asset.isAudioOnly
                 )
             }.onFailure { err ->
-                _socialIntakeState.value = SocialIntakeState.Error(url, err.message ?: "Failed to resolve media stream")
+                setSocialIntakeState(
+                    SocialIntakeState.Error(
+                        url = url,
+                        message = err.message ?: "Failed to resolve media stream",
+                        platform = platform,
+                        attemptedQuality = quality
+                    )
+                )
             }
         }
     }
 
+    fun retrySocialResolution(url: String, quality: MediaQuality = MediaQuality.MAX) {
+        startSocialDownload(url, quality)
+    }
+
+    private val _batteryGuidanceState = MutableStateFlow(BatteryGuidanceState.NOT_REQUIRED)
+    val batteryGuidanceState: StateFlow<BatteryGuidanceState> = _batteryGuidanceState.asStateFlow()
+
     private val _showBatteryGuidance = MutableStateFlow(false)
     val showBatteryGuidance: StateFlow<Boolean> = _showBatteryGuidance.asStateFlow()
 
-    fun dismissBatteryGuidance() {
-        _showBatteryGuidance.value = false
+    private fun updateBatteryGuidanceState(next: BatteryGuidanceState) {
+        if (_batteryGuidanceState.value.canTransitionTo(next)) {
+            _batteryGuidanceState.value = next
+            _showBatteryGuidance.value = next.shouldShowBanner
+        }
     }
+
+    fun refreshBatteryGuidance() {
+        val isAggressive = powerExemptionChecker.isAggressiveOem()
+        val isExempt = powerExemptionChecker.isIgnoringBatteryOptimizations()
+        val next = when {
+            !isAggressive -> BatteryGuidanceState.NOT_REQUIRED
+            isExempt -> BatteryGuidanceState.EXEMPTED
+            _batteryGuidanceState.value == BatteryGuidanceState.DISMISSED -> BatteryGuidanceState.DISMISSED
+            else -> BatteryGuidanceState.ACTION_REQUIRED
+        }
+        updateBatteryGuidanceState(next)
+    }
+
+    fun dismissBatteryGuidance() {
+        updateBatteryGuidanceState(BatteryGuidanceState.DISMISSED)
+    }
+
+    private val _dialogState = MutableStateFlow<MainDialogState>(MainDialogState.None)
+    val dialogState: StateFlow<MainDialogState> = _dialogState.asStateFlow()
+
+    fun openCancelOrDiscardDialog(fileName: String?, isPaused: Boolean) {
+        _dialogState.value = MainDialogState.ConfirmCancelOrDiscard(fileName = fileName, isPaused = isPaused)
+    }
+
+    fun openBackgroundExitDialog() {
+        _dialogState.value = MainDialogState.ConfirmBackgroundExit
+    }
+
+    fun dismissDialog() {
+        _dialogState.value = MainDialogState.None
+    }
+
+    fun confirmCancelOrDiscard() {
+        val current = _dialogState.value as? MainDialogState.ConfirmCancelOrDiscard
+        discardDownload(current?.fileName)
+        _dialogState.value = MainDialogState.None
+    }
+
+    val enginePhase: StateFlow<EnginePhase> =
+        repository?.enginePhase ?: MutableStateFlow(EnginePhase.IDLE)
+    val circuitBreakerSnapshot: StateFlow<CircuitBreakerSnapshot> =
+        repository?.circuitBreakerSnapshot ?: MutableStateFlow(CircuitBreakerSnapshot())
+    val queuePhase: StateFlow<QueuePhase> =
+        repository?.queuePhase ?: MutableStateFlow(QueuePhase.Idle)
+    val listenerState: StateFlow<NetworkListenerState> =
+        repository?.listenerState ?: MutableStateFlow(NetworkListenerState.STOPPED)
+    val cellularKeepAliveState: StateFlow<CellularKeepAliveState> =
+        repository?.cellularKeepAliveState ?: MutableStateFlow(CellularKeepAliveState.IDLE)
 
     val downloadState: StateFlow<DownloadState> = downloadStateOverride ?: repository?.downloadState ?: MutableStateFlow(DownloadState.Idle)
     val isWifiAvailable: StateFlow<Boolean> = repository?.isWifiAvailable ?: MutableStateFlow(false)
@@ -373,40 +470,66 @@ open class MainViewModel(
     private val _selectedPreset = MutableStateFlow<QuickTestPreset?>(null)
     val selectedPreset: StateFlow<QuickTestPreset?> = _selectedPreset.asStateFlow()
 
+    private val _clipboardSuggestionState = MutableStateFlow<ClipboardSuggestionState>(ClipboardSuggestionState.Hidden)
+    val clipboardSuggestionState: StateFlow<ClipboardSuggestionState> = _clipboardSuggestionState.asStateFlow()
+
     private val _hasClipboardContent = MutableStateFlow(false)
     val hasClipboardContent: StateFlow<Boolean> = _hasClipboardContent.asStateFlow()
 
     private val _detectedClipboardUrl = MutableStateFlow<String?>(null)
     val detectedClipboardUrl: StateFlow<String?> = _detectedClipboardUrl.asStateFlow()
 
+    private fun updateClipboardSuggestion(state: ClipboardSuggestionState) {
+        _clipboardSuggestionState.value = state
+        when (state) {
+            is ClipboardSuggestionState.Hidden -> {
+                _hasClipboardContent.value = false
+                _detectedClipboardUrl.value = null
+            }
+            is ClipboardSuggestionState.TextAvailable -> {
+                _hasClipboardContent.value = true
+                _detectedClipboardUrl.value = null
+            }
+            is ClipboardSuggestionState.UrlDetected -> {
+                _hasClipboardContent.value = true
+                _detectedClipboardUrl.value = state.url
+            }
+        }
+    }
+
     fun onClipboardStateChanged(hasText: Boolean) {
-        if (_urlInput.value.isBlank()) {
-            _hasClipboardContent.value = hasText
+        if (_urlInput.value.isBlank() && hasText) {
+            val current = _clipboardSuggestionState.value
+            if (current !is ClipboardSuggestionState.UrlDetected) {
+                updateClipboardSuggestion(ClipboardSuggestionState.TextAvailable)
+            }
         } else {
-            _hasClipboardContent.value = false
+            updateClipboardSuggestion(ClipboardSuggestionState.Hidden)
         }
     }
 
     fun dismissClipboardSuggestion() {
-        _hasClipboardContent.value = false
-        _detectedClipboardUrl.value = null
+        updateClipboardSuggestion(ClipboardSuggestionState.Hidden)
     }
 
     fun onClipboardChecked(url: String?) {
         val trimmed = url?.trim()
         if (!trimmed.isNullOrBlank() && (trimmed.startsWith("http://") || trimmed.startsWith("https://"))) {
-            if (_urlInput.value.isBlank() && _detectedClipboardUrl.value != trimmed) {
-                _detectedClipboardUrl.value = trimmed
-                _hasClipboardContent.value = true
+            if (_urlInput.value.isBlank()) {
+                val current = _clipboardSuggestionState.value
+                if (current !is ClipboardSuggestionState.UrlDetected || current.url != trimmed) {
+                    updateClipboardSuggestion(ClipboardSuggestionState.UrlDetected(trimmed))
+                }
             }
         }
     }
 
     fun acceptClipboardUrl() {
-        _detectedClipboardUrl.value?.let {
+        val detected = (_clipboardSuggestionState.value as? ClipboardSuggestionState.UrlDetected)?.url
+            ?: _detectedClipboardUrl.value
+        detected?.let {
             onUrlChanged(it)
-            _detectedClipboardUrl.value = null
-            _hasClipboardContent.value = false
+            updateClipboardSuggestion(ClipboardSuggestionState.Hidden)
         }
     }
 
@@ -416,7 +539,10 @@ open class MainViewModel(
 
     init {
         if (!powerExemptionChecker.isIgnoringBatteryOptimizations() && powerExemptionChecker.isAggressiveOem()) {
+            _batteryGuidanceState.value = BatteryGuidanceState.ACTION_REQUIRED
             _showBatteryGuidance.value = true
+        } else if (powerExemptionChecker.isAggressiveOem()) {
+            _batteryGuidanceState.value = BatteryGuidanceState.EXEMPTED
         }
         val currentState = downloadState.value
         if (currentState is DownloadState.Paused && currentState.url.isNotBlank()) {
@@ -428,8 +554,7 @@ open class MainViewModel(
     fun onUrlChanged(newUrl: String) {
         _urlInput.value = newUrl
         if (newUrl.isNotBlank()) {
-            _hasClipboardContent.value = false
-            _detectedClipboardUrl.value = null
+            updateClipboardSuggestion(ClipboardSuggestionState.Hidden)
             checkAndPrepareSocialLink(newUrl)
         }
         _selectedPreset.value = DEFAULT_PRESETS.firstOrNull { it.url == newUrl.trim() }
@@ -450,11 +575,23 @@ open class MainViewModel(
         _selectedPreset.value = null
     }
 
+    private val _sequentialStreamMode = MutableStateFlow(SequentialStreamMode.AUTO)
+    val sequentialStreamMode: StateFlow<SequentialStreamMode> = _sequentialStreamMode.asStateFlow()
+
     private val _isSequentialStreamRequested = MutableStateFlow<Boolean?>(null)
     val isSequentialStreamRequested: StateFlow<Boolean?> = _isSequentialStreamRequested.asStateFlow()
 
+    fun setSequentialStreamMode(mode: SequentialStreamMode) {
+        _sequentialStreamMode.value = mode
+        _isSequentialStreamRequested.value = mode.legacyValue
+    }
+
     fun setSequentialStreamMode(enabled: Boolean?) {
-        _isSequentialStreamRequested.value = enabled
+        setSequentialStreamMode(SequentialStreamMode.fromLegacy(enabled))
+    }
+
+    fun resetSequentialStreamToAuto() {
+        setSequentialStreamMode(SequentialStreamMode.AUTO)
     }
 
     open fun startDownload(customUrl: String? = null) {
@@ -516,9 +653,7 @@ open class MainViewModel(
     }
 
     fun isStartButtonEnabled(state: DownloadState, input: String): Boolean {
-        val trimmed = input.trim()
-        val isValidHttpScheme = trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)
-        return isValidHttpScheme && state !is DownloadState.Downloading && state !is DownloadState.Probing
+        return PrimaryActionUiState.resolve(state, input).isEnabled
     }
 
     fun deleteHistoryItem(item: DownloadHistoryItem, deleteFileFromDisk: Boolean) {

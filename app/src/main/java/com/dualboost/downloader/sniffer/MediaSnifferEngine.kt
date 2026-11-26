@@ -7,50 +7,79 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
 /**
- * High-performance network request analyzer for the In-App Sniffer Browser.
+ * Explicit reason why an intercepted browser request was ignored by [MediaSnifferEngine].
+ */
+enum class SniffIgnoreReason {
+    AD_OR_TRACKER,
+    STATIC_ASSET,
+    UNSUPPORTED_FORMAT,
+    DUPLICATE
+}
+
+/**
+ * Explicit outcome of inspecting a WebView network request.
+ */
+sealed class SniffOutcome {
+    data class Detected(val item: DetectedMediaItem) : SniffOutcome()
+    data class Ignored(val reason: SniffIgnoreReason) : SniffOutcome()
+}
+
+/**
+ * Thread-safe network request analyzer for the In-App Sniffer Browser.
  * Inspects outgoing and incoming WebView network traffic, blocks adware tracking,
  * and intercepts media streams (.mp4, .mkv, .m3u8, etc.) for 1-tap downloading.
  */
 class MediaSnifferEngine {
 
+    private val lock = Any()
     private val _detectedMedia = MutableStateFlow<List<DetectedMediaItem>>(emptyList())
     val detectedMedia: StateFlow<List<DetectedMediaItem>> = _detectedMedia.asStateFlow()
+
+    fun inspectRequestWithOutcome(
+        url: String,
+        headers: Map<String, String> = emptyMap(),
+        mimeType: String? = null
+    ): SniffOutcome {
+        val trimmedUrl = url.trim()
+        if (isAdwareOrTracking(trimmedUrl)) return SniffOutcome.Ignored(SniffIgnoreReason.AD_OR_TRACKER)
+        if (isStaticAsset(trimmedUrl)) return SniffOutcome.Ignored(SniffIgnoreReason.STATIC_ASSET)
+
+        val ext = extractExtension(trimmedUrl, headers, mimeType)
+            ?: return SniffOutcome.Ignored(SniffIgnoreReason.UNSUPPORTED_FORMAT)
+        val fileName = extractFileName(trimmedUrl, headers, ext)
+        val contentLength = headers["Content-Length"]?.toLongOrNull()
+            ?: headers["content-length"]?.toLongOrNull()
+
+        synchronized(lock) {
+            val current = _detectedMedia.value
+            if (current.any { it.url == trimmedUrl || (it.fileName == fileName && it.extension == ext) }) {
+                return SniffOutcome.Ignored(SniffIgnoreReason.DUPLICATE)
+            }
+
+            val item = DetectedMediaItem(
+                url = trimmedUrl,
+                fileName = fileName,
+                extension = ext,
+                mimeType = mimeType,
+                contentLength = contentLength
+            )
+            _detectedMedia.value = current + item
+            return SniffOutcome.Detected(item)
+        }
+    }
 
     fun inspectRequest(
         url: String,
         headers: Map<String, String> = emptyMap(),
         mimeType: String? = null
     ): DetectedMediaItem? {
-        val trimmedUrl = url.trim()
-        if (isAdwareOrTracking(trimmedUrl)) return null
-        if (isStaticAsset(trimmedUrl)) return null
-
-        val ext = extractExtension(trimmedUrl, headers, mimeType) ?: return null
-        val fileName = extractFileName(trimmedUrl, headers, ext)
-
-        // Deduplication: ensure each unique video stream is registered only once
-        val current = _detectedMedia.value
-        if (current.any { it.url == trimmedUrl || (it.fileName == fileName && it.extension == ext) }) {
-            return null
-        }
-
-        val contentLength = headers["Content-Length"]?.toLongOrNull()
-            ?: headers["content-length"]?.toLongOrNull()
-
-        val item = DetectedMediaItem(
-            url = trimmedUrl,
-            fileName = fileName,
-            extension = ext,
-            mimeType = mimeType,
-            contentLength = contentLength
-        )
-
-        _detectedMedia.value = current + item
-        return item
+        return (inspectRequestWithOutcome(url, headers, mimeType) as? SniffOutcome.Detected)?.item
     }
 
     fun clear() {
-        _detectedMedia.value = emptyList()
+        synchronized(lock) {
+            _detectedMedia.value = emptyList()
+        }
     }
 
     private fun isAdwareOrTracking(url: String): Boolean {
