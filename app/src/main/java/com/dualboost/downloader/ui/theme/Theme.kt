@@ -2,10 +2,15 @@ package com.dualboost.downloader.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 internal val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF64D2FF),
@@ -79,6 +84,58 @@ internal val LightColorScheme = lightColorScheme(
     onErrorContainer = Color(0xFF410002)
 )
 
+internal val DualBoostShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(28.dp),
+    largeIncreased = RoundedCornerShape(24.dp),
+    extraLargeIncreased = RoundedCornerShape(28.dp),
+    extraExtraLarge = RoundedCornerShape(32.dp)
+)
+
+internal val DualBoostTypography = Typography(
+    fontFamily = FontFamily.SansSerif
+)
+
+/**
+ * Returns Material 3 1.5.0 morphing [ButtonShapes] that smoothly compress corner radii on press.
+ */
+@Composable
+fun expressiveButtonShapes(
+    baseCorner: Dp = 14.dp,
+    pressedCorner: Dp = 8.dp
+): ButtonShapes = ButtonDefaults.shapes(
+    shape = RoundedCornerShape(baseCorner),
+    pressedShape = RoundedCornerShape(pressedCorner)
+)
+
+/**
+ * Wraps an expressive shape-morphing [IconButton] with a Material 3 1.5.0 anchored [PlainTooltip].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExpressiveTooltipIconButton(
+    tooltip: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(tooltip) } },
+        state = rememberTooltipState()
+    ) {
+        IconButton(
+            onClick = onClick,
+            shapes = IconButtonDefaults.shapes(),
+            modifier = modifier,
+            content = content
+        )
+    }
+}
+
 @Composable
 fun DualBoostTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -94,9 +151,11 @@ fun DualBoostTheme(
         else -> LightColorScheme
     }
 
-    MaterialTheme(
+    MaterialExpressiveTheme(
         colorScheme = colorScheme,
-        typography = Typography(),
+        motionScheme = MotionScheme.expressive(),
+        shapes = DualBoostShapes,
+        typography = DualBoostTypography,
         content = content
     )
 }

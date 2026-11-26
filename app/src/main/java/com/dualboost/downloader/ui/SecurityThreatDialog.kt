@@ -1,19 +1,12 @@
 package com.dualboost.downloader.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Security
-import androidx.compose.material.icons.rounded.Shield
-import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -22,7 +15,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.security.ThreatSeverity
+import com.dualboost.downloader.ui.theme.DualBoostIcons
+import com.dualboost.downloader.ui.theme.expressiveButtonShapes
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SecurityThreatDialog(
     threatState: DownloadState.ThreatDetected,
@@ -37,16 +33,16 @@ fun SecurityThreatDialog(
         onDismissRequest = onDismiss,
         icon = {
             Surface(
-                shape = CircleShape,
+                shape = MaterialShapes.Cookie9Sided.toShape(),
                 color = MaterialTheme.colorScheme.errorContainer,
-                modifier = Modifier.size(54.dp)
+                modifier = Modifier.size(56.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.Rounded.Security,
+                        painter = painterResource(DualBoostIcons.Security),
                         contentDescription = "Threat Detected",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(32.dp)
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(30.dp)
                     )
                 }
             }
@@ -55,7 +51,7 @@ fun SecurityThreatDialog(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "Security Alert: Threat Blocked",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleMediumEmphasized,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -135,25 +131,26 @@ fun SecurityThreatDialog(
         confirmButton = {
             Button(
                 onClick = onSafeDiscard,
+                shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
                     contentColor = MaterialTheme.colorScheme.onError
                 ),
-                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Rounded.Shield, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(painter = painterResource(DualBoostIcons.Shield), contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Safe Discard (Recommended)", fontWeight = FontWeight.Bold)
+                Text("Safe Discard (Recommended)", style = MaterialTheme.typography.labelLargeEmphasized)
             }
         },
         dismissButton = {
             TextButton(
                 onClick = { onOverrideDownload(threatState.url) },
+                shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(
-                    Icons.Rounded.WarningAmber,
+                    painter = painterResource(DualBoostIcons.Warning),
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
                     tint = MaterialTheme.colorScheme.error
@@ -167,6 +164,6 @@ fun SecurityThreatDialog(
             }
         },
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(24.dp)
+        shape = MaterialTheme.shapes.large
     )
 }

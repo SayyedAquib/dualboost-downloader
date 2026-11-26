@@ -1,8 +1,11 @@
 package com.dualboost.downloader
 
+import androidx.compose.material3.MotionScheme
 import androidx.compose.ui.graphics.Color
 import com.dualboost.downloader.ui.theme.DarkColorScheme
 import com.dualboost.downloader.ui.theme.LightColorScheme
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.max
@@ -108,6 +111,22 @@ class ThemeContrastTest {
         val darkPrimaryLuminance = calculateLuminance(darkPrimary)
         val darkRatio = (max(darkTintLuminance, darkPrimaryLuminance) + 0.05) / (min(darkTintLuminance, darkPrimaryLuminance) + 0.05)
         assertTrue("Dark translucent brand tint pattern contrast should exceed 3.0:1 (icon threshold), was $darkRatio", darkRatio >= 3.0)
+    }
+
+    @Test
+    fun testMaterial3ExpressiveMotionScheme_ProvidesDistinctSpringSpecs() {
+        val expressive = MotionScheme.expressive()
+        val standard = MotionScheme.standard()
+
+        assertNotNull(expressive.defaultSpatialSpec<Float>())
+        assertNotNull(expressive.fastSpatialSpec<Float>())
+        assertNotNull(expressive.slowSpatialSpec<Float>())
+        assertNotNull(expressive.defaultEffectsSpec<Float>())
+        assertNotEquals(
+            "Expressive spatial motion spec must differ from standard motion spec",
+            standard.defaultSpatialSpec<Float>(),
+            expressive.defaultSpatialSpec<Float>()
+        )
     }
 }
 

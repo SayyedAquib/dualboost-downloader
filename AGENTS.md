@@ -36,7 +36,7 @@ DualBoost Downloader is an Android application for Google Pixel 9 (Android 14/15
             ├── network/      # DualNetworkManager (socket binding)
             ├── engine/       # DualDownloaderEngine (chunking & queue)
             ├── service/      # Foreground service & notifications
-            └── ui/           # MainActivity and Compose components
+            └── ui/           # MainActivity, Compose components, DualBoostIcons, and Theme
 ```
 
 ## Development Commands
@@ -59,7 +59,7 @@ DualBoost Downloader is an Android application for Google Pixel 9 (Android 14/15
 - Run lint verification: `.\gradlew.bat lint`
 
 ## Code Conventions
-- Language: 100% Kotlin 2.0 with Kotlin Coroutines and Flows.
+- Language: 100% Kotlin 2.2 (AGP 9.5.3 built-in Kotlin, Gradle 9.6.0, Compose BOM `2026.11.01` / Material 3 `1.5.0`) with Kotlin Coroutines and Flows.
 - Asynchronous patterns: Use Kotlin `StateFlow` and `SharedFlow` for reactive state. Avoid raw threads or RxJava.
 - Immutability: Use immutable data classes for state representations (`DownloadState`, `DownloadChunk`).
 - Scopes: Confine background jobs to `SupervisorJob() + Dispatchers.IO`.
@@ -83,6 +83,7 @@ DualBoost Downloader is an Android application for Google Pixel 9 (Android 14/15
 ## Dependency Guidelines
 - All dependencies must be declared in `gradle/libs.versions.toml`.
 - Do not introduce heavy third-party libraries (e.g., RxJava, Guava, or external VPN SDKs). Stick to Jetpack libraries and `okhttp3`.
+- Use bundled **Material Symbols Rounded** Android Vector Drawables (`app/src/main/res/drawable/ms_*.xml`, mapped in `ui/theme/DualBoostIcons.kt`) instead of the deprecated `material-icons-extended` dependency.
 
 ## Testing Requirements
 - Code changes touching the chunking queue or network manager must pass compilation and unit tests before committing.

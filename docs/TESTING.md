@@ -7,10 +7,20 @@ Focus on pragmatic verification of critical path operations: chunk calculation, 
 - **Unit Testing Framework**: JUnit 4 / JUnit 5 (Android standard)
 - **Assertion Library**: Kotlin `test` assertions
 - **Mocking**: MockWebServer (OkHttp) for simulating HTTP Range responses
-- **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Android tests (`connectedAndroidTest`)
+- **Device Instrumentation**: Android Debug Bridge (`adb`) CLI and connected Compose UI tests (`connectedAndroidTest`, 13 active tests in `MainComposeUiTest`, 100% passing on Pixel 9)
+
+## Connected UI Testing (`androidTest`)
+Compose instrumentation tests reside in `app/src/androidTest/java/com/dualboost/downloader/ui/MainComposeUiTest.kt` (`13` tests executed directly on Pixel 9 via `.\gradlew.bat connectedAndroidTest`, 100% passing):
+- Covers idle dashboard state, URL validation/preset selection, "Watch While Downloading" sequential switch interaction, compact single-stream telemetry (`Single-Stream • Wi-Fi Only`, `Wi-Fi • 12.5 MB/s`, `5G (Inactive)`), desktop spoof & cloud slicer badges, sequential `⚡ Stream Ready • 24.0 MB buffered` + `Preview` CTA, paused/discard state, completed action layout, and Material 3 `1.5.0` Expressive `Probing` / `AutoRecovering` states (`testProbingAndAutoRecoveringStates_RenderWithMaterialExpressiveTheme`).
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (347 active tests across 59 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (408 active tests across 72 test suites, 100% passing):
+
+- **ThemeContrastTest** (4 tests):
+  - `testLightColorScheme_AllStandardPairingsExceedWcagAA`: Verifies WCAG AA contrast ratios (>= 4.5:1) across LightColorScheme container and surface pairs.
+  - `testDarkColorScheme_AllStandardPairingsExceedWcagAA`: Verifies WCAG AA contrast ratios (>= 4.5:1) across DarkColorScheme container and surface pairs.
+  - `testTranslucentBrandTintPattern_ExceedsHighContrastInBothModes`: Verifies 14% primary translucent tint contrast (>= 3.0:1) in Light and Dark modes.
+  - `testMaterial3ExpressiveMotionScheme_ProvidesDistinctSpringSpecs`: Verifies Material 3 `1.5.0` `MotionScheme.expressive()` provides non-null spatial/effects specs distinct from `MotionScheme.standard()`.
 
 - **ChunkConfigTest** (6 tests):
   - `testChunkConfig_DefaultsToAutoAdaptiveAnd4MB`: Verifies domain model defaults to Auto-Adaptive sizing with 4 MB manual baseline.
@@ -343,6 +353,7 @@ End-to-end and component UI testing on Android devices is performed using Google
   7. **Desktop Mode Active Badge**: Asserts that `⚡ Desktop Mode Active` badge renders with primary container tint when `isDesktopSpoofed == true`.
   8. **Cloud Slicer Active Badge**: Asserts that `⚡ Cloud Slicer Active` badge renders with tertiary container tint when `isCloudSlicerActive == true`.
   9. **Settings Modal Sheet**: Asserts that tapping Settings in navigation drawer opens the streamlined `SettingsBottomSheet` status dashboard.
+  10. **Expressive Probing & Auto-Recovery States**: Verifies `DownloadState.Probing` and `DownloadState.AutoRecovering` render cleanly under `DualBoostTheme` (`MaterialExpressiveTheme` + `LinearWavyProgressIndicator`).
 
 ### Personal Cloud Slicer & Stage 3 Unit Tests (`EngineComprehensiveTest.kt`)
 - `testSlicerPreferences_SaveAndRetrieveUrlAndSecret`: Asserts SharedPreferences storage and retrieval of worker URL and optional secret token.
@@ -538,9 +549,10 @@ End-to-end and component UI testing on Android devices is performed using Google
 
 ## Required Checks
 Before marking any development task complete:
-1. `.\gradlew.bat test` passes with 0 failures.
-2. `.\gradlew.bat assembleDebug` produces a valid APK.
-3. Lint checks pass without blocking errors: `.\gradlew.bat lint`.
+1. `.\gradlew.bat test` passes with 0 failures (408 tests across 72 suites).
+2. `.\gradlew.bat connectedAndroidTest` passes with 0 failures on connected Pixel hardware (13/13 UI tests).
+3. `.\gradlew.bat assembleRelease` produces a valid R8-minified APK.
+4. Lint checks pass without blocking errors: `.\gradlew.bat lint`.
 
 ## CI Testing
 CLI commands designed for local terminal or headless CI (GitHub Actions):

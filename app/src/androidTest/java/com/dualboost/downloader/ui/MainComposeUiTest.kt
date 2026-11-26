@@ -177,19 +177,15 @@ class MainComposeUiTest {
             }
         }
 
-        // Verify single stream alert banner
-        composeTestRule.onNodeWithText(
-            "Single-Stream Mode: Server does not support dual-channel splitting • Running on Wi-Fi to preserve mobile data"
-        ).performScrollTo().assertIsDisplayed()
+        // Verify compact Single-Stream status chip and single-channel telemetry
+        composeTestRule.onNodeWithText("Single-Stream • Wi-Fi Only").performScrollTo().assertIsDisplayed()
 
-        // Verify header text
-        composeTestRule.onNodeWithText("Single-Channel Bandwidth").performScrollTo().assertIsDisplayed()
-
-        // Verify speed displayed in MB/s
+        // Verify hero and Wi-Fi speeds displayed in MB/s
         composeTestRule.onNodeWithText("12.5 MB/s").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Wi-Fi • 12.5 MB/s").performScrollTo().assertIsDisplayed()
 
-        // Verify inactive cellular label
-        composeTestRule.onNodeWithText("5G Cellular (Inactive in Single-Stream)").performScrollTo().assertIsDisplayed()
+        // Verify inactive cellular inline chip label
+        composeTestRule.onNodeWithText("5G (Inactive)").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -355,7 +351,7 @@ class MainComposeUiTest {
         }
 
         // Verify Stream Ready badge is displayed
-        composeTestRule.onNodeWithText("⚡ Stream Ready • 24.00 MB buffered").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("⚡ Stream Ready • 24.0 MB buffered").performScrollTo().assertIsDisplayed()
 
         // Verify Hero integrated "Preview" CTA is displayed and triggers onOpenFile
         composeTestRule.onNodeWithText("Preview").performScrollTo().assertIsDisplayed().performClick()
@@ -395,5 +391,29 @@ class MainComposeUiTest {
 
         // Verify compact Single-Stream chip is displayed
         composeTestRule.onNodeWithText("Single-Stream • Wi-Fi Only").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun testProbingAndAutoRecoveringStates_RenderWithMaterialExpressiveTheme() {
+        val stateFlow = kotlinx.coroutines.flow.MutableStateFlow<DownloadState>(
+            DownloadState.Probing("Probing server capabilities...")
+        )
+        val viewModel = MainViewModel(repository = null, downloadStateOverride = stateFlow)
+        composeTestRule.setContent {
+            DualBoostTheme {
+                MainScreen(
+                    viewModel = viewModel,
+                    onOpenFile = { _, _ -> },
+                    onShareFile = { _, _ -> }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Probing server capabilities...").performScrollTo().assertIsDisplayed()
+
+        stateFlow.value = DownloadState.AutoRecovering("Waiting for Wi-Fi signal", retryAttempt = 2)
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Auto-Recovering Network").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Waiting for Wi-Fi signal (Retry attempt #2)").performScrollTo().assertIsDisplayed()
     }
 }

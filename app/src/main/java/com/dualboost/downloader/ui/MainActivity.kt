@@ -18,21 +18,19 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,12 +38,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -55,7 +52,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.dualboost.downloader.data.DownloadState
+import com.dualboost.downloader.ui.theme.DualBoostIcons
 import com.dualboost.downloader.ui.theme.DualBoostTheme
+import com.dualboost.downloader.ui.theme.ExpressiveTooltipIconButton
+import com.dualboost.downloader.ui.theme.expressiveButtonShapes
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.File
@@ -247,7 +247,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MainScreen(
     viewModel: MainViewModel,
@@ -309,13 +309,13 @@ fun MainScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
-                            shape = CircleShape,
+                            shape = MaterialShapes.Cookie9Sided.toShape(),
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(38.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Bolt,
+                                    painter = painterResource(DualBoostIcons.Bolt),
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.size(22.dp)
@@ -325,11 +325,11 @@ fun MainScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "DualBoost",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                            style = MaterialTheme.typography.titleLargeEmphasized
                         )
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
             )
@@ -365,7 +365,7 @@ fun MainScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.Security,
+                            painter = painterResource(DualBoostIcons.Security),
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.size(20.dp)
@@ -397,7 +397,7 @@ fun MainScreen(
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Rounded.BatteryAlert,
+                                painter = painterResource(DualBoostIcons.BatteryAlert),
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onTertiaryContainer,
                                 modifier = Modifier.size(22.dp)
@@ -405,7 +405,7 @@ fun MainScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Battery Optimization Warning",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                style = MaterialTheme.typography.titleSmallEmphasized,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                         }
@@ -423,6 +423,7 @@ fun MainScreen(
                         ) {
                             TextButton(
                                 onClick = { viewModel.dismissBatteryGuidance() },
+                                shapes = expressiveButtonShapes(baseCorner = 10.dp, pressedCorner = 6.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(
@@ -445,12 +446,12 @@ fun MainScreen(
                                         } catch (_: Exception) {}
                                     }
                                 },
-                                shape = RoundedCornerShape(10.dp),
+                                shapes = expressiveButtonShapes(baseCorner = 10.dp, pressedCorner = 6.dp),
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                             ) {
                                 Text(
                                     text = "Exempt App",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                    style = MaterialTheme.typography.labelMediumEmphasized
                                 )
                             }
                         }
@@ -477,7 +478,7 @@ fun MainScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.VpnKey,
+                            painter = painterResource(DualBoostIcons.VpnKey),
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.size(20.dp)
@@ -486,7 +487,7 @@ fun MainScreen(
                         Column {
                             Text(
                                 text = "VPN Active: Secure Multi-Stream Mode",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                style = MaterialTheme.typography.labelMediumEmphasized,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                             Text(
@@ -518,7 +519,7 @@ fun MainScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.Warning,
+                            painter = painterResource(DualBoostIcons.Warning),
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.size(20.dp)
@@ -527,7 +528,7 @@ fun MainScreen(
                         Column {
                             Text(
                                 text = "Data Roaming Active: Mobile Data Paused",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                style = MaterialTheme.typography.labelMediumEmphasized,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                             Text(
@@ -563,7 +564,7 @@ fun MainScreen(
                         .fillMaxHeight(),
                     title = wifiTitle,
                     subtitle = if (wifiAvailable) viewModel.getSignalLabel(wifiSignalLevel) else "Disconnected",
-                    icon = if (wifiAvailable) Icons.Rounded.Wifi else Icons.Rounded.WifiOff,
+                    iconRes = if (wifiAvailable) DualBoostIcons.Wifi else DualBoostIcons.WifiOff,
                     isActive = wifiAvailable,
                     activeColor = wifiColor
                 )
@@ -573,7 +574,7 @@ fun MainScreen(
                         .fillMaxHeight(),
                     title = cellularTitle,
                     subtitle = cellularSubtitle,
-                    icon = if (cellularAvailable) Icons.Rounded.SignalCellularAlt else Icons.Rounded.SignalCellularOff,
+                    iconRes = if (cellularAvailable) DualBoostIcons.SignalCellularAlt else DualBoostIcons.SignalCellularOff,
                     isActive = cellularAvailable,
                     activeColor = cellularColor
                 )
@@ -583,7 +584,7 @@ fun MainScreen(
 
             // Download Input Card
             Card(
-                shape = RoundedCornerShape(24.dp),
+                shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -593,7 +594,7 @@ fun MainScreen(
                 Column(modifier = Modifier.padding(18.dp)) {
                     Text(
                         text = "New Download",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.titleMediumEmphasized,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -622,7 +623,7 @@ fun MainScreen(
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Icon(
-                                        imageVector = if (!detectedClipboardUrl.isNullOrBlank()) Icons.Rounded.Link else Icons.Rounded.ContentPaste,
+                                        painter = painterResource(if (!detectedClipboardUrl.isNullOrBlank()) DualBoostIcons.Link else DualBoostIcons.ContentPaste),
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                         modifier = Modifier.size(18.dp)
@@ -631,7 +632,7 @@ fun MainScreen(
                                     Column {
                                         Text(
                                             text = if (!detectedClipboardUrl.isNullOrBlank()) "Link detected in clipboard" else "Clipboard text available",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            style = MaterialTheme.typography.labelSmallEmphasized,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                         Text(
@@ -654,7 +655,7 @@ fun MainScreen(
                                                 onPasteFromClipboard()
                                             }
                                         },
-                                        shape = RoundedCornerShape(10.dp),
+                                        shapes = expressiveButtonShapes(baseCorner = 10.dp, pressedCorner = 6.dp),
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                         modifier = Modifier.height(32.dp),
                                         colors = ButtonDefaults.buttonColors(
@@ -665,12 +666,13 @@ fun MainScreen(
                                         Text("Paste", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    IconButton(
+                                    ExpressiveTooltipIconButton(
+                                        tooltip = "Dismiss",
                                         onClick = { viewModel.dismissClipboardSuggestion() },
                                         modifier = Modifier.size(28.dp)
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Rounded.Close,
+                                            painter = painterResource(DualBoostIcons.Close),
                                             contentDescription = "Dismiss",
                                             tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
                                             modifier = Modifier.size(16.dp)
@@ -687,113 +689,132 @@ fun MainScreen(
                         label = { Text("Download Link") },
                         placeholder = { Text("https://example.com/largefile.zip") },
                         leadingIcon = {
-                            Icon(Icons.Rounded.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Icon(
+                                painter = painterResource(DualBoostIcons.Link),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         },
                         trailingIcon = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (urlInput.isNotBlank()) {
-                                    IconButton(onClick = { viewModel.clearUrl() }) {
-                                        Icon(Icons.Rounded.Clear, contentDescription = "Clear")
+                                    ExpressiveTooltipIconButton(
+                                        tooltip = "Clear link",
+                                        onClick = { viewModel.clearUrl() }
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(DualBoostIcons.Close),
+                                            contentDescription = "Clear"
+                                        )
                                     }
                                 }
-                                IconButton(
+                                ExpressiveTooltipIconButton(
+                                    tooltip = "Paste from clipboard",
                                     onClick = {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         onPasteFromClipboard()
                                     }
                                 ) {
-                                    Icon(Icons.Rounded.ContentPaste, contentDescription = "Paste from clipboard")
+                                    Icon(
+                                        painter = painterResource(DualBoostIcons.ContentPaste),
+                                        contentDescription = "Paste from clipboard"
+                                    )
                                 }
                             }
                         },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.25f),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
-                        ),
-                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.tonalColors(),
+                        shape = OutlinedTextFieldDefaults.roundedShape,
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Watch While Downloading (Sequential Video Streaming)
+                    // Watch While Downloading (Sequential Video Streaming via Expressive ListItem)
                     val isAutoVideoUrl = isSequentialRequested == null && com.dualboost.downloader.engine.DualDownloaderEngine.isVideoFile(urlInput)
                     val isSequentialActive = isSequentialRequested == true || (isSequentialRequested == null && isAutoVideoUrl)
+                    val statusText = when {
+                        isSequentialRequested == true -> "On • Downloads in order to preview early"
+                        isSequentialRequested == false -> "Off • Maximum speed for files & games"
+                        isAutoVideoUrl -> "Video detected • Ready to watch while downloading"
+                        else -> "Auto • Activates automatically for video links"
+                    }
 
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (isSequentialActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, if (isSequentialActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                viewModel.setSequentialStreamMode(!isSequentialActive)
-                            }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 11.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
+                    ListItem(
+                        checked = isSequentialActive,
+                        onCheckedChange = { isChecked ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            viewModel.setSequentialStreamMode(isChecked)
+                        },
+                        shapes = ListItemDefaults.shapes(
+                            shape = MaterialTheme.shapes.medium,
+                            selectedShape = MaterialTheme.shapes.medium
+                        ),
+                        colors = ListItemDefaults.colors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        ),
+                        leadingContent = {
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isSequentialActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                modifier = Modifier.size(34.dp)
                             ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (isSequentialActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainerHighest,
-                                    modifier = Modifier.size(34.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = if (isSequentialActive) Icons.Rounded.PlayCircle else Icons.Rounded.PlayCircleOutline,
-                                            contentDescription = null,
-                                            tint = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = "Watch While Downloading",
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    val statusText = when {
-                                        isSequentialRequested == true -> "On • Downloads in order to preview early"
-                                        isSequentialRequested == false -> "Off • Maximum speed for files & games"
-                                        isAutoVideoUrl -> "Video detected • Ready to watch while downloading"
-                                        else -> "Auto • Activates automatically for video links"
-                                    }
-                                    Text(
-                                        text = statusText,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        painter = painterResource(if (isSequentialActive) DualBoostIcons.PlayCircleFilled else DualBoostIcons.PlayCircle),
+                                        contentDescription = null,
+                                        tint = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
+                        },
+                        supportingContent = {
+                            Text(
+                                text = statusText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isSequentialActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        trailingContent = {
                             Switch(
                                 checked = isSequentialActive,
                                 onCheckedChange = { isChecked ->
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     viewModel.setSequentialStreamMode(isChecked)
                                 },
+                                thumbContent = {
+                                    if (isSequentialActive) {
+                                        Icon(
+                                            painter = painterResource(DualBoostIcons.PlayArrow),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                                        )
+                                    }
+                                },
                                 modifier = Modifier.scale(0.85f),
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                                    checkedIconColor = MaterialTheme.colorScheme.onPrimary
                                 )
                             )
-                        }
+                        },
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                1.dp,
+                                if (isSequentialActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                MaterialTheme.shapes.medium
+                            )
+                    ) {
+                        Text(
+                            text = "Watch While Downloading",
+                            style = MaterialTheme.typography.titleSmallEmphasized,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -808,10 +829,10 @@ fun MainScreen(
                                 viewModel.startDownload()
                             }
                         },
+                        shapes = expressiveButtonShapes(baseCorner = 16.dp, pressedCorner = 10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
-                        shape = RoundedCornerShape(16.dp),
                         enabled = isEnabled,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
@@ -820,8 +841,9 @@ fun MainScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                if (isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Bolt,
-                                contentDescription = null
+                                painter = painterResource(if (isPaused) DualBoostIcons.PlayArrow else DualBoostIcons.Bolt),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
@@ -830,7 +852,7 @@ fun MainScreen(
                                     is DownloadState.Paused -> "Resume Download"
                                     else -> "Boost Download"
                                 },
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                style = MaterialTheme.typography.titleMediumEmphasized
                             )
                         }
                     }
@@ -856,7 +878,7 @@ fun MainScreen(
 
                     is DownloadState.Probing -> {
                         Card(
-                            shape = RoundedCornerShape(24.dp),
+                            shape = MaterialTheme.shapes.large,
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -865,19 +887,23 @@ fun MainScreen(
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        strokeWidth = 3.dp
+                                    LoadingIndicator(
+                                        modifier = Modifier.size(30.dp),
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Text(
                                         text = state.message,
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                                        style = MaterialTheme.typography.titleMediumEmphasized,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
-                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                LinearWavyProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                )
                             }
                         }
                     }
@@ -969,7 +995,7 @@ fun MainScreen(
                                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                                 ) {
                                                     Icon(
-                                                        imageVector = if (isReady) Icons.Rounded.PlayCircle else Icons.Rounded.PlayArrow,
+                                                        painter = painterResource(if (isReady) DualBoostIcons.PlayCircleFilled else DualBoostIcons.PlayArrow),
                                                         contentDescription = null,
                                                         tint = badgeContentColor,
                                                         modifier = Modifier.size(12.dp)
@@ -978,7 +1004,7 @@ fun MainScreen(
                                                     Text(
                                                         text = if (isReady) "⚡ Stream Ready • ${formatBytes(state.contiguousPlayableBytes)} buffered"
                                                                else "⚡ Buffering Stream • ${formatBytes(state.contiguousPlayableBytes)} / 24 MB",
-                                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                        style = MaterialTheme.typography.labelSmallEmphasized,
                                                         color = badgeContentColor
                                                     )
                                                 }
@@ -998,7 +1024,7 @@ fun MainScreen(
                                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                                 ) {
                                                     Icon(
-                                                        imageVector = Icons.Rounded.Info,
+                                                        painter = painterResource(DualBoostIcons.Info),
                                                         contentDescription = null,
                                                         tint = MaterialTheme.colorScheme.onTertiaryContainer,
                                                         modifier = Modifier.size(12.dp)
@@ -1006,7 +1032,7 @@ fun MainScreen(
                                                     Spacer(modifier = Modifier.width(4.dp))
                                                     Text(
                                                         text = "Single-Stream • ${if (state.cellularDownloadedBytes > 0L && state.wifiDownloadedBytes == 0L) cellularGeneration.detailLabel else "Wi-Fi Only"}",
-                                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                        style = MaterialTheme.typography.labelSmallEmphasized,
                                                         color = MaterialTheme.colorScheme.onTertiaryContainer
                                                     )
                                                 }
@@ -1019,7 +1045,7 @@ fun MainScreen(
                                     ) {
                                         Text(
                                             text = "${(state.progressPercentage * 100).toInt()}%",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            style = MaterialTheme.typography.titleMediumEmphasized,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                         )
@@ -1036,7 +1062,7 @@ fun MainScreen(
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
-                                            imageVector = Icons.Rounded.Speed,
+                                            painter = painterResource(DualBoostIcons.Speed),
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(24.dp)
@@ -1044,7 +1070,7 @@ fun MainScreen(
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
                                             text = com.dualboost.downloader.data.formatSpeed(state.totalSpeedMBps),
-                                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                            style = MaterialTheme.typography.headlineSmallEmphasized,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
@@ -1120,7 +1146,7 @@ fun MainScreen(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Icon(
-                                            imageVector = Icons.Rounded.Wifi,
+                                            painter = painterResource(DualBoostIcons.Wifi),
                                             contentDescription = null,
                                             tint = if (isWifiInactiveInSingleStream) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(13.dp)
@@ -1143,7 +1169,7 @@ fun MainScreen(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Icon(
-                                            imageVector = Icons.Rounded.SignalCellularAlt,
+                                            painter = painterResource(DualBoostIcons.SignalCellularAlt),
                                             contentDescription = null,
                                             tint = if (isCellularInactiveInSingleStream) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(13.dp)
@@ -1159,80 +1185,130 @@ fun MainScreen(
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                // Integrated Controls Row (Preview + Pause + Cancel)
-                                Row(
+                                // Integrated Controls ButtonGroup (Preview + Pause + Cancel)
+                                val previewInteraction = remember { MutableInteractionSource() }
+                                val pauseInteraction = remember { MutableInteractionSource() }
+                                val cancelInteraction = remember { MutableInteractionSource() }
+                                ButtonGroup(
+                                    overflowIndicator = { menuState -> ButtonGroupDefaults.OverflowIndicator(menuState) },
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     if (state.isPlayable) {
-                                        Button(
-                                            onClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                onOpenFile(state.filePath, state.contentUriString)
+                                        customItem(
+                                            buttonGroupContent = {
+                                                Button(
+                                                    onClick = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        onOpenFile(state.filePath, state.contentUriString)
+                                                    },
+                                                    shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                                    interactionSource = previewInteraction,
+                                                    modifier = Modifier
+                                                        .weight(1.3f)
+                                                        .animateWidth(previewInteraction, compressionLimit = 8.dp)
+                                                        .height(48.dp),
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = MaterialTheme.colorScheme.primary,
+                                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                                    ),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                                ) {
+                                                    Icon(
+                                                        painter = painterResource(DualBoostIcons.PlayArrow),
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = "Preview",
+                                                        style = MaterialTheme.typography.titleSmallEmphasized,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
                                             },
-                                            modifier = Modifier
-                                                .weight(1.3f)
-                                                .height(48.dp),
-                                            shape = RoundedCornerShape(14.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.primary,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary
-                                            ),
-                                            contentPadding = PaddingValues(horizontal = 8.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.PlayArrow,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "Preview",
-                                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
+                                            menuContent = { menuState ->
+                                                DropdownMenuItem(
+                                                    text = { Text("Preview") },
+                                                    onClick = {
+                                                        menuState.dismiss()
+                                                        onOpenFile(state.filePath, state.contentUriString)
+                                                    }
+                                                )
+                                            }
+                                        )
+                                    }
+
+                                    customItem(
+                                        buttonGroupContent = {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    viewModel.pauseDownload()
+                                                },
+                                                shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                                interactionSource = pauseInteraction,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .animateWidth(pauseInteraction, compressionLimit = 8.dp)
+                                                    .height(48.dp),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                            ) {
+                                                Icon(painter = painterResource(DualBoostIcons.Pause), contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Pause", style = MaterialTheme.typography.labelLargeEmphasized, maxLines = 1)
+                                            }
+                                        },
+                                        menuContent = { menuState ->
+                                            DropdownMenuItem(
+                                                text = { Text("Pause") },
+                                                onClick = {
+                                                    menuState.dismiss()
+                                                    viewModel.pauseDownload()
+                                                }
                                             )
                                         }
-                                    }
+                                    )
 
-                                    OutlinedButton(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            viewModel.pauseDownload()
+                                    customItem(
+                                        buttonGroupContent = {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    pendingCancelFileName = state.fileName
+                                                    showCancelConfirmDialog = true
+                                                },
+                                                shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                                interactionSource = cancelInteraction,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .animateWidth(cancelInteraction, compressionLimit = 8.dp)
+                                                    .height(48.dp),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                                                colors = ButtonDefaults.outlinedButtonColors(
+                                                    contentColor = MaterialTheme.colorScheme.error
+                                                ),
+                                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                            ) {
+                                                Icon(painter = painterResource(DualBoostIcons.Close), contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Cancel", style = MaterialTheme.typography.labelLargeEmphasized, maxLines = 1)
+                                            }
                                         },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(48.dp),
-                                        shape = RoundedCornerShape(14.dp),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                        contentPadding = PaddingValues(horizontal = 8.dp)
-                                    ) {
-                                        Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Pause", fontWeight = FontWeight.SemiBold, maxLines = 1)
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            pendingCancelFileName = state.fileName
-                                            showCancelConfirmDialog = true
-                                        },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(48.dp),
-                                        shape = RoundedCornerShape(14.dp),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = MaterialTheme.colorScheme.error
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 8.dp)
-                                    ) {
-                                        Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Cancel", fontWeight = FontWeight.SemiBold, maxLines = 1)
-                                    }
+                                        menuContent = { menuState ->
+                                            DropdownMenuItem(
+                                                text = { Text("Cancel") },
+                                                onClick = {
+                                                    menuState.dismiss()
+                                                    pendingCancelFileName = state.fileName
+                                                    showCancelConfirmDialog = true
+                                                }
+                                            )
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -1240,7 +1316,7 @@ fun MainScreen(
 
                     is DownloadState.AutoRecovering -> {
                         Card(
-                            shape = RoundedCornerShape(24.dp),
+                            shape = MaterialTheme.shapes.large,
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer
@@ -1249,15 +1325,14 @@ fun MainScreen(
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                        strokeWidth = 3.dp
+                                    LoadingIndicator(
+                                        modifier = Modifier.size(30.dp),
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
                                         text = "Auto-Recovering Network",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.titleMediumEmphasized,
                                         color = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 }
@@ -1268,9 +1343,10 @@ fun MainScreen(
                                     color = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
-                                LinearProgressIndicator(
+                                LinearWavyProgressIndicator(
                                     modifier = Modifier.fillMaxWidth(),
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    trackColor = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.24f)
                                 )
                             }
                         }
@@ -1278,7 +1354,7 @@ fun MainScreen(
 
                     is DownloadState.Completed -> {
                         Card(
-                            shape = RoundedCornerShape(24.dp),
+                            shape = MaterialTheme.shapes.large,
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -1288,16 +1364,16 @@ fun MainScreen(
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
-                                        shape = CircleShape,
+                                        shape = MaterialShapes.Cookie9Sided.toShape(),
                                         color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(40.dp)
+                                        modifier = Modifier.size(42.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
-                                                imageVector = Icons.Rounded.Check,
+                                                painter = painterResource(DualBoostIcons.Check),
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.onPrimary,
-                                                modifier = Modifier.size(24.dp)
+                                                modifier = Modifier.size(22.dp)
                                             )
                                         }
                                     }
@@ -1305,7 +1381,7 @@ fun MainScreen(
                                     Column {
                                         Text(
                                             text = "Download Complete!",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            style = MaterialTheme.typography.titleMediumEmphasized,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                         val avgSpeedText = if (state.averageSpeedMBps > 0.0) " at ${com.dualboost.downloader.data.formatSpeed(state.averageSpeedMBps)} avg" else ""
@@ -1329,7 +1405,7 @@ fun MainScreen(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = Icons.Rounded.Folder,
+                                        painter = painterResource(DualBoostIcons.Folder),
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                                         modifier = Modifier.size(14.dp)
@@ -1357,7 +1433,7 @@ fun MainScreen(
 
                     is DownloadState.ThreatDetected -> {
                         Card(
-                            shape = RoundedCornerShape(24.dp),
+                            shape = MaterialTheme.shapes.large,
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer
@@ -1367,7 +1443,7 @@ fun MainScreen(
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = Icons.Rounded.Security,
+                                        painter = painterResource(DualBoostIcons.Security),
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(28.dp)
@@ -1375,7 +1451,7 @@ fun MainScreen(
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text(
                                         text = "🛑 Threat Blocked",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.titleMediumEmphasized,
                                         color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                 }
@@ -1386,25 +1462,63 @@ fun MainScreen(
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
-                                Row(
+                                val safeInteraction = remember { MutableInteractionSource() }
+                                val overrideInteraction = remember { MutableInteractionSource() }
+                                ButtonGroup(
+                                    overflowIndicator = { menuState -> ButtonGroupDefaults.OverflowIndicator(menuState) },
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Button(
-                                        onClick = { viewModel.resetToIdle() },
-                                        modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.error
-                                        )
-                                    ) {
-                                        Text("Safe Discard")
-                                    }
-                                    OutlinedButton(
-                                        onClick = { viewModel.startDownloadWithBypass(state.url) },
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text("Override & Download")
-                                    }
+                                    customItem(
+                                        buttonGroupContent = {
+                                            Button(
+                                                onClick = { viewModel.resetToIdle() },
+                                                shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                                interactionSource = safeInteraction,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .animateWidth(safeInteraction, compressionLimit = 8.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.error,
+                                                    contentColor = MaterialTheme.colorScheme.onError
+                                                )
+                                            ) {
+                                                Text("Safe Discard", maxLines = 1)
+                                            }
+                                        },
+                                        menuContent = { menuState ->
+                                            DropdownMenuItem(
+                                                text = { Text("Safe Discard") },
+                                                onClick = {
+                                                    menuState.dismiss()
+                                                    viewModel.resetToIdle()
+                                                }
+                                            )
+                                        }
+                                    )
+                                    customItem(
+                                        buttonGroupContent = {
+                                            OutlinedButton(
+                                                onClick = { viewModel.startDownloadWithBypass(state.url) },
+                                                shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                                interactionSource = overrideInteraction,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .animateWidth(overrideInteraction, compressionLimit = 8.dp)
+                                            ) {
+                                                Text("Override & Download", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                        },
+                                        menuContent = { menuState ->
+                                            DropdownMenuItem(
+                                                text = { Text("Override & Download") },
+                                                onClick = {
+                                                    menuState.dismiss()
+                                                    viewModel.startDownloadWithBypass(state.url)
+                                                }
+                                            )
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -1412,7 +1526,7 @@ fun MainScreen(
 
                     is DownloadState.Failed -> {
                         Card(
-                            shape = RoundedCornerShape(24.dp),
+                            shape = MaterialTheme.shapes.large,
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer
@@ -1422,7 +1536,7 @@ fun MainScreen(
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = Icons.Rounded.ErrorOutline,
+                                        painter = painterResource(DualBoostIcons.Error),
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onErrorContainer,
                                         modifier = Modifier.size(28.dp)
@@ -1430,7 +1544,7 @@ fun MainScreen(
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text(
                                         text = "Download Interrupted",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.titleMediumEmphasized,
                                         color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                 }
@@ -1441,40 +1555,75 @@ fun MainScreen(
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
-                                Row(
+                                val retryInteraction = remember { MutableInteractionSource() }
+                                val dismissInteraction = remember { MutableInteractionSource() }
+                                ButtonGroup(
+                                    overflowIndicator = { menuState -> ButtonGroupDefaults.OverflowIndicator(menuState) },
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Button(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            viewModel.retryDownload()
+                                    customItem(
+                                        buttonGroupContent = {
+                                            Button(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    viewModel.retryDownload()
+                                                },
+                                                shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                                interactionSource = retryInteraction,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .animateWidth(retryInteraction, compressionLimit = 8.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.error,
+                                                    contentColor = MaterialTheme.colorScheme.onError
+                                                )
+                                            ) {
+                                                Icon(painter = painterResource(DualBoostIcons.Refresh), contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Retry", style = MaterialTheme.typography.labelLargeEmphasized, maxLines = 1)
+                                            }
                                         },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.error,
-                                            contentColor = MaterialTheme.colorScheme.onError
-                                        )
-                                    ) {
-                                        Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Retry")
-                                    }
+                                        menuContent = { menuState ->
+                                            DropdownMenuItem(
+                                                text = { Text("Retry") },
+                                                onClick = {
+                                                    menuState.dismiss()
+                                                    viewModel.retryDownload()
+                                                }
+                                            )
+                                        }
+                                    )
 
-                                    OutlinedButton(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            viewModel.resetToIdle()
+                                    customItem(
+                                        buttonGroupContent = {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    viewModel.resetToIdle()
+                                                },
+                                                shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                                interactionSource = dismissInteraction,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .animateWidth(dismissInteraction, compressionLimit = 8.dp),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+                                            ) {
+                                                Icon(painter = painterResource(DualBoostIcons.Close), contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onErrorContainer)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.labelLargeEmphasized, maxLines = 1)
+                                            }
                                         },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(14.dp),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
-                                    ) {
-                                        Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onErrorContainer)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer)
-                                    }
+                                        menuContent = { menuState ->
+                                            DropdownMenuItem(
+                                                text = { Text("Dismiss") },
+                                                onClick = {
+                                                    menuState.dismiss()
+                                                    viewModel.resetToIdle()
+                                                }
+                                            )
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -1482,7 +1631,7 @@ fun MainScreen(
 
                     is DownloadState.Paused -> {
                         Card(
-                            shape = RoundedCornerShape(24.dp),
+                            shape = MaterialTheme.shapes.large,
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainer
                             ),
@@ -1507,7 +1656,7 @@ fun MainScreen(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Rounded.Pause,
+                                                painter = painterResource(DualBoostIcons.Pause),
                                                 contentDescription = "Paused",
                                                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                                 modifier = Modifier.size(20.dp)
@@ -1517,8 +1666,7 @@ fun MainScreen(
                                         Column {
                                             Text(
                                                 text = "Download Paused",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.titleMediumEmphasized,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                             if (state.fileName.isNotBlank()) {
@@ -1599,39 +1747,75 @@ fun MainScreen(
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                Row(
+                                val resumeInteraction = remember { MutableInteractionSource() }
+                                val discardInteraction = remember { MutableInteractionSource() }
+                                ButtonGroup(
+                                    overflowIndicator = { menuState -> ButtonGroupDefaults.OverflowIndicator(menuState) },
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Button(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            viewModel.startDownload(if (state.url.isNotBlank()) state.url else viewModel.urlInput.value)
+                                    customItem(
+                                        buttonGroupContent = {
+                                            Button(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    viewModel.startDownload(if (state.url.isNotBlank()) state.url else viewModel.urlInput.value)
+                                                },
+                                                shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                                interactionSource = resumeInteraction,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .animateWidth(resumeInteraction, compressionLimit = 8.dp)
+                                            ) {
+                                                Icon(painter = painterResource(DualBoostIcons.PlayArrow), contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Resume", style = MaterialTheme.typography.labelLargeEmphasized, maxLines = 1)
+                                            }
                                         },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(14.dp)
-                                    ) {
-                                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Resume")
-                                    }
+                                        menuContent = { menuState ->
+                                            DropdownMenuItem(
+                                                text = { Text("Resume") },
+                                                onClick = {
+                                                    menuState.dismiss()
+                                                    viewModel.startDownload(if (state.url.isNotBlank()) state.url else viewModel.urlInput.value)
+                                                }
+                                            )
+                                        }
+                                    )
 
-                                    OutlinedButton(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            pendingCancelFileName = state.fileName
-                                            showCancelConfirmDialog = true
+                                    customItem(
+                                        buttonGroupContent = {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    pendingCancelFileName = state.fileName
+                                                    showCancelConfirmDialog = true
+                                                },
+                                                shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                                interactionSource = discardInteraction,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .animateWidth(discardInteraction, compressionLimit = 8.dp),
+                                                colors = ButtonDefaults.outlinedButtonColors(
+                                                    contentColor = MaterialTheme.colorScheme.error
+                                                )
+                                            ) {
+                                                Icon(painter = painterResource(DualBoostIcons.Delete), contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Discard", style = MaterialTheme.typography.labelLargeEmphasized, maxLines = 1)
+                                            }
                                         },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = MaterialTheme.colorScheme.error
-                                        )
-                                    ) {
-                                        Icon(Icons.Rounded.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Discard")
-                                    }
+                                        menuContent = { menuState ->
+                                            DropdownMenuItem(
+                                                text = { Text("Discard") },
+                                                onClick = {
+                                                    menuState.dismiss()
+                                                    pendingCancelFileName = state.fileName
+                                                    showCancelConfirmDialog = true
+                                                }
+                                            )
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -1652,7 +1836,7 @@ fun MainScreen(
             },
             icon = {
                 Icon(
-                    imageVector = Icons.Rounded.Warning,
+                    painter = painterResource(DualBoostIcons.Warning),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(32.dp)
@@ -1661,7 +1845,7 @@ fun MainScreen(
             title = {
                 Text(
                     text = "Cancel Download?",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleMediumEmphasized,
                     textAlign = TextAlign.Center
                 )
             },
@@ -1680,13 +1864,13 @@ fun MainScreen(
                         showCancelConfirmDialog = false
                         pendingCancelFileName = null
                     },
+                    shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError
-                    ),
-                    shape = RoundedCornerShape(12.dp)
+                    )
                 ) {
-                    Text("Yes, Cancel", fontWeight = FontWeight.Bold)
+                    Text("Yes, Cancel", style = MaterialTheme.typography.labelLargeEmphasized)
                 }
             },
             dismissButton = {
@@ -1694,13 +1878,14 @@ fun MainScreen(
                     onClick = {
                         showCancelConfirmDialog = false
                         pendingCancelFileName = null
-                    }
+                    },
+                    shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp)
                 ) {
                     Text("Keep Downloading")
                 }
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(24.dp)
+            shape = MaterialTheme.shapes.large
         )
     }
 
@@ -1719,7 +1904,7 @@ fun MainScreen(
             onDismissRequest = { showExitDownloadConfirmDialog = false },
             icon = {
                 Icon(
-                    imageVector = Icons.Rounded.Download,
+                    painter = painterResource(DualBoostIcons.Download),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(32.dp)
@@ -1728,8 +1913,8 @@ fun MainScreen(
             title = {
                 Text(
                     text = "Download In Progress",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    textAlign = TextAlign.Center
                 )
             },
             text = {
@@ -1745,7 +1930,7 @@ fun MainScreen(
                         showExitDownloadConfirmDialog = false
                         (context as? android.app.Activity)?.moveTaskToBack(true)
                     },
-                    shape = RoundedCornerShape(12.dp)
+                    shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp)
                 ) {
                     Text("Minimize to Background")
                 }
@@ -1756,7 +1941,7 @@ fun MainScreen(
                         showExitDownloadConfirmDialog = false
                         viewModel.discardDownload()
                     },
-                    shape = RoundedCornerShape(12.dp),
+                    shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
                     ),
@@ -1766,7 +1951,7 @@ fun MainScreen(
                 }
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(24.dp)
+            shape = MaterialTheme.shapes.large
         )
     }
 
@@ -1787,7 +1972,7 @@ fun NetworkCard(
     modifier: Modifier = Modifier,
     title: String,
     subtitle: String,
-    icon: ImageVector,
+    @DrawableRes iconRes: Int,
     isActive: Boolean,
     activeColor: Color
 ) {
@@ -1830,7 +2015,7 @@ fun NetworkCard(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = icon,
+                            painter = painterResource(iconRes),
                             contentDescription = null,
                             tint = if (isActive) activeColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier.size(20.dp)
@@ -1847,7 +2032,7 @@ fun NetworkCard(
             Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.titleSmallEmphasized,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
@@ -1878,7 +2063,7 @@ fun PresetChip(
         ) {
             if (isRangeEnabled) {
                 Icon(
-                    imageVector = Icons.Rounded.Bolt,
+                    painter = painterResource(DualBoostIcons.Bolt),
                     contentDescription = "Dual Channel Aggregation Supported",
                     tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(15.dp)
@@ -1902,7 +2087,7 @@ fun SpeedDetailRow(
     speedMBps: Double,
     downloadedBytes: Long,
     indicatorColor: Color,
-    icon: ImageVector,
+    @DrawableRes iconRes: Int,
     isDimmed: Boolean = false
 ) {
     val isStreaming = speedMBps > 0.05 && !isDimmed
@@ -1938,7 +2123,7 @@ fun SpeedDetailRow(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Icon(
-                imageVector = icon,
+                painter = painterResource(iconRes),
                 contentDescription = null,
                 tint = indicatorColor,
                 modifier = Modifier.size(16.dp)
@@ -2114,74 +2299,107 @@ fun DownloadCompletedActions(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onOpenFile(filePath, contentUriString)
             },
+            shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
                 .semantics(mergeDescendants = true) {},
-            shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
-            Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(painter = painterResource(DualBoostIcons.PlayArrow), contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Open File",
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+                style = MaterialTheme.typography.labelLargeEmphasized
             )
         }
 
-        // Split Secondary Action Row: Show in Files & Share side-by-side
-        Row(
+        // Split Secondary Action ButtonGroup: Show in Files & Share side-by-side
+        val filesInteraction = remember { MutableInteractionSource() }
+        val shareInteraction = remember { MutableInteractionSource() }
+        ButtonGroup(
+            overflowIndicator = { menuState -> ButtonGroupDefaults.OverflowIndicator(menuState) },
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilledTonalButton(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onOpenFileLocation(filePath, contentUriString)
+            customItem(
+                buttonGroupContent = {
+                    FilledTonalButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onOpenFileLocation(filePath, contentUriString)
+                        },
+                        shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                        interactionSource = filesInteraction,
+                        modifier = Modifier
+                            .weight(1f)
+                            .animateWidth(filesInteraction, compressionLimit = 8.dp)
+                            .height(44.dp)
+                            .semantics(mergeDescendants = true) {},
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Icon(painter = painterResource(DualBoostIcons.FolderOpen), contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Show in Files",
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelMediumEmphasized
+                        )
+                    }
                 },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp)
-                    .semantics(mergeDescendants = true) {},
-                shape = RoundedCornerShape(14.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp)
-            ) {
-                Icon(Icons.Rounded.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Show in Files",
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
-                )
-            }
+                menuContent = { menuState ->
+                    DropdownMenuItem(
+                        text = { Text("Show in Files") },
+                        onClick = {
+                            menuState.dismiss()
+                            onOpenFileLocation(filePath, contentUriString)
+                        }
+                    )
+                }
+            )
 
-            FilledTonalButton(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onShareFile(filePath, contentUriString)
+            customItem(
+                buttonGroupContent = {
+                    FilledTonalButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onShareFile(filePath, contentUriString)
+                        },
+                        shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                        interactionSource = shareInteraction,
+                        modifier = Modifier
+                            .weight(1f)
+                            .animateWidth(shareInteraction, compressionLimit = 8.dp)
+                            .height(44.dp)
+                            .semantics(mergeDescendants = true) {},
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Icon(painter = painterResource(DualBoostIcons.Share), contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Share",
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelMediumEmphasized
+                        )
+                    }
                 },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp)
-                    .semantics(mergeDescendants = true) {},
-                shape = RoundedCornerShape(14.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp)
-            ) {
-                Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Share",
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
-                )
-            }
+                menuContent = { menuState ->
+                    DropdownMenuItem(
+                        text = { Text("Share") },
+                        onClick = {
+                            menuState.dismiss()
+                            onShareFile(filePath, contentUriString)
+                        }
+                    )
+                }
+            )
         }
     }
 }

@@ -2201,6 +2201,47 @@ Investigation revealed two interacting root causes:
 - **Hardware/Battery**: Wi-Fi radio remains in low-latency/high-perf mode only during active downloads and releases cleanly on all terminal states.
 - **Test Coverage**: Verified via TDD with new unit tests in `CircuitBreakerHalfOpenTest`, `EngineCircuitBreakerRecoveryTest`, and `ServiceLifecycleTest`.
 
+---
+
+## ADR-058: Compose Material 3 1.5.0, Expressive Components & Material Symbols Migration
+
+### Date
+2026-11-26
+
+### Status
+Accepted
+
+### Context
+Compose Material 3 `1.5.0` reached stable (November 18, 2026), graduating Material 3 Expressive theming (`MaterialExpressiveTheme`, `MotionScheme.expressive()`), expanded `Shapes` and `Typography` (`*Emphasized`), `ButtonGroup`, shape-morphing `ButtonDefaults.shapes` and `IconButtonDefaults.shapes`, wavy progress indicators (`LinearWavyProgressIndicator`, `CircularWavyProgressIndicator`), `LoadingIndicator`, `MaterialShapes`, `SegmentedListItem`, `TooltipBox` + `TooltipAnchorPosition`, tonal rounded `OutlinedTextField` defaults, and deterministic bottom sheet anchor management (`rememberBottomSheetState`) while deprecating `TopAppBarDefaults.centerAlignedTopAppBarColors`, `rememberModalBottomSheetState`, and heavy `androidx.compose.material:material-icons-extended` icon artifacts.
+
+Inspecting Google Maven AAR metadata (`material3-android:1.5.0` and `compose-bom:2026.11.01` / `ui-android:1.13.0`) showed `material3:1.5.0` requires `minCompileSdk = 37` (`37.1` for `ui-android:1.13.0`) and `minAndroidGradlePluginVersion = 9.1.0`.
+
+### Decision
+1. **Toolchain & Dependency Upgrade**:
+   - Upgraded Gradle wrapper to `9.6.0` (`gradle/wrapper/gradle-wrapper.properties`) and Android Gradle Plugin to `9.5.3` (`gradle/libs.versions.toml`).
+   - Migrated to AGP 9 built-in Kotlin by removing the legacy `org.jetbrains.kotlin.android` plugin and `kotlinOptions` block, configuring `kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }` in `app/build.gradle.kts`, and aligning `kotlin-compose` to `2.2.10`.
+   - Installed Android SDK `platforms/android-37.1` and `build-tools/37.0.0`, and updated `app/build.gradle.kts` to `compileSdk { version = release(37) { minorApiLevel = 1 } }` while keeping `targetSdk = 35` and `minSdk = 26`.
+   - Upgraded `composeBom` to `2026.11.01` (resolving `androidx.compose.material3:material3:1.5.0`) and removed `androidx.compose.material:material-icons-extended`.
+2. **Material Symbols Rounded Vector Icons (`DualBoostIcons.kt`, `res/drawable/ms_*.xml`)**:
+   - Replaced all `Icons.Rounded.*` references across the UI with 33 bundled official Material Symbols Rounded Android Vector Drawables (`app/src/main/res/drawable/ms_*.xml`, mapped in `DualBoostIcons.kt`) rendered via `painterResource(...)`.
+3. **Expressive Theme, Styles & Helpers (`Theme.kt`)**:
+   - Migrated `DualBoostTheme` from `MaterialTheme` to `MaterialExpressiveTheme` configured with `MotionScheme.expressive()`, `DualBoostShapes` (8-tier `Shapes`), and `DualBoostTypography` (`Typography(fontFamily = FontFamily.SansSerif)` + `*Emphasized` styles), preserving `dynamicDarkColorScheme` / `dynamicLightColorScheme` and fallback `DarkColorScheme` / `LightColorScheme` tokens.
+   - Added `expressiveButtonShapes(...)` (`ButtonDefaults.shapes(...)`) for smooth press corner compression and `ExpressiveTooltipIconButton(...)` combining `TooltipBox`, `PlainTooltip`, `TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above)`, and `IconButtonDefaults.shapes()`.
+4. **Expressive Component Upgrades & Deprecation Cleanups (`MainActivity.kt`, `SocialMediaModalSheet.kt`, `SecurityThreatDialog.kt`)**:
+   - Styled TopBar brand emblem, `Completed` checkmark badge, social platform header badge, and threat header badge with `MaterialShapes.Cookie9Sided.toShape()`.
+   - Upgraded the URL `OutlinedTextField` to `OutlinedTextFieldDefaults.tonalColors()`, `OutlinedTextFieldDefaults.roundedShape`, and `ExpressiveTooltipIconButton` paste/clear actions.
+   - Migrated the "Watch While Downloading" toggle to a checkable Material 3 `ListItem` + `Switch` with `thumbContent` (`DualBoostIcons.Check`).
+   - Added `LoadingIndicator` + `LinearWavyProgressIndicator` to `DownloadState.Probing` and `DownloadState.AutoRecovering`, and upgraded `SocialIntakeState.Resolving` to `CircularWavyProgressIndicator`.
+   - Converted horizontal button bars (`Preview/Pause/Cancel`, `Safe Discard/Override`, `Retry/Dismiss`, `Resume/Discard`, `Show in Files/Share`, and `SocialMediaModalSheet` actions) to `ButtonGroup` (`ButtonGroupDefaults.OverflowIndicator`, `customItem`, `Modifier.animateWidth(...)`) with `expressiveButtonShapes(...)`.
+   - Upgraded `SocialMediaModalSheet` quality selection options to `SegmentedListItem` (`ListItemDefaults.segmentedShapes`, `ListItemDefaults.segmentedColors`).
+   - Replaced deprecated `TopAppBarDefaults.centerAlignedTopAppBarColors(...)` with `TopAppBarDefaults.topAppBarColors(...)`, removed obsolete `@OptIn(ExperimentalMaterial3Api::class)` on `MainScreen`, and migrated `rememberModalBottomSheetState(skipPartiallyExpanded = true)` to `rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))`.
+
+### Consequences
+- **UX**: Spring-physics expressive motion, shape-morphing `ButtonGroup` controls, `SegmentedListItem` quality rows, wavy/organic loading indicators, and crisp Material Symbols Rounded icons unify the UI with Android 17 / Material 3 `1.5.0` guidelines while preserving all high-contrast Material You color tokens.
+- **Build & Compatibility**: Project compiles cleanly against Android 37.1 (`AGP 9.5.3` / `Gradle 9.6.0`) with zero Material 3 deprecation warnings and reduced icon bloat after dropping `material-icons-extended`.
+- **Test Coverage**: Verified by `ThemeContrastTest` (`testMaterial3ExpressiveMotionScheme_ProvidesDistinctSpringSpecs`), `MainComposeUiTest` (`13/13` instrumentation tests passing on Pixel 9 Android 17, including `testProbingAndAutoRecoveringStates_RenderWithMaterialExpressiveTheme` and updated assertions aligned with streamlined telemetry UI), `408` unit tests across `72` suites, `lint` (0 errors), and R8 release APK packaging (`app-release.apk`, `1,896,297` bytes) launched cleanly on Pixel 9.
+
+
 
 
 
