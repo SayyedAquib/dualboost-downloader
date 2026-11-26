@@ -13,7 +13,7 @@ DualBoost Downloader embraces Material 3 Expressive ("Material You") design prin
 
 ## Colors & Themes
 ### Material You Dynamic Theming (Pixel Native Monet Engine)
-The application uses Compose Material 3 `1.5.0` (`MaterialExpressiveTheme`, `MotionScheme.expressive()`, `DualBoostShapes`, and `DualBoostTypography` in `Theme.kt`, plus Material Symbols Rounded vector drawables in `DualBoostIcons.kt`) and fully embraces Material You dynamic color extraction (`dynamicColor = true`), harmonizing with the user's Pixel wallpaper and automatically switching between dynamic dark and dynamic light themes based on system Day/Night mode:
+The application uses Compose Material 3 `1.5.0` (`MaterialExpressiveTheme`, `MotionScheme.expressive()`, `DualBoostShapes` backed by `ShapeDefaults`, and `DualBoostTypography` in `Theme.kt`, plus Material Symbols Rounded vector drawables in `DualBoostIcons.kt`) and fully embraces Material You dynamic color extraction (`dynamicColor = true`), harmonizing with the user's Pixel wallpaper and automatically switching between dynamic dark and dynamic light themes based on system Day/Night mode (with complete fallback `surfaceBright`, `surfaceDim`, and `*Fixed` roles):
 - **Background & Scaffold**: Adapts directly to `MaterialTheme.colorScheme.background`.
 - **Surfaces & Cards Hierarchy**: Material 3 surface elevation hierarchy eliminates flat pitch-black clipping in Dark Mode:
   - Deepest tier: `surfaceContainerLowest` for unselected/dormant cards.
@@ -37,11 +37,12 @@ To ensure physical network transparency across any wallpaper palette:
 - **Cellular (5G/LTE) Stream**: Neon Violet (`#B388FF` in Dark Mode, `#651FFF` in Light Mode) applied to status dot, icon, and speed progress segment. Displays `Icons.Rounded.SignalCellularOff` when disconnected.
 
 ## Typography & Motion
-- **Material 3 `1.5.0` `Typography` & Emphasized Scale**: Configured via `DualBoostTypography` (`FontFamily.SansSerif`) and `*Emphasized` styles (`headlineSmallEmphasized`, `titleLargeEmphasized`, `titleMediumEmphasized`, `titleSmallEmphasized`, `labelSmallEmphasized`) for headers, active speeds, status chips, and primary actions.
-- **`DualBoostShapes` & Organic Geometry**: Expanded 8-tier `Shapes` token set (`Theme.kt`) paired with `MaterialShapes.Cookie9Sided.toShape()` for the TopBar brand emblem and download completion badge.
+- **Material 3 `1.5.0` `Typography` & Emphasized Scale**: Configured via `DualBoostTypography` (`FontFamily.SansSerif`) and `*Emphasized` styles (`headlineSmallEmphasized`, `titleLargeEmphasized`, `titleMediumEmphasized`, `titleSmallEmphasized`, `labelLargeEmphasized`, `labelMediumEmphasized`, `labelSmallEmphasized`) for headers, active speeds, status chips, and actions.
+- **`DualBoostShapes` & Organic Geometry**: `Shapes` backed by Material 3 `1.5.0` `ShapeDefaults` (`ExtraSmall` through `ExtraExtraLarge`) in `Theme.kt`, paired with `MaterialShapes.Cookie9Sided.toShape()` for the TopBar emblem, network card icon badges, sequential toggle badge, paused badge, completion badge, alert dialogs, and social/security hero emblems.
 - **Material Symbols Rounded Icons**: 33 bundled Android Vector Drawables (`res/drawable/ms_*.xml` mapped in `DualBoostIcons.kt`) rendered via `painterResource(...)`, replacing legacy `Icons.Rounded.*` and removing `material-icons-extended`.
-- **`MotionScheme.expressive()`**: Configured via `MaterialExpressiveTheme` in `Theme.kt` for spring-physics-based transitions across sheets, buttons, and controls (ADR-058).
-- **Shape-Morphing Buttons & Icon Buttons**: `expressiveButtonShapes(...)` (`ButtonDefaults.shapes`) smoothly compresses button corner radii on press; `ExpressiveTooltipIconButton` pairs `IconButtonDefaults.shapes()` with `TooltipBox` + `PlainTooltip` (`TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above)`).
+- **`MotionScheme.expressive()`**: Configured via `MaterialExpressiveTheme` in `Theme.kt` for spring-physics-based transitions across sheets, buttons, and controls (ADR-058 / ADR-060).
+- **Shape-Morphing Buttons & Icon Buttons**: `ButtonDefaults.shapes()` and `ButtonDefaults.shapesFor(...)` (`ExtraSmallContainerHeight` / `MediumContainerHeight`) morph button corner radii smoothly on press; `ExpressiveTooltipIconButton` pairs `IconButtonDefaults.shapes()` with `TooltipBox` + `PlainTooltip` (`TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above)`).
+- **Top Bar & Scroll/Toast Hygiene**: `CenterAlignedTopAppBar` uses `TopAppBarDefaults.pinnedScrollBehavior()` (`scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer`), and in-app errors/notices route through Material 3 `SnackbarHost` instead of system `Toast`s.
 - Smooth `animateFloatAsState` transitions on progress and speed meters.
 - Expressive state changes utilizing `AnimatedContent` cross-fades.
 - Haptic tactile feedback (`HapticFeedbackType.LongPress` and `TextHandleMove`) on actions and completion.
@@ -63,14 +64,14 @@ To ensure physical network transparency across any wallpaper palette:
 ## Component Patterns
 
 ### Buttons
-- **Interactive `ButtonGroup` Rows**: Horizontal control rows (`Preview / Pause / Cancel`, `Safe Discard / Override`, `Retry / Dismiss`, `Resume / Discard`, `Show in Files / Share`, and `SocialMediaModalSheet` actions) use Material 3 `1.5.0` `ButtonGroup` (`ButtonGroupDefaults.OverflowIndicator`, `customItem`, and `Modifier.animateWidth(...)`) paired with `expressiveButtonShapes(...)`.
-- **Primary Action ("Boost Download")**: Filled `Button` with `expressiveButtonShapes(...)`, full width or weighted, primary container color.
-- **Secondary / Control Action ("Pause", "Resume")**: `OutlinedButton` with `expressiveButtonShapes(...)` and 12dp–14dp base corner radius.
+- **Interactive `ButtonGroup` Rows**: Horizontal control rows (`Battery Warning`, `Preview / Pause / Cancel`, `Safe Discard / Override`, `Retry / Dismiss`, `Resume / Discard`, `Show in Files / Share`, and `SocialMediaModalSheet` actions) use Material 3 `1.5.0` `ButtonGroup` (`ButtonGroupDefaults.OverflowIndicator` with `leadingIcon`s in overflow `DropdownMenuItem`s, `customItem`, and `Modifier.animateWidth(...)`) paired with `ButtonDefaults.shapes()`.
+- **Primary Action ("Boost Download")**: Full-width filled `Button` sized with `ButtonDefaults.MediumContainerHeight` / `ButtonDefaults.shapesFor(ButtonDefaults.MediumContainerHeight)`, primary container color.
+- **Secondary / Control Action ("Pause", "Resume", Clipboard "Paste")**: `OutlinedButton` with `ButtonDefaults.shapes()` and compact actions sized with `ButtonDefaults.ExtraSmallContainerHeight` / `ButtonDefaults.shapesFor(...)`.
 
 ### Forms & Suggestions
-- **Smart Context Pill Banner**: Expressive Material 3 pill (`secondaryContainer`) displaying detected clipboard download URLs with 1-tap "Paste" button and dismiss affordance.
+- **Smart Context Pill Banner**: Expressive Material 3 `OutlinedCard` (`secondaryContainer`) displaying detected clipboard download URLs with an extra-small "Paste" `Button` and tooltip dismiss icon button.
 - **URL Input Field**: Full-width `OutlinedTextField` using `OutlinedTextFieldDefaults.tonalColors()` and `OutlinedTextFieldDefaults.roundedShape`, single line, with explicit placeholder and `ExpressiveTooltipIconButton` paste/clear trailing controls.
-- **Sequential Stream Toggle**: Checkable Material 3 `ListItem` paired with a `Switch` using `thumbContent` (`DualBoostIcons.Check`).
+- **Sequential Stream Toggle**: Checkable Material 3 `ListItem` with a `MaterialShapes.Cookie9Sided` icon badge, unscaled native `Switch` using `thumbContent` (`DualBoostIcons.Check`), and an `AssistChip` for "Reset to Auto".
 
 ### Cards
 - **Download Input Card**: 24dp rounded container (`surfaceContainer`) containing the URL input field, optional privacy-conscious clipboard suggestion pill, Sequential Video Stream Mode toggle, and the primary "Boost Download" button. Developer preset benchmark buttons have been pruned for a clean consumer-first layout (ADR-050).
@@ -100,7 +101,7 @@ To ensure physical network transparency across any wallpaper palette:
 ### Loading States
 - **Server Probing & Auto-Recovery**: Expressive Material 3 `1.5.0` `LoadingIndicator` + `LinearWavyProgressIndicator` with explanatory text ("Connecting and probing server capabilities..." / recovery attempt details).
 - **Social Media Stream Extraction**: Indeterminate `CircularWavyProgressIndicator` inside `SocialMediaModalSheet` using deterministic `rememberBottomSheetState`.
-- **Segmented Transfer / Paused**: Dual-color proportional transfer bar during active downloads and steady determinate `LinearProgressIndicator` when paused ($0.0 \dots 1.0$).
+- **Segmented Transfer / Paused**: Dual-color proportional transfer bar during active downloads (with `Badge` percentage indicator) and flattened determinate `LinearWavyProgressIndicator(progress = ..., amplitude = { 0f })` when paused ($0.0 \dots 1.0$).
 
 ### Empty States
 - **Minimalist Idle Screen**: When no download is running, the app maintains an uncluttered, distraction-free layout showing only the hero network cards and the "New Download" card (the redundant "Ready to Download" empty placeholder card is removed per ADR-050).
@@ -108,8 +109,8 @@ To ensure physical network transparency across any wallpaper palette:
 ### Error States
 - Red container card (`errorContainer`) containing explicit error messages (e.g., DNS failure, timeout, HTTP 404).
 - **Actionable Error Recovery (`ADR-032`)**: Elevated failure card includes side-by-side `ButtonGroup` actions:
-  - **Retry**: High-contrast filled `Button` with `expressiveButtonShapes(...)`, error container tint, and `DualBoostIcons.Refresh` to restart or re-attempt the transfer using the preserved URL.
-  - **Dismiss**: Outlined `Button` with `expressiveButtonShapes(...)`, error border, and `DualBoostIcons.Close` to cleanly reset the UI state to `Idle`.
+  - **Retry**: High-contrast filled `Button` with `ButtonDefaults.shapes()`, error container tint, and `DualBoostIcons.Refresh` to restart or re-attempt the transfer using the preserved URL.
+  - **Dismiss**: Outlined `Button` with `ButtonDefaults.shapes()`, error border, and `DualBoostIcons.Close` to cleanly reset the UI state to `Idle`.
 
 ### Back Navigation & System Dialogs (`ADR-032`)
 - **Smart Back Handling**: System back gestures first dismiss open modals, sheets, and drawers sequentially.
@@ -147,17 +148,17 @@ To ensure physical network transparency across any wallpaper palette:
 - **Card 3: Automated Zero-Touch Engines**: Clean summary rows for Multi-Thread Concurrency (Auto), Chunk Slicing (Auto 1 MB–64 MB), Cellular Detection (Auto 5G/LTE), Network Timeout (Balanced), Cloud Slicer (Pre-configured), and Storage (Public Downloads).
 - **Action Button**: Full-width "Done" button (`Icons.Rounded.Check`) dismissing modal.
 
-### Security Threat UI Components (`ADR-038`)
-- **SecurityThreatDialog**: Dedicated Material 3 `AlertDialog` presenting a prominent circular red shield icon (`errorContainer`), severity classification chip (`CRITICAL RISK • DOUBLE_EXTENSION`), original requested filename vs true deceptive target payload in high-contrast monospace font, explanatory text informing that bytes were purged from storage, a prominent red `[ 🛡️ Safe Discard (Recommended) ]` button, and an explicit `[ ⚠️ Download Anyway (At your own risk) ]` bypass action.
-- **Threat Detected Inline Card**: Rendered in `MainActivity` during `DownloadState.ThreatDetected` with `1.5.dp` error border, red shield header, threat description, and side-by-side "Safe Discard" and "Override & Download" buttons.
+### Security Threat UI Components (`ADR-038`, `ADR-060`)
+- **SecurityThreatDialog**: Dedicated Material 3 `AlertDialog` (`MaterialTheme.shapes.largeIncreased`) presenting a prominent `MaterialShapes.Cookie9Sided` red shield badge (`errorContainer`), severity classification chip (`CRITICAL RISK • DOUBLE_EXTENSION`, `MaterialTheme.shapes.small`), original requested filename vs. actual disguised target payload in high-contrast monospace typography (`labelMediumEmphasized`), explanatory copy, and `ButtonDefaults.shapes()` actions (`[ 🛡️ Safe Discard (Recommended) ]` and `[ ⚠️ Download Anyway (At your own risk) ]`).
+- **Threat Detected Inline Card**: Rendered in `MainActivity` during `DownloadState.ThreatDetected` with `1.5.dp` error border, red shield header, threat description, and `ButtonGroup` actions ("Safe Discard" and "Override & Download").
 
-### Social Media Intake & Quality Modal (`ADR-039`, `ADR-058`)
-- **SocialMediaModalSheet**: Material 3 `1.5.0` `ModalBottomSheet` using deterministic `rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))`, triggered on social link paste or Share Sheet intake:
-  - **Platform Hero Badge**: 54dp `MaterialShapes.Cookie9Sided.toShape()` container with translucent brand tint and Material Symbols Rounded platform icon.
+### Social Media Intake & Quality Modal (`ADR-039`, `ADR-058`, `ADR-060`)
+- **SocialMediaModalSheet**: Material 3 `1.5.0` `ModalBottomSheet` (`BottomSheetDefaults.ExpandedShape`) using deterministic `rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))`, triggered on social link paste or Share Sheet intake:
+  - **Platform Hero Badge**: 56dp `MaterialShapes.Cookie9Sided.toShape()` container with theme-adapted platform tint (`SocialPlatform.resolveBrandColorHex(isDark)`) and Material Symbols Rounded platform icon.
   - **URL Monospace Preview**: Compact `surfaceContainerHighest` pill with `DualBoostIcons.Link` icon and single-line URL truncation.
   - **Segmented Quality List**: 1-tap `SegmentedListItem` rows (`ListItemDefaults.segmentedShapes`, `ListItemDefaults.segmentedColors`) for `MAX (4K / 1080p)`, `HD 720p`, and `Audio Only (MP3)`.
-  - **`ButtonGroup` Action Bar**: Animated side-by-side `ButtonGroup` actions (`Add to Queue` and `Boost Download` with `expressiveButtonShapes(...)`).
-  - **Resolving & Error Overlays**: Centered 56dp `CircularWavyProgressIndicator` during stream extraction, and dedicated error state with dismiss recovery.
+  - **`ButtonGroup` Action Bar**: Animated side-by-side `ButtonGroup` actions (`Add to Queue`, `Boost Download`, `Dismiss`, `Retry` with `ButtonDefaults.shapes()`, `labelLargeEmphasized`, and `leadingIcon` overflow items).
+  - **Resolving & Error Overlays**: Centered 56dp `CircularWavyProgressIndicator` during stream extraction, and dedicated error state with dismiss/retry recovery.
 
 ### Accessibility
 - Minimum touch targets of 48x48dp for all buttons.

@@ -2275,6 +2275,36 @@ An end-to-end codebase audit following ADR-056 identified remaining implicit sta
 - **DX & AX**: All implicit boolean/counter combinations are consolidated into documented, exhaustive Kotlin `enum` / `sealed class` machines with explicit `canTransitionTo` guards and observable `StateFlow`s.
 - **Verification**: Verified with `.\gradlew.bat test compileDebugAndroidTestKotlin lint assembleRelease` — `425/425` unit tests passing across `73` suites (0 failures, 0 skipped), instrumentation tests compiling cleanly, `lint` passing with 0 errors, and R8 `app-release.apk` (`1,912,681` bytes) assembled.
 
+---
+
+## ADR-060: Complete Material 3 1.5.0 Token, Navigation & Component Parity
+
+### Date
+2026-11-26
+
+### Status
+Accepted
+
+### Context
+A follow-up full-codebase audit after ADR-058 identified remaining pre-1.5.0 patterns and partial adoptions across the UI: system `Toast` calls in a `Scaffold` lacking `SnackbarHost`, a `CenterAlignedTopAppBar` without `scrollBehavior`, raw `Surface` banners and chips, a legacy `LinearProgressIndicator` on paused transfers, manual `RoundedCornerShape(...)` / `FontWeight` / `.sp` / `.scale(0.85f)` overrides, missing `*Fixed` and `surfaceBright`/`surfaceDim` roles in fallback color schemes, static non-adaptive social platform hexes, missing `leadingIcon`s in `ButtonGroup` overflow menus, and three dead pre-1.5.0 helper composables (`PresetChip`, `SpeedDetailRow`, `SegmentedChunkStrip`) left in `MainActivity.kt`.
+
+### Decision
+1. **Complete `ColorScheme`, `Shapes` & Button Token Parity (`Theme.kt`)**:
+   - Populated `surfaceBright`, `surfaceDim`, and all Material 3 `*Fixed` color roles (`primaryFixed`, `primaryFixedDim`, `onPrimaryFixed`, `onPrimaryFixedVariant`, `secondaryFixed*`, `tertiaryFixed*`) on fallback `DarkColorScheme` and `LightColorScheme` (verified via `ThemeContrastTest`).
+   - Aligned `DualBoostShapes` to `ShapeDefaults` (`ExtraSmall` through `ExtraExtraLarge`) and removed the redundant `expressiveButtonShapes(...)` wrapper so buttons use native `ButtonDefaults.shapes()` and `ButtonDefaults.shapesFor(ButtonDefaults.MediumContainerHeight / ExtraSmallContainerHeight)`.
+2. **Navigation, Feedback, Banners & Controls (`MainActivity.kt`)**:
+   - Added `SnackbarHost(snackbarHostState)` to `Scaffold` and replaced all 8 `Toast.makeText(...)` calls for clipboard and file-action feedback with Material 3 `Snackbar` messages.
+   - Wired `TopAppBarDefaults.pinnedScrollBehavior()` + `Modifier.nestedScroll(...)` into `CenterAlignedTopAppBar` with `scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer`.
+   - Upgraded advisory banners (Root, Battery Optimization Warning, VPN Active, Data Roaming Guard, Clipboard Suggestion) from raw `Surface` to `OutlinedCard`, converted the Battery Warning action bar to a `ButtonGroup`, upgraded `"Reset to Auto"` to an `AssistChip`, replaced the active download percentage pill with `Badge`, and removed `.scale(0.85f)` from the checkable `ListItem` `Switch`.
+   - Switched `DownloadState.Paused` from `LinearProgressIndicator` to flattened determinate `LinearWavyProgressIndicator(progress = ..., amplitude = { 0f })`.
+   - Replaced all remaining hardcoded `RoundedCornerShape(...)` and manual `FontWeight`/`sp` overrides with `MaterialTheme.shapes.*` and `*Emphasized` typography styles, wrapped alert dialog icons in `MaterialShapes.Cookie9Sided.toShape()` badges, added `leadingIcon`s to all `ButtonGroup` overflow `DropdownMenuItem`s, and removed unreferenced legacy helpers (`PresetChip`, `SpeedDetailRow`, `SegmentedChunkStrip`).
+3. **Sheet & Dialog Polish (`SocialMediaModel.kt`, `SocialMediaModalSheet.kt`, `SecurityThreatDialog.kt`)**:
+   - Added dark/light contrast adaptation (`SocialPlatform.resolveBrandColorHex(isDark)`) for platform badges, migrated `ModalBottomSheet` shape to `BottomSheetDefaults.ExpandedShape`, added overflow menu `leadingIcon`s and `labelLargeEmphasized` error button labels, and replaced manual shapes/weights in `SecurityThreatDialog` with `MaterialTheme.shapes.*` and `ButtonDefaults.shapes()`.
+
+### Consequences
+- **Consistency**: Zero pre-1.5.0 `LinearProgressIndicator`, `Toast.makeText`, `RoundedCornerShape`, `.sp`, `.scale()`, or manual `FontWeight` overrides remain anywhere in `app/src`.
+- **Verification**: Verified with `.\gradlew.bat test lint assembleRelease connectedAndroidTest` — `425/425` unit tests across `73` suites, `13/13` Pixel 9 instrumentation tests (`MainComposeUiTest`), `lint` (`0` errors, `0` warnings), and R8 `app-release.apk` (`1,932,333` bytes) installed and launched cleanly (`PID=15103`).
+
 
 
 

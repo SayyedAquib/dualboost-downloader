@@ -14,11 +14,11 @@ Compose instrumentation tests reside in `app/src/androidTest/java/com/dualboost/
 - Covers idle dashboard state, URL validation/preset selection, "Watch While Downloading" sequential switch interaction, compact single-stream telemetry (`Single-Stream • Wi-Fi Only`, `Wi-Fi • 12.5 MB/s`, `5G (Inactive)`), desktop spoof & cloud slicer badges, sequential `⚡ Stream Ready • 24.0 MB buffered` + `Preview` CTA, paused/discard state, completed action layout, and Material 3 `1.5.0` Expressive `Probing` / `AutoRecovering` states (`testProbingAndAutoRecoveringStates_RenderWithMaterialExpressiveTheme`).
 
 ## Unit Testing
-Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (408 active tests across 72 test suites, 100% passing):
+Unit tests reside in `app/src/test/java/com/dualboost/downloader/` (425 active tests across 73 test suites, 100% passing):
 
 - **ThemeContrastTest** (4 tests):
   - `testLightColorScheme_AllStandardPairingsExceedWcagAA`: Verifies WCAG AA contrast ratios (>= 4.5:1) across LightColorScheme container and surface pairs.
-  - `testDarkColorScheme_AllStandardPairingsExceedWcagAA`: Verifies WCAG AA contrast ratios (>= 4.5:1) across DarkColorScheme container and surface pairs.
+  - `testDarkColorScheme_AllStandardPairingsExceedWcagAA`: Verifies WCAG AA contrast ratios (>= 4.5:1) across DarkColorScheme container, surface, and fixed color (`*Fixed`) pairs.
   - `testTranslucentBrandTintPattern_ExceedsHighContrastInBothModes`: Verifies 14% primary translucent tint contrast (>= 3.0:1) in Light and Dark modes.
   - `testMaterial3ExpressiveMotionScheme_ProvidesDistinctSpringSpecs`: Verifies Material 3 `1.5.0` `MotionScheme.expressive()` provides non-null spatial/effects specs distinct from `MotionScheme.standard()`.
 
@@ -569,7 +569,7 @@ End-to-end and component UI testing on Android devices is performed using Google
 ## Required Checks
 Before marking any development task complete:
 1. `.\gradlew.bat test` passes with 0 failures (425 tests across 73 suites).
-2. `.\gradlew.bat connectedAndroidTest` passes with 0 failures on connected Pixel hardware (13/13 UI tests; instrumentation compilation verified via `compileDebugAndroidTestKotlin`).
+2. `.\gradlew.bat connectedAndroidTest` passes with 0 failures on connected Pixel hardware (13/13 UI tests).
 3. `.\gradlew.bat assembleRelease` produces a valid R8-minified APK.
 4. Lint checks pass without blocking errors: `.\gradlew.bat lint`.
 

@@ -1,15 +1,22 @@
 package com.dualboost.downloader.social
 
-enum class SocialPlatform(val displayName: String, val brandColorHex: Long) {
-    YOUTUBE("YouTube", 0xFFFF0000),
-    INSTAGRAM("Instagram", 0xFFE1306C),
-    TIKTOK("TikTok", 0xFF00F2FE),
-    TWITTER("Twitter / X", 0xFF1DA1F2),
-    REDDIT("Reddit", 0xFFFF4500),
-    FACEBOOK("Facebook", 0xFF1877F2),
-    PINTEREST("Pinterest", 0xFFE60023),
-    SOUNDCLOUD("SoundCloud", 0xFFFF5500),
-    VIMEO("Vimeo", 0xFF1AB7EA)
+enum class SocialPlatform(
+    val displayName: String,
+    val brandColorHex: Long,
+    val lightBrandColorHex: Long = brandColorHex
+) {
+    YOUTUBE("YouTube", 0xFFFF4D4D, 0xFFC62828),
+    INSTAGRAM("Instagram", 0xFFF472B6, 0xFFC2185B),
+    TIKTOK("TikTok", 0xFF00F2FE, 0xFF007B83),
+    TWITTER("Twitter / X", 0xFF38BDF8, 0xFF0277BD),
+    REDDIT("Reddit", 0xFFFF6D3A, 0xFFD84315),
+    FACEBOOK("Facebook", 0xFF60A5FA, 0xFF1565C0),
+    PINTEREST("Pinterest", 0xFFFF4D67, 0xFFC62828),
+    SOUNDCLOUD("SoundCloud", 0xFFFF7A33, 0xFFD84315),
+    VIMEO("Vimeo", 0xFF38BDF8, 0xFF0277BD);
+
+    /** Returns a contrast-appropriate accent hex for the current dark/light theme. */
+    fun resolveBrandColorHex(isDark: Boolean): Long = if (isDark) brandColorHex else lightBrandColorHex
 }
 
 enum class MediaQuality(val label: String, val apiValue: String) {

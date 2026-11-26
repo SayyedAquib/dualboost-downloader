@@ -2,8 +2,8 @@ package com.dualboost.downloader.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,7 +19,6 @@ import com.dualboost.downloader.social.MediaQuality
 import com.dualboost.downloader.social.SocialIntakeState
 import com.dualboost.downloader.social.SocialPlatform
 import com.dualboost.downloader.ui.theme.DualBoostIcons
-import com.dualboost.downloader.ui.theme.expressiveButtonShapes
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -35,6 +34,7 @@ fun SocialMediaModalSheet(
     if (state is SocialIntakeState.Idle) return
 
     val haptic = LocalHapticFeedback.current
+    val isDark = isSystemInDarkTheme()
     var selectedQuality by remember { mutableStateOf(MediaQuality.MAX) }
 
     ModalBottomSheet(
@@ -44,7 +44,7 @@ fun SocialMediaModalSheet(
             enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
         ),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        shape = BottomSheetDefaults.ExpandedShape
     ) {
         Column(
             modifier = Modifier
@@ -56,7 +56,7 @@ fun SocialMediaModalSheet(
             when (state) {
                 is SocialIntakeState.Ready -> {
                     val platform = state.platform
-                    val brandColor = Color(platform.brandColorHex)
+                    val brandColor = Color(platform.resolveBrandColorHex(isDark))
 
                     // Platform Header Badge
                     Surface(
@@ -222,7 +222,7 @@ fun SocialMediaModalSheet(
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         onEnqueue(state.originalUrl, selectedQuality)
                                     },
-                                    shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                    shapes = ButtonDefaults.shapes(),
                                     interactionSource = queueInteraction,
                                     modifier = Modifier
                                         .weight(1f)
@@ -236,6 +236,7 @@ fun SocialMediaModalSheet(
                             menuContent = { menuState ->
                                 DropdownMenuItem(
                                     text = { Text("Add to Queue") },
+                                    leadingIcon = { Icon(painter = painterResource(DualBoostIcons.PlaylistAdd), contentDescription = null) },
                                     onClick = {
                                         menuState.dismiss()
                                         onEnqueue(state.originalUrl, selectedQuality)
@@ -251,7 +252,7 @@ fun SocialMediaModalSheet(
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         onDownload(state.originalUrl, selectedQuality)
                                     },
-                                    shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                    shapes = ButtonDefaults.shapes(),
                                     interactionSource = boostInteraction,
                                     modifier = Modifier
                                         .weight(1.3f)
@@ -265,6 +266,7 @@ fun SocialMediaModalSheet(
                             menuContent = { menuState ->
                                 DropdownMenuItem(
                                     text = { Text("Boost Download") },
+                                    leadingIcon = { Icon(painter = painterResource(DualBoostIcons.Bolt), contentDescription = null) },
                                     onClick = {
                                         menuState.dismiss()
                                         onDownload(state.originalUrl, selectedQuality)
@@ -335,18 +337,19 @@ fun SocialMediaModalSheet(
                                 buttonGroupContent = {
                                     OutlinedButton(
                                         onClick = onDismiss,
-                                        shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                        shapes = ButtonDefaults.shapes(),
                                         interactionSource = dismissInteraction,
                                         modifier = Modifier
                                             .weight(1f)
                                             .animateWidth(dismissInteraction, compressionLimit = 8.dp)
                                     ) {
-                                        Text("Dismiss", maxLines = 1)
+                                        Text("Dismiss", style = MaterialTheme.typography.labelLargeEmphasized, maxLines = 1)
                                     }
                                 },
                                 menuContent = { menuState ->
                                     DropdownMenuItem(
                                         text = { Text("Dismiss") },
+                                        leadingIcon = { Icon(painter = painterResource(DualBoostIcons.Close), contentDescription = null) },
                                         onClick = {
                                             menuState.dismiss()
                                             onDismiss()
@@ -361,7 +364,7 @@ fun SocialMediaModalSheet(
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             onRetry(state.url, state.attemptedQuality)
                                         },
-                                        shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                                        shapes = ButtonDefaults.shapes(),
                                         interactionSource = retryInteraction,
                                         modifier = Modifier
                                             .weight(1.2f)
@@ -369,12 +372,13 @@ fun SocialMediaModalSheet(
                                     ) {
                                         Icon(painter = painterResource(DualBoostIcons.Refresh), contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Retry", maxLines = 1)
+                                        Text("Retry", style = MaterialTheme.typography.labelLargeEmphasized, maxLines = 1)
                                     }
                                 },
                                 menuContent = { menuState ->
                                     DropdownMenuItem(
                                         text = { Text("Retry") },
+                                        leadingIcon = { Icon(painter = painterResource(DualBoostIcons.Refresh), contentDescription = null) },
                                         onClick = {
                                             menuState.dismiss()
                                             onRetry(state.url, state.attemptedQuality)
@@ -386,10 +390,10 @@ fun SocialMediaModalSheet(
                     } else {
                         Button(
                             onClick = onDismiss,
-                            shapes = expressiveButtonShapes(baseCorner = 14.dp, pressedCorner = 8.dp),
+                            shapes = ButtonDefaults.shapes(),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Dismiss")
+                            Text("Dismiss", style = MaterialTheme.typography.labelLargeEmphasized)
                         }
                     }
                 }

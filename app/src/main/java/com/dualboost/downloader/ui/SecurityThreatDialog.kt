@@ -1,22 +1,18 @@
 package com.dualboost.downloader.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.dualboost.downloader.data.DownloadState
 import com.dualboost.downloader.security.ThreatSeverity
 import com.dualboost.downloader.ui.theme.DualBoostIcons
-import com.dualboost.downloader.ui.theme.expressiveButtonShapes
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -57,12 +53,12 @@ fun SecurityThreatDialog(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
+                    shape = MaterialTheme.shapes.small,
                     color = if (isCritical) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary
                 ) {
                     Text(
                         text = "${threat.severity.name} RISK • ${threat.threatType?.name ?: "THREAT"}",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.labelSmallEmphasized,
                         color = if (isCritical) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onTertiary,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
@@ -81,7 +77,7 @@ fun SecurityThreatDialog(
                 )
 
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.7f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -94,7 +90,7 @@ fun SecurityThreatDialog(
                             )
                             Text(
                                 text = orig,
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.labelMediumEmphasized,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -109,8 +105,7 @@ fun SecurityThreatDialog(
                             )
                             Text(
                                 text = disguised,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelMediumEmphasized.copy(
                                     fontFamily = FontFamily.Monospace
                                 ),
                                 color = MaterialTheme.colorScheme.error,
@@ -131,7 +126,7 @@ fun SecurityThreatDialog(
         confirmButton = {
             Button(
                 onClick = onSafeDiscard,
-                shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp),
+                shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
                     contentColor = MaterialTheme.colorScheme.onError
@@ -146,7 +141,7 @@ fun SecurityThreatDialog(
         dismissButton = {
             TextButton(
                 onClick = { onOverrideDownload(threatState.url) },
-                shapes = expressiveButtonShapes(baseCorner = 12.dp, pressedCorner = 8.dp),
+                shapes = ButtonDefaults.shapes(),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(
@@ -159,11 +154,11 @@ fun SecurityThreatDialog(
                 Text(
                     "Download Anyway (At your own risk)",
                     color = MaterialTheme.colorScheme.error,
-                    fontSize = 12.sp
+                    style = MaterialTheme.typography.labelMediumEmphasized
                 )
             }
         },
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large
+        shape = MaterialTheme.shapes.largeIncreased
     )
 }

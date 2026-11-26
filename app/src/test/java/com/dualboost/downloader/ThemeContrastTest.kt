@@ -91,6 +91,11 @@ class ThemeContrastTest {
         // ErrorContainer vs OnErrorContainer
         val errorContainerContrast = contrastRatio(scheme.errorContainer, scheme.onErrorContainer)
         assertTrue("Dark errorContainer contrast should exceed 4.5:1, was $errorContainerContrast", errorContainerContrast >= 4.5)
+
+        // Material 3 1.5.0 Fixed color roles
+        assertTrue(contrastRatio(scheme.primaryFixed, scheme.onPrimaryFixed) >= 4.5)
+        assertTrue(contrastRatio(scheme.secondaryFixed, scheme.onSecondaryFixed) >= 4.5)
+        assertTrue(contrastRatio(scheme.tertiaryFixed, scheme.onTertiaryFixed) >= 4.5)
     }
 
     @Test
